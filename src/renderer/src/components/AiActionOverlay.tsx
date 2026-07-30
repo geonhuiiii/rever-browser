@@ -5,6 +5,7 @@ import type { AiAction } from '../../../preload'
 const KIND_COLOR: Record<AiAction['kind'], string> = {
   navigate: '#a855f7',
   click: '#ff3b30',
+  hover: '#ffd60a',
   type: '#0a84ff',
   scroll: '#30d158',
   snapshot: '#8e8e93',
@@ -16,6 +17,7 @@ const KIND_COLOR: Record<AiAction['kind'], string> = {
 const KIND_TAG: Record<AiAction['kind'], string> = {
   navigate: 'NAV',
   click: 'CLICK',
+  hover: 'HOVER',
   type: 'TYPE',
   scroll: 'SCROLL',
   snapshot: 'SNAP',

@@ -32,6 +32,7 @@ export type ViewportMode = 'desktop' | 'mobile'
 export type AiActionKind =
   | 'navigate'
   | 'click'
+  | 'hover'
   | 'type'
   | 'scroll'
   | 'snapshot'

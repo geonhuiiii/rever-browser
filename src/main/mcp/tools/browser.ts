@@ -7,7 +7,15 @@ import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
 import { evalInPage } from '../cdp-eval'
 import { humanScroll } from '../human-input'
-import { clickRef, clickSelector, takeSnapshot, typeRef, typeSelector } from '../snapshot'
+import {
+  clickRef,
+  clickSelector,
+  hoverRef,
+  hoverSelector,
+  takeSnapshot,
+  typeRef,
+  typeSelector
+} from '../snapshot'
 import { ok, err, errorMessage } from '../utils'
 
 /**
@@ -90,6 +98,25 @@ export function registerBrowserTools(mcp: McpServer) {
   )
 
   mcp.registerTool(
+    'browser_hover',
+    {
+      description:
+        'Hover over the element identified by ref (from the latest browser_snapshot). Scrolls into view and performs a human-like mouse move WITHOUT clicking — use it to open hover-triggered dropdown menus, tooltips and mega-navs. Returns a fresh snapshot so the hover-revealed content is visible. Refs from the previous snapshot are now stale.',
+      inputSchema: {
+        ref: z.string().describe('Element ref from browser_snapshot, e.g. "r12"')
+      }
+    },
+    async ({ ref }) => {
+      try {
+        await hoverRef(ref)
+        return await snapshotAfter(`hovered ${ref}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
     'browser_type',
     {
       description:
@@ -128,6 +155,27 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await clickSelector(selector)
         return await snapshotAfter(`clicked selector ${selector}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_hover_selector',
+    {
+      description:
+        'Hover over the first element matching a CSS selector, using the SAME human-shaped cursor move as browser_hover (no click). Use when you have a selector but no snapshot ref — NEVER fake hover with raw JS dispatchEvent, as that skips the cursor animation and fires untrusted events. Returns a fresh snapshot.',
+      inputSchema: {
+        selector: z
+          .string()
+          .describe('CSS selector for the target, e.g. "nav .menu-item"')
+      }
+    },
+    async ({ selector }) => {
+      try {
+        await hoverSelector(selector)
+        return await snapshotAfter(`hovered selector ${selector}`)
       } catch (e) {
         return err(errorMessage(e))
       }

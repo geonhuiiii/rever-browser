@@ -219,6 +219,41 @@ async function clickObjectId(objectId: string, label: string, role?: string): Pr
   await humanPressRelease(x, y)
 }
 
+/**
+ * Core hover: same scroll → thinking pause → cursor move → flash sequence as
+ * clickObjectId, but WITHOUT the press/release — the cursor just arrives and
+ * stays, so :hover styles / mouseover-driven menus stay open. Shared by
+ * hoverRef (snapshot ref) and hoverSelector (CSS selector).
+ */
+async function hoverObjectId(objectId: string, label: string, role?: string): Promise<void> {
+  const target = getActiveTarget()!
+  emitAiAction({ kind: 'hover', label, detail: role })
+
+  const result = (await target.dbg.sendCommand('Runtime.callFunctionOn', {
+    objectId,
+    functionDeclaration: `async function() {
+      this.scrollIntoView({block:"center"})
+      await new Promise(r => requestAnimationFrame(() => r()))
+      const r = this.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    }`,
+    returnByValue: true,
+    awaitPromise: true
+  })) as { result: { value: { x: number; y: number } } }
+  const { x, y } = result.result.value
+
+  await thinkingPause()
+  await humanMouseMove(x, y)
+
+  await target.dbg.sendCommand('Runtime.callFunctionOn', {
+    objectId,
+    functionDeclaration: `function(label) {
+      if (window.__reverAi) window.__reverAi.flashElement(this, label, 'hover')
+    }`,
+    arguments: [{ value: label }]
+  })
+}
+
 /** Core type: same human-shaped sequence as clickObjectId, then focus + type
  * (+ optional Enter) via real CDP key events. Shared by typeRef/typeSelector. */
 async function typeObjectId(
@@ -270,6 +305,19 @@ export async function typeRef(ref: string, text: string, submit: boolean): Promi
   const objectId = await resolveObjectId(ref)
   const label = `AI type${entry?.name ? ` → "${entry.name.slice(0, 24)}"` : ''}`
   await typeObjectId(objectId, text, submit, label, entry?.role)
+}
+
+export async function hoverRef(ref: string): Promise<void> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const label = `AI hover${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
+  await hoverObjectId(objectId, label, entry?.role)
+}
+
+export async function hoverSelector(selector: string): Promise<void> {
+  const objectId = await resolveSelectorObjectId(selector)
+  const shortSel = selector.length > 32 ? selector.slice(0, 32) + '…' : selector
+  await hoverObjectId(objectId, `AI hover "${shortSel}"`)
 }
 
 export async function clickSelector(selector: string): Promise<void> {

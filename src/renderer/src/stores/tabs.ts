@@ -35,7 +35,7 @@ interface TabsState {
   setTabProxy: (id: string, proxy: ProxyConfig | undefined) => void
 }
 
-const INITIAL_URL = 'https://www.google.com'
+const INITIAL_URL = 'https://github.com/greekr4/rever-browser'
 
 let nextId = 1
 const newId = (): string => `t${nextId++}`

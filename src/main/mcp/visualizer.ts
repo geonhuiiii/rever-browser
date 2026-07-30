@@ -27,6 +27,7 @@ export const VISUALIZER_INIT_SCRIPT = `
       animation: pop 220ms ease-out, fade 1300ms ease-in 700ms forwards;
     }
     .box.click   { border: 2px solid #ff3b30; box-shadow: 0 0 0 4px rgba(255,59,48,0.18); }
+    .box.hover   { border: 2px solid #ffd60a; box-shadow: 0 0 0 4px rgba(255,214,10,0.18); }
     .box.type    { border: 2px solid #0a84ff; box-shadow: 0 0 0 4px rgba(10,132,255,0.18); }
     .box.scroll  { border: 2px solid #30d158; box-shadow: 0 0 0 4px rgba(48,209,88,0.18); }
     .label {
@@ -41,6 +42,7 @@ export const VISUALIZER_INIT_SCRIPT = `
       letter-spacing: 0.2px;
     }
     .box.click  .label { background: #ff3b30; }
+    .box.hover  .label { background: #ffd60a; color: #111; }
     .box.type   .label { background: #0a84ff; }
     .box.scroll .label { background: #30d158; }
     .pulse {

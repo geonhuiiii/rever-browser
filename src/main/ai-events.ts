@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron'
 export type AiActionKind =
   | 'navigate'
   | 'click'
+  | 'hover'
   | 'type'
   | 'scroll'
   | 'snapshot'
