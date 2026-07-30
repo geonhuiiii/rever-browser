@@ -609,7 +609,15 @@ export function ChatPanel() {
         />
         {busy && <Spinner />}
         {busy ? (
-          <button type="button" onClick={() => stop()} style={{ background: '#3a1f1f', borderColor: '#5a2a2a' }}>
+          <button
+            type="button"
+            onClick={() => stop()}
+            style={{
+              background: 'var(--chip-danger-bg)',
+              borderColor: 'var(--chip-danger-border)',
+              color: 'var(--chip-danger-text)'
+            }}
+          >
             Stop
           </button>
         ) : (

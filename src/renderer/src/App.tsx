@@ -19,6 +19,7 @@ import { useTabsStore } from '@/stores/tabs'
 import { useAppThemeStore, resolveTheme } from '@/stores/app-theme'
 import { useViewportStore } from '@/stores/viewport'
 import { originFromUrl, useWebviewThemeStore, type WebviewTheme } from '@/stores/webview-theme'
+import { handleAgentRequest } from '@/workflows/core/agent-bridge'
 
 type PanelId = 'traffic' | 'console' | 'exceptions' | 'websocket' | 'repeater' | 'storage' | 'history' | 'workflows'
 
@@ -58,6 +59,9 @@ function App() {
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
   }, [themeMode])
+
+  // Serve main-process requests for renderer-owned state (saved macros).
+  useEffect(() => window.rev.bridge.onRequest(handleAgentRequest), [])
 
   const themeByOrigin = useWebviewThemeStore((s) => s.byOrigin)
   const cycleTheme = useWebviewThemeStore((s) => s.cycle)
@@ -333,7 +337,7 @@ function App() {
               disabled={!activeOrigin}
               title={
                 activeOrigin
-                  ? `Page theme for ${activeOrigin} — click to cycle Auto → Light → Dark`
+                  ? `Page theme for ${activeOrigin} — Auto follows the app theme. Click to cycle Auto → Light → Dark`
                   : 'No site loaded'
               }
               style={{
@@ -342,7 +346,7 @@ function App() {
                   : activeTheme === 'dark'
                     ? '#222'
                     : undefined,
-                color: activeTheme === 'light' ? '#111' : undefined,
+                color: activeTheme === 'light' ? '#111' : activeTheme === 'dark' ? '#eee' : undefined,
                 borderColor:
                   activeTheme === 'light'
                     ? '#aaa'
@@ -366,6 +370,7 @@ function App() {
               title="Toggle desktop/mobile viewport"
               style={{
                 background: viewportMode === 'mobile' ? '#244' : undefined,
+                color: viewportMode === 'mobile' ? '#dee' : undefined,
                 borderColor: viewportMode === 'mobile' ? '#377' : undefined
               }}
             >

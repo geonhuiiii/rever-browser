@@ -238,7 +238,13 @@ const api = {
     // Keep the native window-controls overlay (Windows/Linux) in sync with the
     // app theme. No-op on macOS (traffic lights aren't recolorable this way).
     setTitlebar: (resolved: 'light' | 'dark'): Promise<void> =>
-      ipcRenderer.invoke('theme:set-titlebar', resolved)
+      ipcRenderer.invoke('theme:set-titlebar', resolved),
+    // Force `prefers-color-scheme` inside one webview (null clears it) so the
+    // loaded site renders its own light/dark stylesheet instead of the OS's.
+    setWebviewScheme: (
+      webContentsId: number,
+      scheme: 'light' | 'dark' | null
+    ): Promise<boolean> => ipcRenderer.invoke('theme:set-webview-scheme', webContentsId, scheme)
   },
   proxy: {
     // Apply (or clear, with null) the given tab's upstream proxy.
@@ -278,6 +284,27 @@ const api = {
         .finally(() => ipcRenderer.removeListener(channel, listener))
     },
     cancel: (): Promise<boolean> => ipcRenderer.invoke('workflow:cancel')
+  },
+  bridge: {
+    // Answer main-process requests (MCP tools reaching renderer-owned state).
+    // The handler's resolved value is sent back on the matching id.
+    onRequest: (handler: (op: string, payload: unknown) => Promise<unknown>): (() => void) => {
+      const listener = (_e: unknown, msg: { id: number; op: string; payload: unknown }): void => {
+        Promise.resolve(handler(msg.op, msg.payload))
+          .then((result) => ipcRenderer.send('bridge:response', { id: msg.id, ok: true, result }))
+          .catch((e: unknown) =>
+            ipcRenderer.send('bridge:response', {
+              id: msg.id,
+              ok: false,
+              error: e instanceof Error ? e.message : String(e)
+            })
+          )
+      }
+      ipcRenderer.on('bridge:request', listener)
+      return () => {
+        ipcRenderer.removeListener('bridge:request', listener)
+      }
+    }
   },
   settings: {
     getApiKey: (provider: 'anthropic' | 'openai'): Promise<string | null> =>

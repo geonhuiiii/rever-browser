@@ -117,6 +117,16 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 - **When in API mode:** _filter, don't dump_ — always pass `host`, `since`, `methodOrType`, or `limit` to `list_requests` (the store holds 500 entries). Skip static assets (`.css`, `.js`, `.png`, `.woff`, ad/analytics) unless asked. **API candidates** are usually XHR/Fetch with a JSON body or response, fired right after a user action, often carrying `Authorization` or a cookie session.
 - **Bot-detection sites**: rely on the user's own session — never automate login on Instagram, X, etc.
 
+## Macros
+
+A macro is a saved sequence of tool calls the user can replay from the Workflows panel with no LLM in the loop.
+
+- **"make a macro out of what I just did"** → `create_macro` with the tool calls you actually made, in order, with the same arguments. Skip read-only reconnaissance steps (`list_requests`, `browser_snapshot`, `get_request`) unless the user wants them; keep the actions that change state (navigate, click, type, scroll).
+- **"drop that step from the macro"** → `list_macros` → `get_macro` → `remove_macro_steps` with the zero-based positions. Use `update_macro` only when arguments or ordering change.
+- **"run the X macro"** → `list_macros` to find the id, then `run_macro`. It replays on the active tab and stops at the first failing step; report which step failed and why.
+- Values that should vary per run go in as `{{var}}` placeholders, with defaults in `vars`.
+- After any change, tell the user the macro name and list its steps.
+
 ## Deliverables
 
 **DOM extraction (the default ask — "search/get/pull the results"):**

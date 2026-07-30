@@ -39,7 +39,9 @@ function stepId(): string {
 }
 
 // Substitute {{var}} then parse each step's input into a runnable form.
-function resolveSteps(
+// Exported so the list's Run button (macro/index.ts) replays a macro the same
+// way the editor does.
+export function resolveSteps(
   steps: MacroStep[],
   varsText: string
 ): { ok: true; steps: WorkflowRunStep[] } | { ok: false; error: string } {
@@ -287,7 +289,19 @@ export function MacroEditor({ workflow, onChange }: WorkflowEditorProps): React.
 
       {runError && <div style={{ color: '#e06c6c', fontSize: 12 }}>{runError}</div>}
 
-      <div style={{ display: 'flex', gap: 6 }}>
+      {/* Pinned so Run stays reachable no matter how long the step list gets. */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 6,
+          position: 'sticky',
+          bottom: 0,
+          background: 'var(--bg-bar)',
+          borderTop: '1px solid var(--border)',
+          padding: '8px 0',
+          marginTop: 2
+        }}
+      >
         {running ? (
           <button type="button" onClick={cancel} style={{ background: 'var(--surface-3)' }}>
             Stop

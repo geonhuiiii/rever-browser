@@ -16,7 +16,8 @@ import {
   getDialogAutoDismiss,
   getDialogHistory,
   setActiveTarget,
-  setDialogAutoDismiss
+  setDialogAutoDismiss,
+  setEmulatedColorScheme
 } from './chrome-cdp'
 import {
   getSnapshotCount,
@@ -31,6 +32,7 @@ import {
   type ChromeImportOptions
 } from './chrome-cookie-import'
 import { detectAgents, type AgentProbe } from './acp-detect'
+import { initRendererBridge } from './renderer-bridge'
 import { launchExternalChrome, killExternalChrome } from './external-chrome'
 import { attachExternalCdp, detachExternalCdp, getExternalTarget } from './external-cdp'
 import {
@@ -246,6 +248,8 @@ app.whenReady().then(() => {
 
   // Initialize sticky-session-cookie persistence (no-op if user has it disabled).
   initCookiePersistence()
+  // Lets MCP tools request renderer-owned state (saved macros).
+  initRendererBridge()
 
   createWindow()
 
@@ -310,6 +314,12 @@ app.whenReady().then(() => {
       // (shouldn't happen off-darwin) — ignore.
     }
   })
+
+  ipcMain.handle(
+    'theme:set-webview-scheme',
+    (_event, webContentsId: number, scheme: 'light' | 'dark' | null) =>
+      setEmulatedColorScheme(webContentsId, scheme)
+  )
 
   ipcMain.handle('acp:list-available', async (_event, probes: AgentProbe[]) => {
     return detectAgents(probes)

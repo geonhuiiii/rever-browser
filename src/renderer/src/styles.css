@@ -39,6 +39,9 @@
   --chip-info-bg: #1f242a;
   --chip-info-border: #2a3a4a;
   --chip-info-text: #aaccee;
+  --chip-danger-bg: #3a1f1f;
+  --chip-danger-border: #5a2a2a;
+  --chip-danger-text: #eeaaaa;
 }
 
 :root[data-theme='light'] {
@@ -74,6 +77,9 @@
   --chip-info-bg: #e8f0fb;
   --chip-info-border: #c3d6ef;
   --chip-info-text: #2f5fa8;
+  --chip-danger-bg: #fbeaea;
+  --chip-danger-border: #eabcbc;
+  --chip-danger-text: #a52f2f;
 }
 
 html, body, #root {

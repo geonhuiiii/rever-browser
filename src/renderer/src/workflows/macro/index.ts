@@ -4,7 +4,7 @@
 // delete this folder + its line in workflows/index.ts to remove the kind.
 import { registerWorkflowKind } from '../core/registry'
 import { newWorkflowId, type Workflow } from '../core/types'
-import { MacroEditor, type MacroData } from './MacroEditor'
+import { MacroEditor, resolveSteps, type MacroData } from './MacroEditor'
 
 registerWorkflowKind({
   id: 'macro',
@@ -21,7 +21,17 @@ registerWorkflowKind({
       updatedAt: now
     }
   },
-  Editor: MacroEditor
-  // No list action — running happens inside the Editor so per-step results are
-  // visible. Open a macro via "Edit" and click "Run macro".
+  Editor: MacroEditor,
+  // One-click replay from the list. Per-step results are only shown in the
+  // Editor, so this reports failures and otherwise stays quiet.
+  actionLabel: '▶ Run',
+  action: async (workflow): Promise<void> => {
+    const data = workflow.data as MacroData
+    const resolved = resolveSteps(data.steps, data.vars)
+    if (!resolved.ok) throw new Error(resolved.error)
+    if (resolved.steps.length === 0) throw new Error('No steps to run')
+    const results = await window.rev.workflows.run(resolved.steps, () => {})
+    const failed = results.find((r) => r.status === 'error')
+    if (failed) throw new Error(`Step ${failed.index + 1} (${failed.tool}): ${failed.error}`)
+  }
 })

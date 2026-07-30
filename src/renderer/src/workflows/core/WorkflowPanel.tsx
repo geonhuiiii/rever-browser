@@ -14,6 +14,26 @@ export function WorkflowPanel(): React.ReactElement {
 
   // The workflow currently being created/edited (a working copy).
   const [draft, setDraft] = useState<Workflow | null>(null)
+  // Per-row state for the list's action button (no editor open to report into).
+  const [runningId, setRunningId] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<Record<string, string>>({})
+
+  const runFromList = async (kind: WorkflowKind, w: Workflow): Promise<void> => {
+    if (!kind.action) return
+    setRunningId(w.id)
+    setRowError((prev) => {
+      const next = { ...prev }
+      delete next[w.id]
+      return next
+    })
+    try {
+      await kind.action(w)
+    } catch (e) {
+      setRowError((prev) => ({ ...prev, [w.id]: e instanceof Error ? e.message : String(e) }))
+    } finally {
+      setRunningId((cur) => (cur === w.id ? null : cur))
+    }
+  }
 
   const kinds = listWorkflowKinds()
 
@@ -27,7 +47,18 @@ export function WorkflowPanel(): React.ReactElement {
     const kind = getWorkflowKind(draft.kind)
     const Editor = kind?.Editor
     return (
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+      <div
+        style={{
+          padding: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          height: '100%',
+          // Without this the padding is added on top of 100% and the panel's
+          // overflow:hidden clips the last 24px (hiding the Run button).
+          boxSizing: 'border-box'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 600 }}>{kind?.label ?? draft.kind}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -77,11 +108,14 @@ export function WorkflowPanel(): React.ReactElement {
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {workflows.map((w) => {
             const kind = getWorkflowKind(w.kind)
+            const busy = runningId === w.id
+            const error = rowError[w.id]
             return (
               <div
                 key={w.id}
                 style={{
                   display: 'flex',
+                  flexWrap: 'wrap',
                   alignItems: 'center',
                   gap: 8,
                   padding: '6px 8px',
@@ -107,14 +141,18 @@ export function WorkflowPanel(): React.ReactElement {
                 {kind?.action && (
                   <button
                     type="button"
-                    onClick={() => void kind.action?.(w)}
+                    onClick={() => void runFromList(kind, w)}
+                    disabled={busy}
                     style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-border)', color: 'var(--accent)' }}
                   >
-                    {kind.actionLabel ?? 'Run'}
+                    {busy ? 'Running…' : kind.actionLabel ?? 'Run'}
                   </button>
                 )}
                 <button type="button" onClick={() => setDraft(w)} title="Edit">Edit</button>
                 <button type="button" onClick={() => remove(w.id)} title="Delete">✕</button>
+                {error && (
+                  <div style={{ flexBasis: '100%', color: '#e06c6c', fontSize: 11 }}>{error}</div>
+                )}
               </div>
             )
           })}

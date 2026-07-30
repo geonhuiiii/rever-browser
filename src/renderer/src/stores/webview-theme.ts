@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import { resolveTheme, useAppThemeStore, type ResolvedTheme } from './app-theme'
+
 export type WebviewTheme = 'auto' | 'light' | 'dark'
 
 interface WebviewThemeState {
@@ -46,20 +48,11 @@ export const useWebviewThemeStore = create<WebviewThemeState>()(
   )
 )
 
-export const LIGHT_CSS = `
-:root { color-scheme: light !important; }
-html { background-color: #ffffff !important; }
-body { background-color: #ffffff !important; color: #111111 !important; }
-`
-
-export const DARK_CSS = `
-:root { color-scheme: dark !important; }
-html { background-color: #1a1a1a !important; }
-body { background-color: #1a1a1a !important; color: #e6e6e6 !important; }
-`
-
-export function cssForTheme(theme: WebviewTheme): string | null {
-  if (theme === 'light') return LIGHT_CSS
-  if (theme === 'dark') return DARK_CSS
-  return null
+/**
+ * The `prefers-color-scheme` to emulate inside the webview. 'auto' follows the
+ * app's own theme (not the OS) so an app in light mode doesn't show a dark site.
+ */
+export function resolveWebviewTheme(theme: WebviewTheme): ResolvedTheme {
+  if (theme === 'auto') return resolveTheme(useAppThemeStore.getState().mode)
+  return theme
 }

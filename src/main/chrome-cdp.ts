@@ -331,6 +331,28 @@ export function clearDialogHistory(): void {
   dialogHistory.length = 0
 }
 
+/**
+ * Force `prefers-color-scheme` inside a webview so the site renders its own
+ * light/dark stylesheet instead of following the OS. `null` clears the
+ * override. Requires the debugger to already be attached to `targetId`.
+ */
+export async function setEmulatedColorScheme(
+  targetId: number,
+  scheme: 'light' | 'dark' | null
+): Promise<boolean> {
+  const t = attached.get(targetId)
+  if (!t) return false
+  try {
+    await t.dbg.sendCommand('Emulation.setEmulatedMedia', {
+      features: scheme ? [{ name: 'prefers-color-scheme', value: scheme }] : []
+    })
+    return true
+  } catch (e) {
+    console.warn('[cdp] setEmulatedMedia failed', e)
+    return false
+  }
+}
+
 const SKIP_BODY_PREFIXES = ['image/', 'video/', 'audio/', 'font/']
 const SKIP_BODY_TYPES = new Set(['Image', 'Media', 'Font', 'Stylesheet'])
 
