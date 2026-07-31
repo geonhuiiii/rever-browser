@@ -334,6 +334,9 @@ export function buildElementPaths(doc: DocumentSnapshot): Map<string, number> {
 /** Above this element count the in-page click scan is skipped as too costly. */
 const MAX_SCANNED_ELEMENTS = 10_000
 
+/** Shadow roots nested deeper than this are not worth the traversal. */
+const MAX_SHADOW_DEPTH = 5
+
 export interface ClickScan {
   /** Element-child index paths from `<html>`, e.g. "1.3.0". */
   paths: Set<string>
@@ -358,17 +361,34 @@ export interface ClickScan {
  * heuristic below is what actually catches those.
  */
 const CLICK_SCAN_EXPRESSION = `(() => {
-  const all = document.querySelectorAll('*')
+  // querySelectorAll stops at shadow boundaries, so a role-less click target
+  // inside a web component was invisible to this scan — the same blind spot
+  // iframes had. Design-system and payment widgets live in shadow DOM, and
+  // their buttons are usually plain divs with a handler.
+  const all = []
+  const collect = (root, depth) => {
+    if (depth > ${MAX_SHADOW_DEPTH} || all.length > ${MAX_SCANNED_ELEMENTS}) return
+    for (const el of root.querySelectorAll('*')) {
+      all.push(el)
+      if (el.shadowRoot) collect(el.shadowRoot, depth + 1)
+    }
+  }
+  collect(document, 0)
   if (all.length > ${MAX_SCANNED_ELEMENTS}) return { paths: [], scanned: all.length, skipped: true }
 
   // Element-child index path from <html>. Must mirror buildElementPaths().
+  // Crossing out of a shadow root steps to its host, which is how the flat
+  // snapshot tree is shaped too.
   const pathOf = (el) => {
     const parts = []
     let cur = el
     while (cur && cur !== document.documentElement) {
-      const p = cur.parentElement
+      const p = cur.parentElement ?? (cur.parentNode && cur.parentNode.host)
       if (!p) return null
-      parts.push(Array.prototype.indexOf.call(p.children, cur))
+      const siblings = cur.parentElement ? p.children : cur.parentNode.children
+      const idx = Array.prototype.indexOf.call(siblings, cur)
+      if (idx < 0) return null
+      parts.push(idx)
       cur = p
     }
     return cur === document.documentElement ? parts.reverse().join('.') : null
