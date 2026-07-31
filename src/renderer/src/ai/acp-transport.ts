@@ -146,13 +146,28 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
         abortSignal?.addEventListener('abort', () => {
           void window.rev.acp.cancel(sessionId)
           finish('stop')
+          // session/cancel is only a notification — some agents keep running
+          // (e.g. mid MCP tool call). If the prompt doesn't settle within 5s,
+          // kill the child so it can't keep driving the browser; the next
+          // message spawns a fresh session.
+          const killTimer = setTimeout(() => {
+            void window.rev.acp.kill(sessionId).catch(() => null)
+            if (self.sessionId === sessionId) {
+              self.sessionId = null
+              self.sentContext = false
+            }
+          }, 5_000)
+          promptPromise.then(
+            () => clearTimeout(killTimer),
+            () => clearTimeout(killTimer)
+          )
         })
 
         controller.enqueue({ type: 'start' })
         controller.enqueue({ type: 'start-step' })
         armWatchdog()
 
-        window.rev.acp
+        const promptPromise = window.rev.acp
           .prompt(sessionId, promptText, (notification) => {
             if (closed) return
             armWatchdog()

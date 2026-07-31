@@ -38,6 +38,9 @@ interface SessionEntry {
   dead: boolean
   availableModels: ModelInfo[]
   currentModelId: string | null
+  // Settle-tracking promise for the in-flight prompt (null when idle). Used to
+  // avoid issuing concurrent prompts on one ACP session after a Stop.
+  activePrompt: Promise<void> | null
 }
 
 const sessions = new Map<string, SessionEntry>()
@@ -187,7 +190,8 @@ export async function spawnAcpSession(
     requestPermission: null,
     dead: false,
     availableModels: modelState?.availableModels ?? [],
-    currentModelId: modelState?.currentModelId ?? null
+    currentModelId: modelState?.currentModelId ?? null,
+    activePrompt: null
   }
   entryRef = entry
   sessions.set(result.sessionId, entry)
@@ -214,15 +218,32 @@ export async function promptAcpSession(
   if (!entry) throw new Error(`unknown ACP session: ${sessionId}`)
   if (entry.dead) throw new Error(`ACP session is dead: ${sessionId}`)
 
+  // A previous turn may still be in flight (user hit Stop, then sent a new
+  // message before the agent honoured session/cancel). ACP allows one prompt
+  // per session at a time — re-cancel and wait (bounded) for it to settle.
+  if (entry.activePrompt) {
+    await entry.connection.cancel({ sessionId: entry.sessionId }).catch(() => null)
+    await Promise.race([
+      entry.activePrompt,
+      new Promise<void>((resolve) => setTimeout(resolve, 6_000))
+    ])
+  }
+
   entry.onUpdate = onUpdate
   entry.requestPermission = requestPermission ?? null
+  const p = entry.connection.prompt({
+    sessionId: entry.sessionId,
+    prompt: [{ type: 'text', text }]
+  })
+  entry.activePrompt = p.then(
+    () => undefined,
+    () => undefined
+  )
   try {
-    const res = await entry.connection.prompt({
-      sessionId: entry.sessionId,
-      prompt: [{ type: 'text', text }]
-    })
+    const res = await p
     return { stopReason: res.stopReason }
   } finally {
+    entry.activePrompt = null
     entry.onUpdate = null
     entry.requestPermission = null
   }
