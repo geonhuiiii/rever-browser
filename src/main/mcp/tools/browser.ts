@@ -42,12 +42,23 @@ async function snapshotAfter(actionResult: string): Promise<{
 function filterNote(stats: {
   hidden: number
   offscreen: number
+  clickOnlyRefs: number
+  clickScanned: number
+  clickMatched: number
   fellBackToFull: boolean
 }): string {
   const parts: string[] = []
   if (stats.hidden > 0 || stats.offscreen > 0) {
     parts.push(
       `viewport filter: ${stats.hidden} hidden/covered, ${stats.offscreen} off-screen actionable element(s) omitted — scroll to reach them, or pass full=true for the whole page`
+    )
+  }
+  // Reported even at zero: a silent scan is indistinguishable from a page that
+  // genuinely has no role-less click targets, and the scanned/matched split is
+  // what separates "scan found nothing" from "geometry failed to correlate".
+  if (stats.clickScanned > 0 || stats.clickOnlyRefs > 0) {
+    parts.push(
+      `click scan: ${stats.clickScanned} candidate(s), ${stats.clickMatched} correlated, ${stats.clickOnlyRefs} new ref(s) tagged (click-scan)`
     )
   }
   if (stats.fellBackToFull) {
@@ -98,7 +109,9 @@ export function registerBrowserTools(mcp: McpServer) {
     async ({ full }) => {
       try {
         const snap = await takeSnapshot({ full })
-        return ok(`url: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}${filterNote(snap.stats)}`)
+        return ok(
+          `url: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}${filterNote(snap.stats)}`
+        )
       } catch (e) {
         return err(errorMessage(e))
       }
@@ -296,7 +309,8 @@ export function registerBrowserTools(mcp: McpServer) {
           detail: expression.slice(0, 80)
         })
         const result = await evalInPage<unknown>(expression)
-        return ok(typeof result === 'string' ? result : JSON.stringify(result, null, 2))
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+        return ok(text)
       } catch (e) {
         return err(errorMessage(e))
       }

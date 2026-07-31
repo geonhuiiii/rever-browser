@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildPageLayout, type CaptureResult, type Viewport } from './layout'
+import { buildElementPaths, buildPageLayout, type CaptureResult, type Viewport } from './layout'
 
 const VIEWPORT: Viewport = { x: 0, y: 0, width: 1000, height: 800 }
 
@@ -220,5 +220,136 @@ describe('buildPageLayout', () => {
 
       expect(layout?.byBackendId.get(1)?.occluded).toBe(false)
     })
+  })
+})
+
+/**
+ * <html>                     idx 1  path ''
+ *   <body>                   idx 2  path '0'
+ *     <div id=a>             idx 3  path '0.0'
+ *       <span id=a1>         idx 4  path '0.0.0'
+ *     <div id=b>             idx 5  path '0.1'
+ * Node 0 is the document itself (nodeType 9).
+ */
+const TREE: CaptureResult = {
+  strings: STRINGS,
+  documents: [
+    {
+      nodes: {
+        backendNodeId: [900, 901, 902, 903, 904, 905],
+        parentIndex: [-1, 0, 1, 2, 3, 2],
+        nodeType: [9, 1, 1, 1, 1, 1]
+      },
+      layout: {
+        nodeIndex: [3, 4, 5],
+        bounds: [
+          [0, 0, 300, 100],
+          [10, 10, 80, 20],
+          [0, 200, 300, 100]
+        ],
+        styles: [
+          [S_VISIBLE, S_OPACITY_1],
+          [S_VISIBLE, S_OPACITY_1],
+          [S_VISIBLE, S_OPACITY_1]
+        ],
+        paintOrders: [1, 2, 3]
+      }
+    }
+  ]
+}
+
+describe('buildElementPaths', () => {
+  it('요소 자식 인덱스 경로를 backendNodeId에 매핑한다', () => {
+    const byPath = buildElementPaths(TREE.documents[0])
+
+    expect(byPath.get('0')).toBe(902) // body
+    expect(byPath.get('0.0')).toBe(903) // div#a
+    expect(byPath.get('0.0.0')).toBe(904) // span#a1
+    expect(byPath.get('0.1')).toBe(905) // div#b
+  })
+
+  it('documentElement 자신은 경로를 갖지 않는다', () => {
+    expect(buildElementPaths(TREE.documents[0]).has('')).toBe(false)
+  })
+
+  it('노드 트리 정보가 없으면 빈 맵을 반환한다', () => {
+    const bare = { nodes: { backendNodeId: [1] }, layout: TREE.documents[0].layout }
+    expect(buildElementPaths(bare).size).toBe(0)
+  })
+})
+
+describe('클릭 스캔 경로 매칭', () => {
+  it('경로가 일치하는 노드에만 clickable=true를 붙인다', () => {
+    const layout = buildPageLayout(TREE, VIEWPORT, new Set(['0.0']))
+
+    expect(layout?.byBackendId.get(903)?.clickable).toBe(true)
+    expect(layout?.byBackendId.get(904)?.clickable).toBe(false)
+    expect(layout?.byBackendId.get(905)?.clickable).toBe(false)
+    expect(layout?.clickMatched).toBe(1)
+  })
+
+  it('좌표가 어긋나도 경로 매칭은 영향받지 않는다', () => {
+    // Bounds here are deliberately nothing like a viewport-relative rect; the
+    // geometry-keyed version scored 0 correlated on exactly this mismatch.
+    const scaled: CaptureResult = {
+      ...TREE,
+      documents: [
+        {
+          ...TREE.documents[0],
+          layout: {
+            ...TREE.documents[0].layout,
+            bounds: [
+              [0, 0, 600, 200],
+              [20, 20, 160, 40],
+              [0, 400, 600, 200]
+            ]
+          }
+        }
+      ]
+    }
+
+    const layout = buildPageLayout(scaled, VIEWPORT, new Set(['0.0.0']))
+
+    expect(layout?.byBackendId.get(904)?.clickable).toBe(true)
+    expect(layout?.clickMatched).toBe(1)
+  })
+
+  it('스캔 결과를 주지 않으면 clickable은 전부 false다', () => {
+    const layout = buildPageLayout(TREE, VIEWPORT)
+
+    expect(layout?.byBackendId.get(903)?.clickable).toBe(false)
+    expect(layout?.clickMatched).toBe(0)
+  })
+
+  it('없는 경로는 무시하고 매칭 수에 세지 않는다', () => {
+    const layout = buildPageLayout(TREE, VIEWPORT, new Set(['9.9.9']))
+
+    expect(layout?.clickMatched).toBe(0)
+  })
+})
+
+describe('위임 루트 억제 (React 형태)', () => {
+  // #d-root carries the single delegated listener; #d2 inside it has the
+  // pointer cursor. Preferring the OUTER candidate made the delegation root
+  // claim the ref and swallow #d2 — on a real React app that collapses the
+  // whole application into one ref. The in-page scan now drops any candidate
+  // that contains another candidate, so only the inner one survives.
+  it('자식 후보를 가진 컨테이너는 경로 목록에서 빠진다', () => {
+    // Emulates what the in-page dedup emits: only '0.0.0' (the inner span),
+    // never '0.0' (the delegation root that contains it).
+    const layout = buildPageLayout(TREE, VIEWPORT, new Set(['0.0.0']))
+
+    expect(layout?.byBackendId.get(904)?.clickable).toBe(true) // inner
+    expect(layout?.byBackendId.get(903)?.clickable).toBe(false) // containing root
+    expect(layout?.clickMatched).toBe(1)
+  })
+
+  it('자식 후보가 없는 컨테이너는 그대로 살아남는다', () => {
+    // C1's nested spans never become candidates (cursor inherits), so the
+    // outer element is the only hit and must keep its ref.
+    const layout = buildPageLayout(TREE, VIEWPORT, new Set(['0.0']))
+
+    expect(layout?.byBackendId.get(903)?.clickable).toBe(true)
+    expect(layout?.byBackendId.get(904)?.clickable).toBe(false)
   })
 })

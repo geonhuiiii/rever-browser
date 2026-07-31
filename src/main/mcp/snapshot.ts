@@ -1,7 +1,7 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget } from '../chrome-cdp'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
-import { capturePageLayout, type PageLayout } from './layout'
+import { capturePageLayout, scanClickable, type PageLayout } from './layout'
 
 interface AXValue {
   type: string
@@ -70,6 +70,12 @@ export interface SnapshotStats {
   hidden: number
   /** Nodes dropped because their box sits outside the viewport. */
   offscreen: number
+  /** Refs that exist only because the click scan found them (no ARIA role). */
+  clickOnlyRefs: number
+  /** Elements the in-page click scan reported, before geometry correlation. */
+  clickScanned: number
+  /** How many of those correlated to a snapshot node. */
+  clickMatched: number
   /** True when the filter was discarded because it suppressed everything. */
   fellBackToFull: boolean
 }
@@ -197,23 +203,41 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
     height: meta.innerHeight
   }
 
-  // The AX tree and the layout snapshot are independent reads — issuing them
-  // together keeps the added layout pass off the critical path.
+  // The AX tree, the click scan and the layout snapshot are independent reads —
+  // issuing them together keeps the added passes off the critical path.
+  // The click scan feeds the layout pass, so those two are a chain; the AX tree
+  // is independent and runs alongside the whole chain.
+  //
+  // `full` only turns off viewport PRUNING — the click scan still runs. The
+  // agent reaches for full=true when it cannot find something, so having that
+  // switch also drop the click-scan refs would remove exactly the elements it
+  // is looking for.
   const [axRes, layout] = await Promise.all([
     target.dbg.sendCommand('Accessibility.getFullAXTree') as Promise<{ nodes: AXNode[] }>,
-    opts.full ? Promise.resolve(null) : capturePageLayout(viewport).catch(() => null)
+    scanClickable()
+      .catch(() => null)
+      .then((click) => capturePageLayout(viewport, click?.paths).catch(() => null))
   ])
   const { nodes } = axRes
 
   const byId = new Map<string, AXNode>()
   for (const n of nodes) byId.set(n.nodeId, n)
 
-  const build = (filter: PageLayout | null): { tree: string; stats: SnapshotStats } => {
+  const build = (
+    filter: PageLayout | null,
+    prune: boolean
+  ): { tree: string; stats: SnapshotStats } => {
     refMap.clear()
     let counter = 0
+    let clickOnlyRefs = 0
     const lines: string[] = []
 
-    const walk = (id: string, depth: number, parentName: string): void => {
+    const walk = (
+      id: string,
+      depth: number,
+      parentName: string,
+      ancestorClaimed: boolean
+    ): void => {
       const n = byId.get(id)
       if (!n) return
       const role = (n.role?.value as string | undefined) ?? ''
@@ -227,22 +251,31 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         filter && n.backendDOMNodeId != null
           ? filter.byBackendId.get(n.backendDOMNodeId)
           : undefined
-      if (lay && (!lay.rendered || lay.occluded || !lay.inViewport)) return
+      if (prune && lay && (!lay.rendered || lay.occluded || !lay.inViewport)) return
+
+      // A click signal with no interactive ARIA role — the `<div onClick>`
+      // case. Only the outermost such node in a chain gets a ref, so a button
+      // wrapped in three pointer-cursor divs still yields exactly one.
+      const claimable =
+        lay?.clickable === true &&
+        !ancestorClaimed &&
+        !ACTIONABLE_ROLES.has(role) &&
+        n.backendDOMNodeId != null
 
       // StaticText is collapsed into its parent's name. Suppress entirely if it
       // duplicates the parent name (Playwright MCP rule); otherwise emit as a
       // single quoted text line without a ref (text is not actionable).
-      if (role === 'StaticText') {
+      if (role === 'StaticText' && !claimable) {
         if (!name || name === parentName) return
         lines.push(`${'  '.repeat(depth)}- text ${quote(name)}`)
         return
       }
 
-      const skip = !role || n.ignored || (SKIP_ROLES.has(role) && !name)
+      const skip = !claimable && (!role || n.ignored || (SKIP_ROLES.has(role) && !name))
       let nextDepth = depth
 
       if (!skip) {
-        const parts: string[] = [`- ${role}`]
+        const parts: string[] = [`- ${role || 'clickable'}`]
         if (name) parts.push(quote(name))
 
         if (n.value?.value !== undefined && n.value.value !== '') {
@@ -260,11 +293,13 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           }
         }
 
-        if (n.backendDOMNodeId != null && ACTIONABLE_ROLES.has(role)) {
+        if (n.backendDOMNodeId != null && (ACTIONABLE_ROLES.has(role) || claimable)) {
           counter++
+          if (claimable) clickOnlyRefs++
           const r = `r${counter}`
-          refMap.set(r, { backendNodeId: n.backendDOMNodeId, role, name })
+          refMap.set(r, { backendNodeId: n.backendDOMNodeId, role: role || 'clickable', name })
           parts.push(`[ref=${r}]`)
+          if (claimable) parts.push('(click-scan)')
         }
 
         lines.push(`${'  '.repeat(depth)}${parts.join(' ')}`)
@@ -272,15 +307,25 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       }
 
       const childParentName = skip ? parentName : name
-      for (const c of n.childIds ?? []) walk(c, nextDepth, childParentName)
+      for (const c of n.childIds ?? []) {
+        walk(c, nextDepth, childParentName, ancestorClaimed || claimable)
+      }
     }
 
-    if (nodes[0]) walk(nodes[0].nodeId, 0, '')
+    if (nodes[0]) walk(nodes[0].nodeId, 0, '', false)
 
-    if (!filter) {
+    if (!filter || !prune) {
       return {
         tree: lines.join('\n'),
-        stats: { refs: counter, hidden: 0, offscreen: 0, fellBackToFull: false }
+        stats: {
+          refs: counter,
+          hidden: 0,
+          offscreen: 0,
+          clickOnlyRefs,
+          clickScanned: filter?.clickScanned ?? 0,
+          clickMatched: filter?.clickMatched ?? 0,
+          fellBackToFull: false
+        }
       }
     }
 
@@ -291,12 +336,15 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         refs: counter,
         hidden: tally.hidden,
         offscreen: tally.below + tally.above + tally.side,
+        clickOnlyRefs,
+        clickScanned: filter.clickScanned,
+        clickMatched: filter.clickMatched,
         fellBackToFull: false
       }
     }
   }
 
-  let result = build(layout)
+  let result = build(layout, !opts.full)
 
   // Safety valve for a coordinate mismatch (detached document, odd frame
   // setup): the filter suppressed everything AND cannot say why.
@@ -306,10 +354,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
   // valve there throws away a correct result and silently disables the filter
   // exactly when the page is most confusing. So only fall back when the tally
   // accounts for nothing.
-  if (layout && result.stats.refs === 0) {
+  if (layout && !opts.full && result.stats.refs === 0) {
     const explained = result.stats.hidden > 0 || result.stats.offscreen > 0
     if (!explained) {
-      result = build(null)
+      result = build(layout, false)
       result.stats.fellBackToFull = true
     }
   }

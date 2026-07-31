@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever snapshot fixture</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe;letter-spacing:.02em}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .exp b{color:#7ee787}
+  .exp i{color:#f0b849;font-style:normal}
+
+  /* Every target is visually identical so styling never hints at the answer. */
+  .t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:7px 12px;
+     color:#e6edf3;font-size:13px;display:inline-block}
+  .ptr{cursor:pointer}
+  .plain{cursor:default}
+
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99;display:none}
+  #overlay.on{display:block}
+  #overlay .box{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);
+    background:#161b22;border:1px solid #2b3444;border-radius:10px;padding:20px}
+
+  .spacer{height:1600px;display:flex;align-items:center;justify-content:center;
+    color:#3d4654;border:1px dashed #2b3444;border-radius:8px;margin:10px 0}
+  .hidden-a{display:none}
+  .hidden-b{visibility:hidden}
+  .hidden-c{opacity:0}
+  .hidden-d{width:0;height:0;overflow:hidden;padding:0;border:0}
+</style>
+</head>
+<body>
+
+<h1>rever-browser snapshot fixture</h1>
+<p class="sub">Ground truth is printed under every group. ABOVE THE FOLD: groups A–E. BELOW: groups F–G.</p>
+
+<!-- ============ A: native, AX already covers these ============ -->
+<section>
+  <h2>A. Native elements</h2>
+  <div class="row">
+    <button class="t" data-fx="a1" id="a1">A1 button</button>
+    <a class="t" href="#a2" id="a2">A2 link</a>
+    <input class="t" type="text" id="a3" placeholder="A3 textbox" aria-label="A3 textbox">
+  </div>
+  <p class="exp">Expect <b>3 refs</b> from the accessibility tree · <b>0</b> tagged <i>(click-scan)</i></p>
+</section>
+
+<!-- ============ B: click-scan must find these ============ -->
+<section>
+  <h2>B. No ARIA role — click scan is the only way to see them</h2>
+  <div class="row">
+    <div class="t ptr" id="b1" onclick="hit('b1')">B1 inline onclick</div>
+    <div class="t plain" id="b2">B2 addEventListener click</div>
+    <div class="t ptr" id="b3">B3 cursor:pointer only, no handler</div>
+    <div class="t plain" id="b4" tabindex="0">B4 tabindex=0</div>
+    <span class="t plain" id="b5">B5 pointerdown listener</span>
+  </div>
+  <p class="exp">Expect <b>5 refs</b>, all tagged <i>(click-scan)</i></p>
+</section>
+
+<!-- ============ C: must NOT over-detect ============ -->
+<section>
+  <h2>C. Over-detection guards</h2>
+  <div class="row">
+    <div class="t ptr" id="c1">C1 outer <span>nested</span> <span>spans <span>deep</span></span></div>
+    <div class="t plain" id="c2">C2 plain div, no handler</div>
+    <div class="t plain" id="c3">C3 decorative</div>
+  </div>
+  <p class="exp">Expect <b>exactly 1 ref</b> (C1 outer only — cursor inherits, so naive code reports 4)
+    · C2 and C3 must produce <b>0</b></p>
+</section>
+
+<!-- ============ D: React-style delegation ============ -->
+<section>
+  <h2>D. Delegated handlers (React 17+ shape)</h2>
+  <div class="row" id="d-root">
+    <div class="t plain" id="d1" data-action="one">D1 delegated, no pointer cursor</div>
+    <div class="t ptr" id="d2" data-action="two">D2 delegated + pointer cursor</div>
+  </div>
+  <p class="exp">One listener lives on the container, none on the children.
+    Expect <b>D1 MISSED</b> (documented limitation) · <b>D2 found</b> via the cursor signal</p>
+</section>
+
+<!-- ============ E: hidden variants ============ -->
+<section>
+  <h2>E. Hidden buttons</h2>
+  <div class="row">
+    <button class="t hidden-a" id="e1">E1 display:none</button>
+    <button class="t hidden-b" id="e2">E2 visibility:hidden</button>
+    <button class="t hidden-c" id="e3">E3 opacity:0</button>
+    <button class="t hidden-d" id="e4">E4 zero size</button>
+    <button class="t" id="e5" onclick="toggleOverlay()">E5 toggle overlay (occlusion test)</button>
+  </div>
+  <p class="exp">Expect <b>1 ref</b> (E5 only) · E1–E4 counted as <i>hidden/covered</i></p>
+</section>
+
+<div class="spacer">— 1600px spacer · everything below is OFF-SCREEN —</div>
+
+<!-- ============ F: below the fold ============ -->
+<section>
+  <h2>F. Below the fold</h2>
+  <div class="row">
+    <button class="t" id="f1">F1</button>
+    <button class="t" id="f2">F2</button>
+    <button class="t" id="f3">F3</button>
+    <a class="t" href="#f4" id="f4">F4</a>
+    <a class="t" href="#f5" id="f5">F5</a>
+    <div class="t ptr" id="f6">F6 pointer div</div>
+  </div>
+  <p class="exp">Expect <b>0 refs</b> in a default snapshot · <b>6</b> counted as off-screen with a scroll hint</p>
+</section>
+
+<!-- ============ G: network triggers ============ -->
+<section>
+  <h2>G. Network triggers</h2>
+  <div class="row">
+    <div class="t ptr" id="g1">G1 fires /api/from-div-click</div>
+    <button class="t" id="g2">G2 fires /api/from-button-click</button>
+  </div>
+  <p class="exp">Click either, then run list_requests — the URL proves a trusted click reached the handler</p>
+</section>
+
+<div id="overlay"><div class="box">Overlay is covering the page. Snapshot now.</div></div>
+
+<script>
+  function hit(id) {
+    document.title = 'clicked:' + id
+    fetch('/api/click/' + id).catch(function () {})
+  }
+
+  // Direct listeners — the shape getEventListeners() can actually see.
+  document.getElementById('b2').addEventListener('click', function () { hit('b2') })
+  document.getElementById('b5').addEventListener('pointerdown', function () { hit('b5') })
+  document.getElementById('b4').addEventListener('keydown', function () { hit('b4') })
+
+  // Delegation: ONE listener on the container, nothing on the children. This is
+  // what React 17+ does at the root, and why per-element listener enumeration
+  // finds nothing on React components.
+  document.getElementById('d-root').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]')
+    if (el) hit(el.id)
+  })
+
+  document.getElementById('g1').addEventListener('click', function () {
+    fetch('/api/from-div-click?src=g1').catch(function () {})
+  })
+  document.getElementById('g2').addEventListener('click', function () {
+    fetch('/api/from-button-click?src=g2').catch(function () {})
+  })
+
+  function toggleOverlay() {
+    document.getElementById('overlay').classList.toggle('on')
+  }
+</script>
+</body>
+</html>

@@ -14,12 +14,13 @@ function lay(partial: Partial<NodeLayout> & Pick<NodeLayout, 'y'>): NodeLayout {
     rendered: true,
     inViewport: false,
     occluded: false,
+    clickable: false,
     ...partial
   }
 }
 
 function pageLayout(entries: Array<[number, NodeLayout]>): PageLayout {
-  return { byBackendId: new Map(entries), viewport: VIEWPORT }
+  return { byBackendId: new Map(entries), viewport: VIEWPORT, clickScanned: 0, clickMatched: 0 }
 }
 
 /** Minimal actionable AX node. */
@@ -89,7 +90,9 @@ describe('tallyFiltered', () => {
   it('위쪽으로 벗어난 요소는 above로 분류한다', () => {
     const scrolled: PageLayout = {
       byBackendId: new Map([[1, lay({ y: 100 })]]),
-      viewport: { x: 0, y: 2000, width: 1000, height: 800 }
+      viewport: { x: 0, y: 2000, width: 1000, height: 800 },
+      clickScanned: 0,
+      clickMatched: 0
     }
 
     const t = tallyFiltered([link('l1', 1)], scrolled)
