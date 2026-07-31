@@ -1,29 +1,26 @@
-// Per-tab session isolation. Each browser tab lives in its own persistent
-// Electron partition so it can carry an independent proxy AND an independent
-// cookie/storage jar. The partition string is derived purely from the tab id,
-// so the renderer (which owns tab ids) and the main process agree without
-// having to pass the full partition around.
+// Shared browsing session. All tabs live in one persistent Electron partition
+// so cookies/storage behave like a normal browser profile — logging in on one
+// tab keeps you logged in on tabs opened from it (e.g. Naver cafe posts that
+// open in a new tab). Per-tab isolation (independent proxy + cookie jar) is
+// planned as a separate feature using dedicated windows, not tabs.
 //
-// IMPORTANT: the renderer builds the same string inline as
-// `persist:rever-${tab.id}` in WebviewTab.tsx — keep the two in sync.
+// IMPORTANT: the renderer uses the same string inline as the webview
+// `partition` attribute in WebviewTab.tsx — keep the two in sync.
 
-export const PARTITION_PREFIX = 'persist:rever-'
+export const SHARED_PARTITION = 'persist:rever-shared'
 
-export function partitionForTab(tabId: string): string {
-  return `${PARTITION_PREFIX}${tabId}`
+export function partitionForTab(_tabId: string): string {
+  return SHARED_PARTITION
 }
 
-// Features that act on "the current tab" via the Electron `session.cookies` API
-// (sticky-cookie persistence, Chrome cookie import) need to know which tab is
-// active. The renderer reports it on every active-tab change; until then we
-// default to the first tab's partition, which is deterministic because the
-// renderer's tab-id counter restarts at `t1` on every launch.
-let activePartition = partitionForTab('t1')
-
-export function setActivePartition(partition: string): void {
-  activePartition = partition
+// Features that act on the browsing session via the Electron `session.cookies`
+// API (sticky-cookie persistence, Chrome cookie import) resolve the partition
+// through these helpers. With the shared partition this is now a constant, but
+// the API shape is kept so a future isolated-window feature can slot back in.
+export function setActivePartition(_partition: string): void {
+  // no-op while all tabs share one partition
 }
 
 export function getActivePartition(): string {
-  return activePartition
+  return SHARED_PARTITION
 }

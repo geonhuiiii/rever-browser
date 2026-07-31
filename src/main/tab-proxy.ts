@@ -2,10 +2,11 @@ import { session } from 'electron'
 
 import { partitionForTab } from './tab-partition'
 
-// Per-tab upstream proxy. Electron proxies are configured per `session`, so
-// this only works because each tab has its own partition (see tab-partition.ts).
-// Changing a tab's proxy is a live `session.setProxy()` call — no webview
-// remount is needed.
+// Upstream proxy for the browsing session. Electron proxies are configured per
+// `session`; tabs now share one partition (see tab-partition.ts), so setting a
+// proxy from any tab applies to all tabs. Per-tab/per-window isolation is
+// planned as a separate feature. Changing the proxy is a live
+// `session.setProxy()` call — no webview remount is needed.
 
 export interface TabProxyConfig {
   enabled: boolean

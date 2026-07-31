@@ -116,8 +116,8 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
         disabled={!tab}
         title={
           on && proxy
-            ? `Tab proxy: ${proxy.scheme}://${proxy.host}:${proxy.port} — click to edit`
-            : 'Set a proxy for this tab'
+            ? `Proxy: ${proxy.scheme}://${proxy.host}:${proxy.port} — click to edit`
+            : 'Set a proxy for the browser'
         }
         style={{
           maxWidth: 180,
@@ -235,8 +235,8 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
             </div>
 
             <div style={{ color: 'var(--text-dim)', opacity: 0.8, lineHeight: 1.4 }}>
-              Applies to this tab only; reloads the page. Cookies/storage are
-              isolated per tab.
+              Applies to all tabs (tabs share one browsing session); reloads
+              the page. Per-tab isolation is planned as a separate feature.
             </div>
           </div>
         </>

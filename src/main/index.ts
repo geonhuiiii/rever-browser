@@ -226,10 +226,10 @@ app.whenReady().then(() => {
   // default so the Permissions API reports 'prompt' / 'denied' like a
   // freshly-installed Chrome with no granted sites.
   //
-  // Tabs now each get their own partition (persist:rever-<tabId>), so apply the
-  // deny-all handlers to every session as it's created rather than to one fixed
-  // partition. The app's own UI runs on the default session — skip it so
-  // clipboard/etc. in the renderer keep working.
+  // Apply the deny-all handlers to every non-default session as it's created
+  // (today that's the shared persist:rever-shared partition; future isolated
+  // windows get covered automatically). The app's own UI runs on the default
+  // session — skip it so clipboard/etc. in the renderer keep working.
   app.on('session-created', (createdSession) => {
     if (createdSession === session.defaultSession) return
     createdSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
