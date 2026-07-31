@@ -1,6 +1,7 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget } from '../chrome-cdp'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
+import { capturePageLayout, type PageLayout } from './layout'
 
 interface AXValue {
   type: string
@@ -12,7 +13,7 @@ interface AXProperty {
   value: AXValue
 }
 
-interface AXNode {
+export interface AXNode {
   nodeId: string
   ignored?: boolean
   childIds?: string[]
@@ -62,92 +63,262 @@ function quote(s: string): string {
   return JSON.stringify(s.length > 80 ? s.slice(0, 80) + '…' : s)
 }
 
+export interface SnapshotStats {
+  /** Actionable nodes that got a ref. */
+  refs: number
+  /** Nodes dropped because nothing is painted for them (hidden or covered). */
+  hidden: number
+  /** Nodes dropped because their box sits outside the viewport. */
+  offscreen: number
+  /** True when the filter was discarded because it suppressed everything. */
+  fellBackToFull: boolean
+}
+
 export interface SnapshotResult {
   url: string
   title: string
   tree: string
+  stats: SnapshotStats
 }
 
-export async function takeSnapshot(): Promise<SnapshotResult> {
+interface PageMeta {
+  url: string
+  title: string
+  scrollX: number
+  scrollY: number
+  innerWidth: number
+  innerHeight: number
+}
+
+/** Tally of actionable nodes the viewport filter kept out of the tree. */
+export interface FilterTally {
+  hidden: number
+  below: number
+  above: number
+  side: number
+  nearestBelow: number
+  nearestAbove: number
+}
+
+/**
+ * Count what the filter excludes, by scanning every AX node directly.
+ *
+ * This deliberately does NOT reuse the tree walk. The walk prunes whole
+ * subtrees when a container falls off-screen, so an actionable node buried
+ * under one is never visited — counting there under-reports by an order of
+ * magnitude and suppresses the scroll hints that make pruning safe.
+ */
+export function tallyFiltered(nodes: AXNode[], layout: PageLayout): FilterTally {
+  const t: FilterTally = {
+    hidden: 0,
+    below: 0,
+    above: 0,
+    side: 0,
+    nearestBelow: Infinity,
+    nearestAbove: Infinity
+  }
+  const v = layout.viewport
+
+  for (const n of nodes) {
+    if (n.backendDOMNodeId == null || n.ignored) continue
+    const role = (n.role?.value as string | undefined) ?? ''
+    if (!ACTIONABLE_ROLES.has(role)) continue
+
+    const lay = layout.byBackendId.get(n.backendDOMNodeId)
+    if (!lay) continue
+
+    if (!lay.rendered || lay.occluded) {
+      t.hidden++
+      continue
+    }
+    if (lay.inViewport) continue
+
+    const below = lay.y - (v.y + v.height)
+    const above = v.y - (lay.y + lay.height)
+    if (below > 0) {
+      t.below++
+      t.nearestBelow = Math.min(t.nearestBelow, below)
+    } else if (above > 0) {
+      t.above++
+      t.nearestAbove = Math.min(t.nearestAbove, above)
+    } else {
+      t.side++
+    }
+  }
+
+  return t
+}
+
+export function describeOffscreen(t: FilterTally): string[] {
+  const out: string[] = []
+  // The distance is to the NEAREST element, not to all of them — say so, or a
+  // "scroll down ~25px" hint alongside a count of 138 reads as "25px reveals
+  // everything" and the agent scrolls one row at a time.
+  if (t.below > 0) {
+    const px = Math.max(0, Math.round(t.nearestBelow))
+    out.push(`- [${t.below} more actionable element(s) below the fold — nearest ~${px}px down]`)
+  }
+  if (t.above > 0) {
+    const px = Math.max(0, Math.round(t.nearestAbove))
+    out.push(`- [${t.above} more actionable element(s) above the fold — nearest ~${px}px up]`)
+  }
+  if (t.side > 0) {
+    out.push(`- [${t.side} more actionable element(s) outside the horizontal viewport]`)
+  }
+  return out
+}
+
+/**
+ * Capture the page as an accessibility outline.
+ *
+ * By default only what is actually painted inside the viewport is emitted:
+ * hidden, zero-size, overlay-covered and off-screen subtrees are dropped, and
+ * off-screen actionable nodes are summarised as scroll hints instead. That
+ * keeps the tree small enough that the agent keeps using refs rather than
+ * falling back to raw JS (which skips the human-shaped input path and fires
+ * untrusted events). Pass `full` to get the unfiltered tree back.
+ */
+export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<SnapshotResult> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target — open a page first')
-  refMap.clear()
-
   await target.dbg.sendCommand('Accessibility.enable').catch(() => {})
 
-  const meta = (await target.dbg.sendCommand('Runtime.evaluate', {
-    expression: '({ url: location.href, title: document.title })',
+  const metaRes = (await target.dbg.sendCommand('Runtime.evaluate', {
+    expression:
+      '({ url: location.href, title: document.title, scrollX, scrollY, innerWidth, innerHeight })',
     returnByValue: true
-  })) as { result: { value: { url: string; title: string } } }
+  })) as { result: { value: PageMeta } }
+  const meta = metaRes.result.value
 
-  const { nodes } = (await target.dbg.sendCommand('Accessibility.getFullAXTree')) as {
-    nodes: AXNode[]
+  const viewport = {
+    x: meta.scrollX,
+    y: meta.scrollY,
+    width: meta.innerWidth,
+    height: meta.innerHeight
   }
+
+  // The AX tree and the layout snapshot are independent reads — issuing them
+  // together keeps the added layout pass off the critical path.
+  const [axRes, layout] = await Promise.all([
+    target.dbg.sendCommand('Accessibility.getFullAXTree') as Promise<{ nodes: AXNode[] }>,
+    opts.full ? Promise.resolve(null) : capturePageLayout(viewport).catch(() => null)
+  ])
+  const { nodes } = axRes
 
   const byId = new Map<string, AXNode>()
   for (const n of nodes) byId.set(n.nodeId, n)
 
-  let counter = 0
-  const lines: string[] = []
+  const build = (filter: PageLayout | null): { tree: string; stats: SnapshotStats } => {
+    refMap.clear()
+    let counter = 0
+    const lines: string[] = []
 
-  const walk = (id: string, depth: number, parentName: string): void => {
-    const n = byId.get(id)
-    if (!n) return
-    const role = (n.role?.value as string | undefined) ?? ''
-    const name = String((n.name?.value as string | undefined) ?? '').trim()
+    const walk = (id: string, depth: number, parentName: string): void => {
+      const n = byId.get(id)
+      if (!n) return
+      const role = (n.role?.value as string | undefined) ?? ''
+      const name = String((n.name?.value as string | undefined) ?? '').trim()
 
-    // StaticText is collapsed into its parent's name. Suppress entirely if it
-    // duplicates the parent name (Playwright MCP rule); otherwise emit as a
-    // single quoted text line without a ref (text is not actionable).
-    if (role === 'StaticText') {
-      if (!name || name === parentName) return
-      lines.push(`${'  '.repeat(depth)}- text ${quote(name)}`)
-      return
-    }
+      // Layout gate. A node with no layout entry is left alone — absence of
+      // data must never be read as "invisible", or whole pages would vanish.
+      // Counting happens in tallyFiltered, not here: this prunes subtrees, so
+      // anything below a pruned container is never reached.
+      const lay =
+        filter && n.backendDOMNodeId != null
+          ? filter.byBackendId.get(n.backendDOMNodeId)
+          : undefined
+      if (lay && (!lay.rendered || lay.occluded || !lay.inViewport)) return
 
-    const skip = !role || n.ignored || (SKIP_ROLES.has(role) && !name)
-    let nextDepth = depth
-
-    if (!skip) {
-      const parts: string[] = [`- ${role}`]
-      if (name) parts.push(quote(name))
-
-      if (n.value?.value !== undefined && n.value.value !== '') {
-        parts.push(`value=${quote(String(n.value.value))}`)
+      // StaticText is collapsed into its parent's name. Suppress entirely if it
+      // duplicates the parent name (Playwright MCP rule); otherwise emit as a
+      // single quoted text line without a ref (text is not actionable).
+      if (role === 'StaticText') {
+        if (!name || name === parentName) return
+        lines.push(`${'  '.repeat(depth)}- text ${quote(name)}`)
+        return
       }
 
-      if (n.properties) {
-        for (const p of n.properties) {
-          const v = p.value?.value
-          if ((p.name === 'checked' || p.name === 'selected' || p.name === 'expanded') && v) {
-            parts.push(`${p.name}=${v}`)
-          }
-          if (p.name === 'disabled' && v) parts.push('disabled')
-          if (p.name === 'level' && typeof v === 'number') parts.push(`level=${v}`)
+      const skip = !role || n.ignored || (SKIP_ROLES.has(role) && !name)
+      let nextDepth = depth
+
+      if (!skip) {
+        const parts: string[] = [`- ${role}`]
+        if (name) parts.push(quote(name))
+
+        if (n.value?.value !== undefined && n.value.value !== '') {
+          parts.push(`value=${quote(String(n.value.value))}`)
         }
+
+        if (n.properties) {
+          for (const p of n.properties) {
+            const v = p.value?.value
+            if ((p.name === 'checked' || p.name === 'selected' || p.name === 'expanded') && v) {
+              parts.push(`${p.name}=${v}`)
+            }
+            if (p.name === 'disabled' && v) parts.push('disabled')
+            if (p.name === 'level' && typeof v === 'number') parts.push(`level=${v}`)
+          }
+        }
+
+        if (n.backendDOMNodeId != null && ACTIONABLE_ROLES.has(role)) {
+          counter++
+          const r = `r${counter}`
+          refMap.set(r, { backendNodeId: n.backendDOMNodeId, role, name })
+          parts.push(`[ref=${r}]`)
+        }
+
+        lines.push(`${'  '.repeat(depth)}${parts.join(' ')}`)
+        nextDepth = depth + 1
       }
 
-      if (n.backendDOMNodeId != null && ACTIONABLE_ROLES.has(role)) {
-        counter++
-        const r = `r${counter}`
-        refMap.set(r, { backendNodeId: n.backendDOMNodeId, role, name })
-        parts.push(`[ref=${r}]`)
-      }
-
-      lines.push(`${'  '.repeat(depth)}${parts.join(' ')}`)
-      nextDepth = depth + 1
+      const childParentName = skip ? parentName : name
+      for (const c of n.childIds ?? []) walk(c, nextDepth, childParentName)
     }
 
-    const childParentName = skip ? parentName : name
-    for (const c of n.childIds ?? []) walk(c, nextDepth, childParentName)
+    if (nodes[0]) walk(nodes[0].nodeId, 0, '')
+
+    if (!filter) {
+      return {
+        tree: lines.join('\n'),
+        stats: { refs: counter, hidden: 0, offscreen: 0, fellBackToFull: false }
+      }
+    }
+
+    const tally = tallyFiltered(nodes, filter)
+    return {
+      tree: [...lines, ...describeOffscreen(tally)].join('\n'),
+      stats: {
+        refs: counter,
+        hidden: tally.hidden,
+        offscreen: tally.below + tally.above + tally.side,
+        fellBackToFull: false
+      }
+    }
   }
 
-  if (nodes[0]) walk(nodes[0].nodeId, 0, '')
+  let result = build(layout)
+
+  // Safety valve for a coordinate mismatch (detached document, odd frame
+  // setup): the filter suppressed everything AND cannot say why.
+  //
+  // "Cannot say why" is the load-bearing half. A full-screen modal legitimately
+  // covers every actionable element, which also yields zero refs — firing the
+  // valve there throws away a correct result and silently disables the filter
+  // exactly when the page is most confusing. So only fall back when the tally
+  // accounts for nothing.
+  if (layout && result.stats.refs === 0) {
+    const explained = result.stats.hidden > 0 || result.stats.offscreen > 0
+    if (!explained) {
+      result = build(null)
+      result.stats.fellBackToFull = true
+    }
+  }
 
   return {
-    url: meta.result.value.url,
-    title: meta.result.value.title,
-    tree: lines.join('\n')
+    url: meta.url,
+    title: meta.title,
+    tree: result.tree,
+    stats: result.stats
   }
 }
 

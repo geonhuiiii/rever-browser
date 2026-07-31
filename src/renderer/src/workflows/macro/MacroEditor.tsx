@@ -12,20 +12,34 @@ interface McpToolInfo {
 interface WorkflowRunStep {
   tool: string
   input: Record<string, unknown>
+  waitFor?: string
+  delay?: number
+  saveAs?: string
 }
 interface WorkflowStepProgress {
   index: number
   tool: string
-  status: 'running' | 'done' | 'error'
+  status: 'waiting' | 'running' | 'done' | 'error'
   output?: string
   error?: string
+  waitingFor?: string
 }
+
+// Pseudo-tool: runs a prompt through the agent instead of an MCP tool. Handled
+// in main/workflow-executor.ts, so it never appears in listTools().
+export const AI_TOOL = '__ai_prompt'
 
 export interface MacroStep {
   id: string
   tool: string
   // JSON object literal (as text) for the tool arguments. May contain {{var}}.
   input: string
+  // Wait until this CSS selector matches before running the step.
+  waitFor?: string
+  // Extra pause (ms) before running the step, applied after waitFor.
+  delay?: number
+  // Store this step's result under this name for later {{name}} references.
+  saveAs?: string
 }
 
 export interface MacroData {
@@ -56,9 +70,15 @@ export function resolveSteps(
   const out: WorkflowRunStep[] = []
   for (const s of steps) {
     if (!s.tool) return { ok: false, error: 'A step has no tool selected' }
-    const substituted = s.input.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_m, key: string) => {
+    // Placeholders with no matching variable are left in place: they may refer
+    // to a value an earlier step captures at run time via saveAs, which only
+    // the executor can resolve.
+    const substituted = s.input.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (m, key: string) => {
       const v = vars[key]
-      return v == null ? '' : String(v)
+      if (v == null) return m
+      // Escape so an injected value can't break out of the JSON string.
+      const json = JSON.stringify(String(v))
+      return json.slice(1, -1)
     })
     let input: Record<string, unknown> = {}
     if (substituted.trim()) {
@@ -68,7 +88,13 @@ export function resolveSteps(
         return { ok: false, error: `Step "${s.tool}" input is not valid JSON` }
       }
     }
-    out.push({ tool: s.tool, input })
+    out.push({
+      tool: s.tool,
+      input,
+      ...(s.waitFor?.trim() ? { waitFor: s.waitFor.trim() } : {}),
+      ...(s.delay && s.delay > 0 ? { delay: s.delay } : {}),
+      ...(s.saveAs?.trim() ? { saveAs: s.saveAs.trim() } : {})
+    })
   }
   return { ok: true, steps: out }
 }
@@ -143,6 +169,7 @@ export function MacroEditor({ workflow, onChange }: WorkflowEditorProps): React.
 
   const statusColor = (s: WorkflowStepProgress | undefined): string => {
     if (!s) return 'var(--text-dim)'
+    if (s.status === 'waiting') return 'var(--text-dim)'
     if (s.status === 'running') return 'var(--accent)'
     if (s.status === 'error') return '#e06c6c'
     return 'var(--chip-ok-text)'
@@ -198,6 +225,7 @@ export function MacroEditor({ workflow, onChange }: WorkflowEditorProps): React.
                   style={{ flex: 1, height: 26, padding: '0 6px' }}
                 >
                   {!s.tool && <option value="">Select a tool…</option>}
+                  <option value={AI_TOOL}>{AI_TOOL} — ask the AI</option>
                   {tools.map((t) => (
                     <option key={t.name} value={t.name}>
                       {t.name}
@@ -209,18 +237,78 @@ export function MacroEditor({ workflow, onChange }: WorkflowEditorProps): React.
                 <button type="button" onClick={() => removeStep(s.id)} title="Remove step">✕</button>
               </div>
 
-              {info?.description && (
+              {s.tool === AI_TOOL ? (
                 <div style={{ color: 'var(--text-dim)', fontSize: 11, lineHeight: 1.35 }}>
-                  {info.description}
+                  Sends a prompt to the agent and captures its answer. Set{' '}
+                  <code>json: true</code> to force a parseable JSON answer, then
+                  reference fields as {'{{name.field}}'} in later steps.
                 </div>
+              ) : (
+                info?.description && (
+                  <div style={{ color: 'var(--text-dim)', fontSize: 11, lineHeight: 1.35 }}>
+                    {info.description}
+                  </div>
+                )
               )}
+
+              {/* Preconditions + result capture. Both waits run before the
+                  step: waitFor first, then delay. */}
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  value={s.waitFor ?? ''}
+                  onChange={(e) => updateStep(s.id, { waitFor: e.target.value })}
+                  placeholder="wait for selector (optional)"
+                  spellCheck={false}
+                  title="Poll until this CSS selector matches, then run the step. Fails the step after 10s."
+                  style={{
+                    flex: '1 1 150px',
+                    minWidth: 110,
+                    height: 24,
+                    padding: '0 6px',
+                    fontFamily: 'ui-monospace, monospace',
+                    fontSize: 11
+                  }}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={s.delay ?? ''}
+                  onChange={(e) =>
+                    updateStep(s.id, {
+                      delay: e.target.value === '' ? undefined : Number(e.target.value)
+                    })
+                  }
+                  placeholder="delay ms"
+                  title="Extra pause before the step, applied after waitFor"
+                  style={{ width: 84, height: 24, padding: '0 6px', fontSize: 11 }}
+                />
+                <input
+                  value={s.saveAs ?? ''}
+                  onChange={(e) => updateStep(s.id, { saveAs: e.target.value })}
+                  placeholder="save as"
+                  spellCheck={false}
+                  title="Store this step's result under this name; use it later as {{name}}"
+                  style={{
+                    width: 100,
+                    height: 24,
+                    padding: '0 6px',
+                    fontFamily: 'ui-monospace, monospace',
+                    fontSize: 11
+                  }}
+                />
+              </div>
 
               <textarea
                 value={s.input}
                 onChange={(e) => updateStep(s.id, { input: e.target.value })}
                 spellCheck={false}
                 rows={3}
-                placeholder='{ "url": "https://..." }'
+                placeholder={
+                  s.tool === AI_TOOL
+                    ? '{ "prompt": "Summarise the page title", "json": true, "schema": "{ \\"title\\": string }" }'
+                    : '{ "url": "https://..." }'
+                }
                 style={{
                   fontFamily: 'ui-monospace, monospace',
                   fontSize: 11,
@@ -256,6 +344,7 @@ export function MacroEditor({ workflow, onChange }: WorkflowEditorProps): React.
 
               {prog && (
                 <div style={{ fontSize: 11, color: statusColor(prog) }}>
+                  {prog.status === 'waiting' && `◐ ${prog.waitingFor ?? 'waiting…'}`}
                   {prog.status === 'running' && '● running…'}
                   {prog.status === 'done' && `✓ ${(prog.output ?? '').slice(0, 200) || 'done'}`}
                   {prog.status === 'error' && `✕ ${prog.error ?? 'failed'}`}

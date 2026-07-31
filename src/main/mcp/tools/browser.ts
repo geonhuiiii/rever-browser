@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { emitAiAction } from '../../ai-events'
 import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
-import { evalInPage, visualize } from '../cdp-eval'
+import { evalInPage } from '../cdp-eval'
 import { humanScroll } from '../human-input'
 import {
   clickRef,
@@ -17,12 +17,6 @@ import {
   typeSelector
 } from '../snapshot'
 import { ok, err, errorMessage } from '../utils'
-
-// One-line preview of an eval result / error for the in-page code HUD.
-function preview(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > 120 ? flat.slice(0, 120) + '…' : flat
-}
 
 /**
  * Wait for the page to settle, then take a fresh snapshot. Used by
@@ -37,11 +31,31 @@ async function snapshotAfter(actionResult: string): Promise<{
     await waitForSettle()
     const snap = await takeSnapshot()
     return ok(
-      `${actionResult}\n\n--- snapshot (refs from previous snapshot are now stale) ---\nurl: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}`
+      `${actionResult}\n\n--- snapshot (refs from previous snapshot are now stale) ---\nurl: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}${filterNote(snap.stats)}`
     )
   } catch (e) {
     return ok(`${actionResult}\n\n[auto-snapshot failed: ${errorMessage(e)}]`)
   }
+}
+
+/** Trailing note telling the agent what the viewport filter left out. */
+function filterNote(stats: {
+  hidden: number
+  offscreen: number
+  fellBackToFull: boolean
+}): string {
+  const parts: string[] = []
+  if (stats.hidden > 0 || stats.offscreen > 0) {
+    parts.push(
+      `viewport filter: ${stats.hidden} hidden/covered, ${stats.offscreen} off-screen actionable element(s) omitted — scroll to reach them, or pass full=true for the whole page`
+    )
+  }
+  if (stats.fellBackToFull) {
+    parts.push(
+      'viewport filter DISABLED for this snapshot: it suppressed every element with nothing to attribute it to (likely a coordinate mismatch)'
+    )
+  }
+  return parts.length ? `\n\n[${parts.join(']\n[')}]` : ''
 }
 
 export function registerBrowserTools(mcp: McpServer) {
@@ -71,13 +85,20 @@ export function registerBrowserTools(mcp: McpServer) {
     'browser_snapshot',
     {
       description:
-        'Capture the current page as a compact accessibility-tree snapshot. Returns url, title, and a YAML-like outline where actionable nodes carry [ref=rN] handles. Use these refs in browser_click and browser_type. This is the primary way to "see" the page — far cheaper than dumping HTML or screenshots.'
+        'Capture the current page as a compact accessibility-tree snapshot. Returns url, title, and a YAML-like outline where actionable nodes carry [ref=rN] handles. Use these refs in browser_click and browser_type. This is the primary way to "see" the page — far cheaper than dumping HTML or screenshots. By default only what is painted inside the viewport is returned; hidden, overlay-covered and off-screen nodes are omitted and summarised as scroll hints. Scroll (browser_scroll) to reach them, or pass full=true when you genuinely need the whole document.',
+      inputSchema: {
+        full: z
+          .boolean()
+          .optional()
+          .describe(
+            'Return the entire document instead of the viewport-filtered tree (much larger; default false)'
+          )
+      }
     },
-    async () => {
+    async ({ full }) => {
       try {
-        emitAiAction({ kind: 'snapshot', label: 'AI snapshot' })
-        const snap = await takeSnapshot()
-        return ok(`url: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}`)
+        const snap = await takeSnapshot({ full })
+        return ok(`url: ${snap.url}\ntitle: ${snap.title}\n\n${snap.tree}${filterNote(snap.stats)}`)
       } catch (e) {
         return err(errorMessage(e))
       }
@@ -90,12 +111,6 @@ export function registerBrowserTools(mcp: McpServer) {
       description:
         'Click the element identified by ref (from the latest browser_snapshot). Scrolls into view, performs a human-like mouse move, then clicks. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards. Refs from the previous snapshot are now stale.',
       inputSchema: {
-        // Sweep as soon as the new document is parsed, not after loadURL
-        // resolves — loadURL waits for the full load (images, subframes), so
-        // sweeping then reads as a beat too late. The overlay script is
-        // injected at document-start, so __reverAi already exists here. It has
-        // to be the NEW document: the old one's overlay dies on navigation.
-        target.wc.once('dom-ready', () => visualize('navSweep'))
         ref: z.string().describe('Element ref from browser_snapshot, e.g. "r12"')
       }
     },
@@ -281,9 +296,7 @@ export function registerBrowserTools(mcp: McpServer) {
           detail: expression.slice(0, 80)
         })
         const result = await evalInPage<unknown>(expression)
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-        visualize('evalHudDone', preview(text), false)
-        return ok(text)
+        return ok(typeof result === 'string' ? result : JSON.stringify(result, null, 2))
       } catch (e) {
         return err(errorMessage(e))
       }
@@ -322,11 +335,9 @@ export function registerBrowserTools(mcp: McpServer) {
       const cap = limit ?? 50
       const PER_NODE_CHARS = 500
       emitAiAction({ kind: 'extract', label: 'AI dom_extract', detail: selector.slice(0, 80) })
-        visualize('evalHudStart', expression.slice(0, 160))
       // Build an in-page expression with all params embedded as JSON literals so
       // the selector/attribute names can't break out of the string. evalInPage
       // runs with returnByValue, so we return plain serialisable objects.
-        visualize('evalHudDone', preview(errorMessage(e)), true)
       const expr = `(() => {
   const selector = ${JSON.stringify(selector)};
   const fields = ${JSON.stringify(fieldList)};
@@ -394,6 +405,3 @@ export function registerBrowserTools(mcp: McpServer) {
     }
   )
 }
-        visualize('extractHighlight', selector, result.matched)
-        // Shutter AFTER the capture so the flash never lands in the PNG.
-        visualize('shutter')

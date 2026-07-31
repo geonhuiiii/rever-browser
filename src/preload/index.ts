@@ -114,14 +114,22 @@ export interface McpToolInfo {
 export interface WorkflowRunStep {
   tool: string
   input: Record<string, unknown>
+  // Preconditions, both applied BEFORE the tool runs: wait until `waitFor`
+  // matches an element, then pause a further `delay` ms.
+  waitFor?: string
+  delay?: number
+  // Cap for waitFor polling, ms (default 10000).
+  waitTimeout?: number
 }
 
 export interface WorkflowStepProgress {
   index: number
   tool: string
-  status: 'running' | 'done' | 'error'
+  status: 'waiting' | 'running' | 'done' | 'error'
   output?: string
   error?: string
+  // Human-readable reason shown while status is 'waiting'.
+  waitingFor?: string
 }
 
 export interface PipeCond {
