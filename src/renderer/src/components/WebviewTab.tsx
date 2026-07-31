@@ -116,6 +116,7 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(function WebviewTa
       void applyTheme()
     }
     const onNavigateInPage = (e: Electron.DidNavigateInPageEvent) => {
+      if (!e.isMainFrame) return
       updateTab(tab.id, { url: e.url })
       pushHistory({ tabId: tab.id, url: e.url, title: '' })
       void applyTheme()
