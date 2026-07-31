@@ -1,5 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import { writeFileSync, rmSync } from 'node:fs'
+import path from 'node:path'
+
+import { app } from 'electron'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
@@ -112,6 +116,26 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 }
 
 let cached: Promise<RunningServer> | null = null
+
+/**
+ * Where the live endpoint is published. The port is chosen by the OS, so any
+ * out-of-process client (an external agent, a script, a test harness) has no
+ * way to find the server without this.
+ */
+export function endpointFilePath(): string {
+  return path.join(app.getPath('userData'), 'mcp-endpoint.json')
+}
+
+function writeEndpointFile(url: string): void {
+  try {
+    writeFileSync(
+      endpointFilePath(),
+      JSON.stringify({ url, pid: process.pid, startedAt: new Date().toISOString() }, null, 2)
+    )
+  } catch (e) {
+    console.warn('[mcp] could not publish endpoint file:', e)
+  }
+}
 
 export function startMcpServer(): Promise<RunningServer> {
   if (cached) return cached
@@ -229,10 +253,12 @@ export function startMcpServer(): Promise<RunningServer> {
     boundPort = addr.port
     const url = `http://127.0.0.1:${addr.port}/mcp`
     console.log('[mcp] listening on', url)
+    writeEndpointFile(url)
 
     return {
       url,
       async close() {
+        rmSync(endpointFilePath(), { force: true })
         await new Promise<void>((resolve) => server.close(() => resolve()))
       }
     }

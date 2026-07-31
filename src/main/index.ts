@@ -8,6 +8,7 @@ import type {
   RequestPermissionResponse
 } from '@agentclientprotocol/sdk'
 
+import { startMcpServer } from './mcp/server'
 import {
   attachCdpCapture,
   clearDialogHistory,
@@ -400,6 +401,12 @@ function installMenu() {
 
 app.whenReady().then(() => {
   installMenu()
+
+  // Start the tool server up front rather than on the first agent spawn, and
+  // publish its address. The port is OS-assigned, so without this an external
+  // client — a script, a test harness, an agent running outside the app — has
+  // no way to reach the tools at all, and the in-app chat is the only door.
+  void startMcpServer().catch((e) => console.warn('[mcp] eager start failed:', e))
 
   // macOS dev-mode dock icon (packaged builds use build/icon.icns).
   if (process.platform === 'darwin' && !app.isPackaged) {
