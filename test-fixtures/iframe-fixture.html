@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever iframe fixture</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe}
+  iframe{width:100%;height:96px;border:1px solid #2b3444;border-radius:6px;background:#101722}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .exp b{color:#7ee787}
+  .t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:7px 12px;
+     color:#e6edf3;font-size:13px;display:inline-block}
+</style>
+</head>
+<body>
+
+<h1>rever-browser iframe fixture</h1>
+<p class="sub">Measures what the snapshot can currently see inside frames. Each child holds K1 (button), K2 (link), K3 (pointer div).</p>
+
+<section>
+  <h2>CONTROL. Main-document button</h2>
+  <button class="t" id="ctl">CTL main frame button</button>
+  <p class="exp">Must always get a ref. If this is missing, the page failed to load, not the frame logic.</p>
+</section>
+
+<section>
+  <h2>H. Same-origin iframe (127.0.0.1:8777)</h2>
+  <iframe id="h" src="http://127.0.0.1:8777/iframe-child.html" title="same-origin child"></iframe>
+  <p class="exp">Same origin, same process. Expect <b>K1, K2, K3</b> refs if frame content is reachable at all.</p>
+</section>
+
+<section>
+  <h2>I. Cross-origin, same site (127.0.0.1:8778)</h2>
+  <iframe id="i" src="http://127.0.0.1:8778/iframe-child.html" title="cross-origin same-site child"></iframe>
+  <p class="exp">Different port, so cross-origin for JS, but Chrome sites ignore port - likely the SAME renderer process.</p>
+</section>
+
+<section>
+  <h2>J. Cross-site iframe (localhost:8778)</h2>
+  <iframe id="j" src="http://localhost:8778/iframe-child.html" title="cross-site child"></iframe>
+  <p class="exp">Different host, so a different site - this is the one likely to become an out-of-process iframe (OOPIF),
+    which needs a separate CDP session to reach.</p>
+</section>
+
+<p class="sub">Report per group: how many of K1/K2/K3 appear, and whether any carries a [ref].</p>
+
+</body>
+</html>
