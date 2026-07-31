@@ -1,6 +1,7 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget } from '../chrome-cdp'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
+import { collectFrames } from './frames'
 import { capturePageLayout, scanClickable, type PageLayout } from './layout'
 
 interface AXValue {
@@ -28,6 +29,14 @@ interface RefEntry {
   backendNodeId: number
   role: string
   name: string
+  /**
+   * Viewport offset of the owning `<iframe>`. Coordinates from
+   * getBoundingClientRect inside a frame are relative to THAT frame, while
+   * mouse events are dispatched in page space - without this a click on a
+   * framed element lands wherever the same offset happens to point in the
+   * top document.
+   */
+  frameOffset?: { x: number; y: number }
 }
 
 const refMap = new Map<string, RefEntry>()
@@ -95,6 +104,18 @@ export interface SnapshotStats {
   clickMatched: number
   /** True when the filter was discarded because it suppressed everything. */
   fellBackToFull: boolean
+  /** Child frames whose content was spliced into the tree. */
+  frames: number
+  /**
+   * `<iframe>` elements present in the outline that could NOT be entered.
+   *
+   * Counted from the tree, not from Page.getFrameTree: an out-of-process frame
+   * belongs to another target and never appears in the frame tree at all, so
+   * counting failures there reported 0 while a whole frame was missing.
+   */
+  framesUnreachable: number
+  /** Frames entered but still empty after a retry (likely still loading). */
+  framesEmpty: number
 }
 
 export interface SnapshotResult {
@@ -229,13 +250,15 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
   // agent reaches for full=true when it cannot find something, so having that
   // switch also drop the click-scan refs would remove exactly the elements it
   // is looking for.
-  const [axRes, layout] = await Promise.all([
+  const [axRes, layout, frameRes] = await Promise.all([
     target.dbg.sendCommand('Accessibility.getFullAXTree') as Promise<{ nodes: AXNode[] }>,
     scanClickable()
       .catch(() => null)
-      .then((click) => capturePageLayout(viewport, click?.paths).catch(() => null))
+      .then((click) => capturePageLayout(viewport, click?.paths).catch(() => null)),
+    collectFrames().catch(() => ({ frames: [], unreachable: 0, empty: 0 }))
   ])
   const { nodes } = axRes
+  const framesByOwner = new Map(frameRes.frames.map((f) => [f.ownerBackendNodeId, f]))
 
   const byId = new Map<string, AXNode>()
   for (const n of nodes) byId.set(n.nodeId, n)
@@ -247,15 +270,19 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
     refMap.clear()
     let counter = 0
     let clickOnlyRefs = 0
+    let framesEntered = 0
+    let framesMissed = 0
     const lines: string[] = []
 
     const walk = (
       id: string,
       depth: number,
       parentName: string,
-      ancestorClaimed: boolean
+      ancestorClaimed: boolean,
+      scope: Map<string, AXNode>,
+      frameOffset?: { x: number; y: number }
     ): void => {
-      const n = byId.get(id)
+      const n = scope.get(id)
       if (!n) return
       const role = (n.role?.value as string | undefined) ?? ''
       const name = String((n.name?.value as string | undefined) ?? '').trim()
@@ -296,7 +323,7 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         // print as a bare `- generic [ref=r4]`. Label it by its own text so the
         // agent can tell what it is about to click.
         const label = claimable && (!role || SKIP_ROLES.has(role)) ? 'clickable' : role
-        const shownName = name || (claimable ? firstText(n, byId) : '')
+        const shownName = name || (claimable ? firstText(n, scope) : '')
 
         const parts: string[] = [`- ${label}`]
         if (shownName) parts.push(quote(shownName))
@@ -323,7 +350,8 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           refMap.set(r, {
             backendNodeId: n.backendDOMNodeId,
             role: role || 'clickable',
-            name: shownName
+            name: shownName,
+            frameOffset
           })
           parts.push(`[ref=${r}]`)
           if (claimable) parts.push('(click-scan)')
@@ -335,12 +363,29 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
 
       const childParentName = skip ? parentName : name
       for (const c of n.childIds ?? []) {
-        walk(c, nextDepth, childParentName, ancestorClaimed || claimable)
+        walk(c, nextDepth, childParentName, ancestorClaimed || claimable, scope, frameOffset)
       }
 
+      // Descend into a child frame. Its accessibility tree is a separate
+      // document with its own node ids, so the scope map switches here rather
+      // than being merged — ids collide across frames.
+      const frame = n.backendDOMNodeId != null ? framesByOwner.get(n.backendDOMNodeId) : undefined
+      if (!frame && role === 'Iframe') framesMissed++
+      if (frame) {
+        framesEntered++
+        // Frame-local coordinates need the iframe's own position added back.
+        const box = filter?.byBackendId.get(n.backendDOMNodeId as number)
+        const nextOffset = box
+          ? {
+              x: (frameOffset?.x ?? 0) + box.x - viewport.x,
+              y: (frameOffset?.y ?? 0) + box.y - viewport.y
+            }
+          : frameOffset
+        walk(frame.rootNodeId, nextDepth, name, ancestorClaimed || claimable, frame.byId, nextOffset)
+      }
     }
 
-    if (nodes[0]) walk(nodes[0].nodeId, 0, '', false)
+    if (nodes[0]) walk(nodes[0].nodeId, 0, '', false, byId)
 
     if (!filter || !prune) {
       return {
@@ -352,7 +397,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           clickOnlyRefs,
           clickScanned: filter?.clickScanned ?? 0,
           clickMatched: filter?.clickMatched ?? 0,
-          fellBackToFull: false
+          fellBackToFull: false,
+          frames: framesEntered,
+          framesUnreachable: framesMissed,
+          framesEmpty: frameRes.empty
         }
       }
     }
@@ -367,7 +415,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         clickOnlyRefs,
         clickScanned: filter.clickScanned,
         clickMatched: filter.clickMatched,
-        fellBackToFull: false
+        fellBackToFull: false,
+        frames: framesEntered,
+        framesUnreachable: framesMissed,
+        framesEmpty: frameRes.empty
       }
     }
   }
@@ -436,7 +487,12 @@ async function resolveSelectorObjectId(selector: string): Promise<string> {
  * sequence. The overlay flash appears only once the cursor has arrived. Shared
  * by clickRef (snapshot ref) and clickSelector (CSS selector).
  */
-async function clickObjectId(objectId: string, label: string, role?: string): Promise<void> {
+async function clickObjectId(
+  objectId: string,
+  label: string,
+  role?: string,
+  frameOffset?: { x: number; y: number }
+): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'click', label, detail: role })
 
@@ -451,7 +507,10 @@ async function clickObjectId(objectId: string, label: string, role?: string): Pr
     returnByValue: true,
     awaitPromise: true
   })) as { result: { value: { x: number; y: number } } }
-  const { x, y } = result.result.value
+  // getBoundingClientRect ran inside the element's own frame, so its origin is
+  // that frame — mouse events are dispatched in page space.
+  const x = result.result.value.x + (frameOffset?.x ?? 0)
+  const y = result.result.value.y + (frameOffset?.y ?? 0)
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -472,7 +531,12 @@ async function clickObjectId(objectId: string, label: string, role?: string): Pr
  * stays, so :hover styles / mouseover-driven menus stay open. Shared by
  * hoverRef (snapshot ref) and hoverSelector (CSS selector).
  */
-async function hoverObjectId(objectId: string, label: string, role?: string): Promise<void> {
+async function hoverObjectId(
+  objectId: string,
+  label: string,
+  role?: string,
+  frameOffset?: { x: number; y: number }
+): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'hover', label, detail: role })
 
@@ -487,7 +551,10 @@ async function hoverObjectId(objectId: string, label: string, role?: string): Pr
     returnByValue: true,
     awaitPromise: true
   })) as { result: { value: { x: number; y: number } } }
-  const { x, y } = result.result.value
+  // getBoundingClientRect ran inside the element's own frame, so its origin is
+  // that frame — mouse events are dispatched in page space.
+  const x = result.result.value.x + (frameOffset?.x ?? 0)
+  const y = result.result.value.y + (frameOffset?.y ?? 0)
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -508,7 +575,8 @@ async function typeObjectId(
   text: string,
   submit: boolean,
   label: string,
-  role?: string
+  role?: string,
+  frameOffset?: { x: number; y: number }
 ): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'type', label, detail: text.slice(0, 80) })
@@ -524,7 +592,10 @@ async function typeObjectId(
     returnByValue: true,
     awaitPromise: true
   })) as { result: { value: { x: number; y: number } } }
-  const { x, y } = result.result.value
+  // getBoundingClientRect ran inside the element's own frame, so its origin is
+  // that frame — mouse events are dispatched in page space.
+  const x = result.result.value.x + (frameOffset?.x ?? 0)
+  const y = result.result.value.y + (frameOffset?.y ?? 0)
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -544,21 +615,21 @@ export async function clickRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI click${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await clickObjectId(objectId, label, entry?.role)
+  await clickObjectId(objectId, label, entry?.role, entry?.frameOffset)
 }
 
 export async function typeRef(ref: string, text: string, submit: boolean): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI type${entry?.name ? ` → "${entry.name.slice(0, 24)}"` : ''}`
-  await typeObjectId(objectId, text, submit, label, entry?.role)
+  await typeObjectId(objectId, text, submit, label, entry?.role, entry?.frameOffset)
 }
 
 export async function hoverRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI hover${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await hoverObjectId(objectId, label, entry?.role)
+  await hoverObjectId(objectId, label, entry?.role, entry?.frameOffset)
 }
 
 export async function hoverSelector(selector: string): Promise<void> {

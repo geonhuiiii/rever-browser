@@ -46,6 +46,9 @@ function filterNote(stats: {
   clickScanned: number
   clickMatched: number
   fellBackToFull: boolean
+  frames: number
+  framesUnreachable: number
+  framesEmpty: number
 }): string {
   const parts: string[] = []
   if (stats.hidden > 0 || stats.offscreen > 0) {
@@ -60,6 +63,21 @@ function filterNote(stats: {
     parts.push(
       `click scan: ${stats.clickScanned} candidate(s), ${stats.clickMatched} correlated, ${stats.clickOnlyRefs} new ref(s) tagged (click-scan)`
     )
+  }
+  if (stats.frames > 0 || stats.framesUnreachable > 0) {
+    const bits = [`frames: ${stats.frames} entered`]
+    if (stats.framesUnreachable > 0) {
+      bits.push(
+        `${stats.framesUnreachable} iframe(s) could not be entered (cross-site, runs in its own renderer — not yet supported)`
+      )
+    }
+    if (stats.framesEmpty > 0) {
+      bits.push(`${stats.framesEmpty} entered but still empty (frame had not finished loading)`)
+    }
+    if (stats.frames > 0) {
+      bits.push('click scan does not reach inside frames, so framed elements need an ARIA role')
+    }
+    parts.push(bits.join('; '))
   }
   if (stats.fellBackToFull) {
     parts.push(
