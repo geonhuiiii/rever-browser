@@ -1,5 +1,5 @@
 import { emitAiAction } from '../ai-events'
-import { getActiveTarget } from '../chrome-cdp'
+import { getActiveTarget, waitForSettle } from '../chrome-cdp'
 import { visualize } from './cdp-eval'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
 import { collectFrames } from './frames'
@@ -251,6 +251,33 @@ export function describeOffscreen(t: FilterTally): string[] {
  * untrusted events). Pass `full` to get the unfiltered tree back.
  */
 export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<SnapshotResult> {
+  const first = await captureSnapshot(opts)
+
+  // "Actionable elements exist, none of them are visible" is what an unsettled
+  // layout looks like: the boxes have been created but not yet placed, so they
+  // all read as sitting below the fold. It is also indistinguishable from a
+  // correct snapshot of a page whose controls really are all off-screen, which
+  // is why this waits and re-reads rather than trying to decide.
+  //
+  // A cold load of a heavy page produced exactly this - zero refs, while the
+  // very next snapshot found 25. The agent's first look at a page is the one
+  // that shapes the rest of the session, so an empty first look is expensive.
+  const looksUnsettled =
+    !opts.full &&
+    first.stats.refs === 0 &&
+    first.stats.hidden + first.stats.offscreen > 0
+
+  if (!looksUnsettled) return first
+
+  // Wait the way the page needs rather than a fixed pause: a cold load can
+  // still be fetching well past the normal settle window, and a flat delay is
+  // either too short for that or wasted on every other page.
+  await waitForSettle({ idleMs: 300, timeoutMs: 2500, minWaitMs: 300 })
+  const second = await captureSnapshot(opts)
+  return second.stats.refs > 0 ? second : first
+}
+
+async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target — open a page first')
   // Emit here (not per-tool) so implicit snapshots after navigate/click/type
