@@ -37,19 +37,22 @@ export async function humanMouseMove(toX: number, toY: number): Promise<void> {
     const e = easeInOutCubic(t)
     const x = fromX + (toX - fromX) * e + rand(-1.5, 1.5)
     const y = fromY + (toY - fromY) * e + rand(-1.5, 1.5)
-    // Dispatch the real mouse event AND update the visual cursor sprite in
-    // parallel so the rendered cursor stays in sync with each CDP step.
-    await Promise.all([
-      target.dbg.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseMoved',
-        x,
-        y,
-        button: 'none'
-      }),
-      target.dbg.sendCommand('Runtime.evaluate', {
+    // The cursor sprite is cosmetic, so it is fired without waiting. Awaiting
+    // it put a Runtime.evaluate on the critical path of every step, and that
+    // call queues behind whatever the page's main thread is doing: typing three
+    // characters into Naver's search box took 68 seconds, against 3 on an idle
+    // page. Only the input event itself has to be awaited.
+    void target.dbg
+      .sendCommand('Runtime.evaluate', {
         expression: `window.__reverAi && window.__reverAi.showCursorAt(${x}, ${y})`
       })
-    ])
+      .catch(() => {})
+    await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y,
+      button: 'none'
+    })
     await sleep(rand(6, 14))
   }
   cursorX = toX
@@ -62,33 +65,35 @@ export async function humanMouseMove(toX: number, toY: number): Promise<void> {
 export async function humanPressRelease(x: number, y: number): Promise<void> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target')
+  // Same reason as the cursor move: the press/release sprite is cosmetic, and
+  // awaiting it queues behind the page's main thread.
 
   await sleep(rand(140, 260)) // settle — also lets the highlight overlay render
-  await Promise.all([
-    target.dbg.sendCommand('Input.dispatchMouseEvent', {
-      type: 'mousePressed',
-      x,
-      y,
-      button: 'left',
-      clickCount: 1
-    }),
-    target.dbg.sendCommand('Runtime.evaluate', {
+  void target.dbg
+    .sendCommand('Runtime.evaluate', {
       expression: 'window.__reverAi && window.__reverAi.setCursorPress(true)'
     })
-  ])
+    .catch(() => {})
+  await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1
+  })
   await sleep(rand(45, 95))
-  await Promise.all([
-    target.dbg.sendCommand('Input.dispatchMouseEvent', {
-      type: 'mouseReleased',
-      x,
-      y,
-      button: 'left',
-      clickCount: 1
-    }),
-    target.dbg.sendCommand('Runtime.evaluate', {
+  void target.dbg
+    .sendCommand('Runtime.evaluate', {
       expression: 'window.__reverAi && window.__reverAi.setCursorPress(false)'
     })
-  ])
+    .catch(() => {})
+  await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x,
+    y,
+    button: 'left',
+    clickCount: 1
+  })
 }
 
 /** Pre-action "thinking" pause — looking at the page before acting. */
