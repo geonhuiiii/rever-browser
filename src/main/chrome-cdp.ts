@@ -3,7 +3,14 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { VISUALIZER_INIT_SCRIPT } from './mcp/visualizer'
-import { getRequest, upsertRequest, appendWsFrame, appendConsole, appendException } from './traffic-store'
+import {
+  getRequest,
+  upsertRequest,
+  appendWsFrame,
+  appendConsole,
+  appendException,
+  type StoredRequest
+} from './traffic-store'
 import { STEALTH_INIT_SCRIPT, SPOOFED_CHROME_VERSION, SPOOFED_CHROME_MAJOR } from './stealth-init'
 
 interface AttachedTarget {
@@ -252,7 +259,9 @@ export function setLoadInjectionsHook(fn: LoadInjectionsHook): void {
 
 interface ResponseReceivedParams {
   requestId: string
+  type?: string
   response: {
+    url: string
     status: number
     mimeType: string
     headers: Record<string, string>
@@ -360,6 +369,29 @@ function shouldFetchBody(mimeType: string | undefined, resourceType: string): bo
   if (SKIP_BODY_TYPES.has(resourceType)) return false
   if (mimeType && SKIP_BODY_PREFIXES.some((p) => mimeType.startsWith(p))) return false
   return true
+}
+
+// Cap the fallback re-fetch so a giant asset can't blow up the store.
+const REFETCH_MAX_BYTES = 8 * 1024 * 1024
+
+/**
+ * Fallback body retrieval for when CDP has no copy of the response (cache hit
+ * or service-worker delivery). Fetches the URL anonymously from the main
+ * process. Only used for http(s) GET resources whose body we otherwise lose.
+ */
+async function refetchBody(
+  stored: StoredRequest | undefined
+): Promise<{ responseBody: string; responseBodyBase64: boolean } | null> {
+  if (!stored?.url || !/^https?:/i.test(stored.url)) return null
+  try {
+    const res = await fetch(stored.url, { method: 'GET' })
+    if (!res.ok) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length > REFETCH_MAX_BYTES) return null
+    return { responseBody: buf.toString('utf8'), responseBodyBase64: false }
+  } catch {
+    return null
+  }
 }
 
 export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
@@ -527,8 +559,19 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
       })
     } else if (method === 'Network.responseReceived') {
       const p = params as ResponseReceivedParams
+      // Backfill url/host/resourceType here too. A cache hit (memory or disk)
+      // can land responseReceived + loadingFinished for a requestId whose
+      // requestWillBeSent we never saw, leaving a url-less "Other" record that
+      // list_scripts and every host filter silently drop — the worst failure
+      // for a reversing tool, since a cached bundle is exactly what it wants.
+      // responseReceived carries the final url and the resource type, so use them.
+      // p.type is omitted only when unknown; leave it off the patch in that case
+      // so Object.assign can't clobber a good value from requestWillBeSent.
       upsertRequest({
         requestId: p.requestId,
+        url: p.response.url,
+        host: hostFromUrl(p.response.url),
+        ...(p.type ? { resourceType: p.type } : {}),
         status: p.response.status,
         mimeType: p.response.mimeType,
         responseHeaders: p.response.headers
@@ -572,10 +615,22 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
             responseBodyBase64: res.base64Encoded
           })
         } catch (e) {
-          upsertRequest({
-            requestId: p.requestId,
-            responseBodyError: e instanceof Error ? e.message : String(e)
-          })
+          // getResponseBody returns "No resource with given identifier found"
+          // when the response was served from the memory/disk cache or by a
+          // service worker — exactly how many real sites deliver their JS
+          // bundles. The record would then be a url-only phantom, invisible to
+          // the script tools. Re-fetch the URL from the main process as a
+          // fallback: static bundles are public, so an anonymous GET returns
+          // the same bytes the reverser wants to read.
+          const refetched = await refetchBody(getRequest(p.requestId))
+          if (refetched) {
+            upsertRequest({ requestId: p.requestId, ...refetched })
+          } else {
+            upsertRequest({
+              requestId: p.requestId,
+              responseBodyError: e instanceof Error ? e.message : String(e)
+            })
+          }
         }
       })()
     } else if (method === 'Network.webSocketCreated') {
