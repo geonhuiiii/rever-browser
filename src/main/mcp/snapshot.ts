@@ -54,6 +54,13 @@ const SKIP_ROLES = new Set([
   'LayoutTableColumn'
 ])
 
+/**
+ * Roles whose subtree is label, not structure. A button or link already prints
+ * its accessible name, so everything under it repeats information the agent
+ * has - except a control nested inside, which keeps its own ref and survives.
+ */
+const LABEL_ONLY_SUBTREE = new Set(['button', 'link', 'menuitem', 'tab', 'option', 'switch'])
+
 const ACTIONABLE_ROLES = new Set([
   'button',
   'link',
@@ -287,7 +294,8 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       parentName: string,
       ancestorClaimed: boolean,
       scope: Map<string, AXNode>,
-      frameOffset?: { x: number; y: number }
+      frameOffset?: { x: number; y: number },
+      ancestorControl = false
     ): void => {
       const n = scope.get(id)
       if (!n) return
@@ -322,12 +330,21 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       // duplicates the parent name (Playwright MCP rule); otherwise emit as a
       // single quoted text line without a ref (text is not actionable).
       if (role === 'StaticText' && !claimable) {
+        if (ancestorControl) return
         if (!name || name === parentName) return
         lines.push(`${'  '.repeat(depth)}- text ${quote(name)}`)
         return
       }
 
-      const skip = !claimable && (!role || n.ignored || (SKIP_ROLES.has(role) && !name))
+      // Inside a link or button, the label text and its wrapper spans carry no
+      // information the ancestor line does not already give — a button prints
+      // its own accessible name. Emitting them is most of what the outline
+      // wastes on a real page. Anything with its own ref survives, so a nested
+      // control or a click-scan hit is never swallowed.
+      const insideControl = ancestorControl && !claimable && !ACTIONABLE_ROLES.has(role)
+
+      const skip =
+        insideControl || (!claimable && (!role || n.ignored || (SKIP_ROLES.has(role) && !name)))
       let nextDepth = depth
 
       if (!skip) {
@@ -374,8 +391,17 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       }
 
       const childParentName = skip ? parentName : name
+      const nextAncestorControl = ancestorControl || LABEL_ONLY_SUBTREE.has(role)
       for (const c of n.childIds ?? []) {
-        walk(c, nextDepth, childParentName, ancestorClaimed || claimable, scope, frameOffset)
+        walk(
+          c,
+          nextDepth,
+          childParentName,
+          ancestorClaimed || claimable,
+          scope,
+          frameOffset,
+          nextAncestorControl
+        )
       }
 
       // Descend into a child frame. Its accessibility tree is a separate
@@ -393,7 +419,15 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
               y: (frameOffset?.y ?? 0) + box.y - viewport.y
             }
           : frameOffset
-        walk(frame.rootNodeId, nextDepth, name, ancestorClaimed || claimable, frame.byId, nextOffset)
+        walk(
+          frame.rootNodeId,
+          nextDepth,
+          name,
+          ancestorClaimed || claimable,
+          frame.byId,
+          nextOffset,
+          false
+        )
       }
     }
 
