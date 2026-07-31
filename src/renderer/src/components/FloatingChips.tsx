@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { TrafficList } from '@/components/network/TrafficList'
+import { ApiMapPanel } from '@/components/panels/ApiMapPanel'
 import { ConsolePanel } from '@/components/panels/ConsolePanel'
 import { CookiesPanel } from '@/components/panels/CookiesPanel'
 import { ExceptionsPanel } from '@/components/panels/ExceptionsPanel'
@@ -15,7 +16,7 @@ import { useTrafficStore } from '@/stores/traffic'
 import { WorkflowPanel } from '@/workflows'
 import { useWorkflowsStore } from '@/workflows/core/store'
 
-type PanelId = 'traffic' | 'console' | 'exceptions' | 'websocket' | 'repeater' | 'storage' | 'history' | 'workflows'
+type PanelId = 'traffic' | 'apimap' | 'console' | 'exceptions' | 'websocket' | 'repeater' | 'storage' | 'history' | 'workflows'
 
 interface FloatingChipsProps {
   openPanel: PanelId | null
@@ -33,6 +34,7 @@ const BOTTOM_PANEL_CONFIG = {
 
 export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
   const trafficCount = useTrafficStore((s) => s.order.length)
+  const apiCount = useTrafficStore((s) => Object.keys(s.endpoints).length)
   const repeaterSourceId = useRepeaterStore((s) => s.sourceRequestId)
   const repeaterHistoryLen = useRepeaterStore((s) => s.history.length)
   const historyCount = useHistoryStore((s) => s.entries.length)
@@ -104,6 +106,7 @@ export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
 
   const panelTitle: Record<PanelId, string> = {
     traffic: 'Traffic',
+    apimap: 'API Map',
     console: 'Console',
     exceptions: 'Exceptions',
     websocket: 'WebSocket',
@@ -125,6 +128,12 @@ export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
           active={openPanel === 'traffic'}
           badge={trafficCount > 0 ? String(trafficCount) : undefined}
           onClick={() => toggle('traffic')}
+        />
+        <ChipButton
+          label="API Map"
+          active={openPanel === 'apimap'}
+          badge={apiCount > 0 ? String(apiCount) : undefined}
+          onClick={() => toggle('apimap')}
         />
         <ChipButton
           label="Console"
@@ -212,6 +221,7 @@ export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
             {/* Panel content */}
             <div className="chip-panel-content">
               {openPanel === 'traffic' && <TrafficList />}
+              {openPanel === 'apimap' && <ApiMapPanel />}
               {openPanel === 'console' && <ConsolePanel />}
               {openPanel === 'exceptions' && <ExceptionsPanel />}
               {openPanel === 'websocket' && <WebSocketPanel />}

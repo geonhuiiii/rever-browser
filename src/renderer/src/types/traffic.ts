@@ -8,6 +8,21 @@ export interface TrafficEntry {
   encodedDataLength?: number
   startedAt: number
   completedAt?: number
+  /** set only for XHR/Fetch — links this entry to its ApiEndpoint bucket */
+  endpointKey?: string
+}
+
+export interface ApiEndpoint {
+  key: string
+  origin: string
+  host: string
+  path: string
+  method: string
+  count: number
+  lastRequestId: string
+  lastSeen: number
+  statuses: number[]
+  auth: boolean
 }
 
 export type NetworkEvent =
