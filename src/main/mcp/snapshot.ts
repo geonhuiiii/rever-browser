@@ -42,6 +42,24 @@ interface RefEntry {
 
 const refMap = new Map<string, RefEntry>()
 
+/**
+ * backendNodeIds that carried a ref in the previous snapshot, so the next one
+ * can point at what just appeared.
+ *
+ * In browser-use the equivalent marker is an attention aid. Here it is closer
+ * to evidence: paired with the traffic store, "what showed up right after this
+ * request" is how a response field gets traced to the UI that renders it.
+ */
+let previousRefTargets = new Set<number>()
+let previousUrl = ''
+/**
+ * Which filtering mode produced the baseline. A viewport-filtered snapshot and
+ * a full one contain different node sets, so comparing across them reports
+ * everything the filter had hidden as newly appeared — the first run of this
+ * marked an off-screen button as new when nothing had changed.
+ */
+let previousPruned = true
+
 const SKIP_ROLES = new Set([
   'none',
   'generic',
@@ -124,6 +142,8 @@ export interface SnapshotStats {
   framesUnreachable: number
   /** Frames entered but still empty after a retry (likely still loading). */
   framesEmpty: number
+  /** Refs marked *new because they were absent from the previous snapshot. */
+  newRefs: number
 }
 
 export interface SnapshotResult {
@@ -274,16 +294,23 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
   const { nodes } = axRes
   const framesByOwner = new Map(frameRes.frames.map((f) => [f.ownerBackendNodeId, f]))
 
+  // After a navigation every node is new, so the marker would say nothing. Only
+  // compare within the same document.
+  const sameDocument =
+    previousUrl === meta.url && previousRefTargets.size > 0 && previousPruned === !opts.full
+
   const byId = new Map<string, AXNode>()
   for (const n of nodes) byId.set(n.nodeId, n)
 
   const build = (
     filter: PageLayout | null,
     prune: boolean
-  ): { tree: string; stats: SnapshotStats } => {
+  ): { tree: string; stats: SnapshotStats; refTargets: Set<number> } => {
     refMap.clear()
     let counter = 0
     let clickOnlyRefs = 0
+    let newRefs = 0
+    const seenRefTargets = new Set<number>()
     let framesEntered = 0
     let framesMissed = 0
     const lines: string[] = []
@@ -377,6 +404,11 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         if (n.backendDOMNodeId != null && (ACTIONABLE_ROLES.has(role) || claimable)) {
           counter++
           if (claimable) clickOnlyRefs++
+          if (sameDocument && !previousRefTargets.has(n.backendDOMNodeId)) {
+            parts.push('*new')
+            newRefs++
+          }
+          seenRefTargets.add(n.backendDOMNodeId)
           const r = `r${counter}`
           refMap.set(r, {
             backendNodeId: n.backendDOMNodeId,
@@ -443,6 +475,7 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
     if (!filter || !prune) {
       return {
         tree: lines.join('\n'),
+        refTargets: seenRefTargets,
         stats: {
           refs: counter,
           hidden: 0,
@@ -453,7 +486,8 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           fellBackToFull: false,
           frames: framesEntered,
           framesUnreachable: framesMissed,
-          framesEmpty: frameRes.empty
+          framesEmpty: frameRes.empty,
+          newRefs
         }
       }
     }
@@ -461,6 +495,7 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
     const tally = tallyFiltered(nodes, filter)
     return {
       tree: [...lines, ...describeOffscreen(tally)].join('\n'),
+      refTargets: seenRefTargets,
       stats: {
         refs: counter,
         hidden: tally.hidden,
@@ -471,7 +506,8 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         fellBackToFull: false,
         frames: framesEntered,
         framesUnreachable: framesMissed,
-        framesEmpty: frameRes.empty
+        framesEmpty: frameRes.empty,
+        newRefs
       }
     }
   }
@@ -496,6 +532,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       result.stats.fellBackToFull = result.stats.refs > 0
     }
   }
+
+  previousRefTargets = result.refTargets
+  previousUrl = meta.url
+  previousPruned = !opts.full
 
   return {
     url: meta.url,

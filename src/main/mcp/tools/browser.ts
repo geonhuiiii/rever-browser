@@ -55,6 +55,7 @@ function filterNote(stats: {
   frames: number
   framesUnreachable: number
   framesEmpty: number
+  newRefs: number
 }): string {
   const parts: string[] = []
   if (stats.hidden > 0 || stats.offscreen > 0) {
@@ -84,6 +85,11 @@ function filterNote(stats: {
       bits.push('click scan does not reach inside frames, so framed elements need an ARIA role')
     }
     parts.push(bits.join('; '))
+  }
+  if (stats.newRefs > 0) {
+    parts.push(
+      `${stats.newRefs} ref(s) marked *new — absent from the previous snapshot of this page`
+    )
   }
   if (stats.fellBackToFull) {
     parts.push(
