@@ -74,3 +74,9 @@ The MCP server starts lazily on the first agent spawn and binds to a random loca
 ## License
 
 [MIT](./LICENSE)
+
+## Third-party licenses
+
+All dependencies are listed in [`package.json`](./package.json); every package in the dependency tree uses a permissive license (MIT, Apache-2.0, ISC, or BSD) — no copyleft.
+
+External tools invoked as separate processes (not bundled or distributed with this project): [claude-agent-acp](https://www.npmjs.com/package/@agentclientprotocol/claude-agent-acp) (Apache-2.0), [codex-acp](https://www.npmjs.com/package/@agentclientprotocol/codex-acp) (Apache-2.0), [webcrack](https://www.npmjs.com/package/webcrack) (MIT).
