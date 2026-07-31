@@ -90,6 +90,16 @@ app.userAgentFallback = app.userAgentFallback
 // other AutomationControlled blink features.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 
+// Keep the renderer running at full speed when the window is not the frontmost
+// one. Chromium stops producing compositor frames for a hidden or occluded
+// window, and CDP input dispatch is acked off that pipeline: with the window
+// merely behind another app, each Input.dispatchMouseEvent took ~5s to return,
+// turning one browser_hover into 70s. An agent driving the browser without
+// watching it is the normal case here, so backgrounded must cost nothing.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+
 let mainWindow: BrowserWindow | null = null
 
 // ── Agent permission round-trip ───────────────────────────────────────────
@@ -140,7 +150,10 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
-      sandbox: false
+      sandbox: false,
+      // See the command-line switches above: a backgrounded window must still
+      // render, or CDP input dispatch stalls for seconds per event.
+      backgroundThrottling: false
     }
   })
 

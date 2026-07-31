@@ -217,6 +217,10 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(function WebviewTa
       // Shared partition → all tabs share one cookie/storage jar like a normal
       // browser profile. Must match SHARED_PARTITION in main/tab-partition.ts.
       partition="persist:rever-shared"
+      // The tab has its own webContents, so the window's backgroundThrottling
+      // setting does not reach it. Without this, CDP input dispatch into a
+      // backgrounded window is acked only every ~5s.
+      webpreferences="backgroundThrottling=false"
     />
   )
 })
