@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever shadow + scroll fixture</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .exp b{color:#7ee787}
+  .t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:7px 12px;
+     color:#e6edf3;font-size:13px;display:inline-block;margin:2px}
+  .ptr{cursor:pointer}
+  /* An inner scroll container: its own scrollbar, content past its own fold. */
+  .scroller{height:90px;overflow-y:auto;border:1px dashed #2b3444;border-radius:6px;padding:8px}
+</style>
+</head>
+<body>
+
+<h1>rever shadow DOM + scroll container fixture</h1>
+<p class="sub">Both are cases the snapshot has no code for. Ground truth is printed under each group.</p>
+
+<section>
+  <h2>CONTROL</h2>
+  <button class="t" id="ctl">CTL plain button</button>
+  <p class="exp">Must get a ref, otherwise the page did not load.</p>
+</section>
+
+<section>
+  <h2>S1. Open shadow root</h2>
+  <div id="s1"></div>
+  <p class="exp">Holds S1-BTN (button) and S1-DIV (pointer div).
+    Expect <b>S1-BTN</b> if the accessibility tree pierces open shadow roots.</p>
+</section>
+
+<section>
+  <h2>S2. Closed shadow root</h2>
+  <div id="s2"></div>
+  <p class="exp">Holds S2-BTN. Closed roots are invisible to querySelectorAll and usually to the AX tree too.</p>
+</section>
+
+<section>
+  <h2>S3. Nested shadow (shadow inside shadow)</h2>
+  <div id="s3"></div>
+  <p class="exp">Holds S3-BTN two shadow levels deep.</p>
+</section>
+
+<section>
+  <h2>C1. Inner scroll container</h2>
+  <div class="scroller" id="c1">
+    <div><button class="t" id="c1a">C1-TOP visible</button></div>
+    <div style="height:200px"></div>
+    <div><button class="t" id="c1b">C1-BOTTOM needs inner scroll</button></div>
+  </div>
+  <p class="exp">C1-TOP is visible. <b>C1-BOTTOM</b> sits past the container's own fold — the page does not
+    scroll, only this box does. Does the snapshot mark the container as scrollable, and is C1-BOTTOM
+    reported as reachable?</p>
+</section>
+
+<script>
+  // S1 — open
+  const s1 = document.getElementById('s1').attachShadow({ mode: 'open' })
+  s1.innerHTML = `<style>.t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;
+    padding:7px 12px;color:#e6edf3;display:inline-block;margin:2px;font:13px sans-serif}
+    .ptr{cursor:pointer}</style>
+    <button class="t" id="s1b">S1-BTN in open shadow</button>
+    <div class="t ptr" id="s1d">S1-DIV pointer in open shadow</div>`
+  s1.getElementById('s1b').addEventListener('click', () => {
+    fetch('/api/from-shadow?src=s1-btn').catch(() => {})
+  })
+  s1.getElementById('s1d').addEventListener('click', () => {
+    fetch('/api/from-shadow?src=s1-div').catch(() => {})
+  })
+
+  // S2 — closed
+  const s2 = document.getElementById('s2').attachShadow({ mode: 'closed' })
+  s2.innerHTML = `<style>.t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;
+    padding:7px 12px;color:#e6edf3;display:inline-block;margin:2px;font:13px sans-serif}</style>
+    <button class="t" id="s2b">S2-BTN in closed shadow</button>`
+  s2.getElementById('s2b').addEventListener('click', () => {
+    fetch('/api/from-shadow?src=s2-btn').catch(() => {})
+  })
+
+  // S3 — nested
+  const s3 = document.getElementById('s3').attachShadow({ mode: 'open' })
+  const host = document.createElement('div')
+  s3.appendChild(host)
+  const inner = host.attachShadow({ mode: 'open' })
+  inner.innerHTML = `<style>.t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;
+    padding:7px 12px;color:#e6edf3;display:inline-block;margin:2px;font:13px sans-serif}</style>
+    <button class="t" id="s3b">S3-BTN two shadows deep</button>`
+  inner.getElementById('s3b').addEventListener('click', () => {
+    fetch('/api/from-shadow?src=s3-btn').catch(() => {})
+  })
+
+  document.getElementById('c1b').addEventListener('click', () => {
+    fetch('/api/from-scroller?src=c1-bottom').catch(() => {})
+  })
+</script>
+</body>
+</html>
