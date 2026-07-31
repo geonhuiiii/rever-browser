@@ -149,6 +149,16 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  // Plain link clicks in the app UI (e.g. chat markdown) navigate the renderer
+  // itself, wiping chat / network state. Block them and open in an in-app tab.
+  // Navigations to the app's own URL (dev-server HMR full reload) stay allowed.
+  const appUrl = process.env.ELECTRON_RENDERER_URL ?? 'file://'
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith(appUrl)) return
+    event.preventDefault()
+    if (/^https?:/i.test(url)) sendBrowserCommand('open-tab', { url })
+  })
+
   // Intercept browser shortcuts at the keyboard level. Menu accelerators cover
   // the discoverable items; this covers Cmd/Ctrl+R (reload the webview, not the
   // app renderer — that would wipe chat / network state), Cmd/Ctrl+L and
