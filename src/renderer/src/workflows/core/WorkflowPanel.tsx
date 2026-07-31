@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { getWorkflowKind, listWorkflowKinds, type WorkflowKind } from './registry'
 import { useWorkflowsStore } from './store'
@@ -17,6 +17,19 @@ export function WorkflowPanel(): React.ReactElement {
   // Per-row state for the list's action button (no editor open to report into).
   const [runningId, setRunningId] = useState<string | null>(null)
   const [rowError, setRowError] = useState<Record<string, string>>({})
+  // Workflow awaiting delete confirmation. Deleting is irreversible (the store
+  // persists to localStorage), so ✕ asks first.
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const pendingDelete = confirmId ? workflows.find((w) => w.id === confirmId) ?? null : null
+
+  useEffect(() => {
+    if (!pendingDelete) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setConfirmId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pendingDelete])
 
   const runFromList = async (kind: WorkflowKind, w: Workflow): Promise<void> => {
     if (!kind.action) return
@@ -149,13 +162,81 @@ export function WorkflowPanel(): React.ReactElement {
                   </button>
                 )}
                 <button type="button" onClick={() => setDraft(w)} title="Edit">Edit</button>
-                <button type="button" onClick={() => remove(w.id)} title="Delete">✕</button>
+                <button type="button" onClick={() => setConfirmId(w.id)} title="Delete">✕</button>
                 {error && (
                   <div style={{ flexBasis: '100%', color: '#e06c6c', fontSize: 11 }}>{error}</div>
                 )}
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Compact delete confirmation. Fixed rather than absolute so the panel's
+          overflow can't clip it. Escape or a backdrop click cancels; the Delete
+          button takes focus, so Enter confirms. */}
+      {pendingDelete && (
+        <div
+          onClick={() => setConfirmId(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 200,
+            background: 'rgba(0,0,0,0.45)',
+            display: 'grid',
+            placeItems: 'center'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            style={{
+              width: 280,
+              padding: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              background: 'var(--surface)',
+              border: '1px solid var(--border-2)',
+              borderRadius: 8,
+              boxShadow: '0 12px 40px var(--shadow)'
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Delete this workflow?</div>
+            <div
+              style={{
+                fontSize: 12,
+                color: 'var(--text-dim)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+              title={pendingDelete.name}
+            >
+              {pendingDelete.name || 'Untitled'}
+            </div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setConfirmId(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                autoFocus
+                onClick={() => {
+                  remove(pendingDelete.id)
+                  setConfirmId(null)
+                }}
+                style={{
+                  background: 'var(--chip-danger-bg)',
+                  borderColor: 'var(--chip-danger-border)',
+                  color: 'var(--chip-danger-text)'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
