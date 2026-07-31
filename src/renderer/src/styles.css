@@ -4,6 +4,14 @@
    [data-theme="light"] overrides. The resolved theme is written to
    <html data-theme="..."> by the inline script in index.html (no flash)
    and kept in sync by the app-theme store. */
+
+/* Height of the bottom chip bar. Theme-independent, and the single source of
+   truth: the bar's own height, the slide-up panel's offset, and the padding
+   the webview area reserves for it all read this. */
+:root {
+  --chip-bar-h: 40px;
+}
+
 :root,
 :root[data-theme='dark'] {
   --bg: #0e0e0e;
@@ -262,7 +270,7 @@ body.resizing webview { pointer-events: none; }
   left: 0;
   right: 0;
   bottom: 0;
-  height: 40px;
+  height: var(--chip-bar-h);
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -317,7 +325,7 @@ body.resizing webview { pointer-events: none; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 40px;
+  bottom: var(--chip-bar-h);
   background: var(--glass-panel);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);

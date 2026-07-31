@@ -499,7 +499,19 @@ function App() {
               {browserMode === 'embedded' ? 'Embedded' : 'External (real Chrome)'}
             </button>
           </form>
-          <div style={{ flex: 1, position: 'relative', display: 'flex', minHeight: 0 }}>
+          {/* paddingBottom reserves the chip bar's strip so the webview ends
+              above it instead of being covered by it. The bar and the slide-up
+              panel are absolutely positioned against this box's bottom edge,
+              which is the padding edge — so they still sit flush. */}
+          <div
+            style={{
+              flex: 1,
+              position: 'relative',
+              display: 'flex',
+              minHeight: 0,
+              paddingBottom: 'var(--chip-bar-h)'
+            }}
+          >
             {browserMode === 'embedded' ? (
               <>
                 {tabs.map((t) => (
@@ -514,18 +526,6 @@ function App() {
             ) : (
               <ScreencastView />
             )}
-            <AiActionOverlay />
-            <BotCheckButton onNavigate={(url) => {
-              if (browserMode === 'external') {
-                void window.rev.external.navigate(url).catch(() => {})
-              } else {
-                activeRef()?.loadURL(url)
-              }
-            }} />
-            <FloatingChips openPanel={openPanel} setOpenPanel={setOpenPanel} />
-            <DetailDrawer />
-          </div>
-        </section>
             {findOpen && (
               <div
                 style={{
@@ -593,6 +593,18 @@ function App() {
                 </button>
               </div>
             )}
+            <AiActionOverlay />
+            <BotCheckButton onNavigate={(url) => {
+              if (browserMode === 'external') {
+                void window.rev.external.navigate(url).catch(() => {})
+              } else {
+                activeRef()?.loadURL(url)
+              }
+            }} />
+            <FloatingChips openPanel={openPanel} setOpenPanel={setOpenPanel} />
+            <DetailDrawer />
+          </div>
+        </section>
 
         <div className="splitter" onMouseDown={chat.startDrag} />
 
