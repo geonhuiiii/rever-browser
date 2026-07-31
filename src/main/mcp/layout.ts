@@ -33,6 +33,8 @@ export interface NodeLayout {
    * misses — a `<div onClick>` with no ARIA role, for example.
    */
   clickable: boolean
+  /** Index into the document's node arrays, used to test ancestry. */
+  nodeIndex: number
   /**
    * Pixels of content past this box's own fold, 0 when it does not scroll.
    *
@@ -81,6 +83,9 @@ const OCCLUDER_MIN_AREA_RATIO = 0.25
 
 /** Upper bound on the occluder scan so a huge page can't make it quadratic. */
 const MAX_OCCLUDERS = 40
+
+/** Ancestry walks are bounded; real documents nest far shallower than this. */
+const MAX_ANCESTRY_WALK = 64
 
 /** Below this, the overflow is rounding noise rather than hidden content. */
 const MIN_SCROLLABLE_PX = 16
@@ -196,7 +201,23 @@ function contains(outer: NodeLayout, inner: NodeLayout): boolean {
  * another box AND paints after it is a genuine overlay rather than an
  * ancestor — that is what makes this cheap heuristic safe.
  */
-function markOccluded(entries: NodeLayout[], viewport: Viewport): void {
+function isRelated(a: number, b: number, parentIndex: number[]): boolean {
+  for (const [from, to] of [
+    [a, b],
+    [b, a]
+  ]) {
+    let cur = from
+    for (let guard = 0; guard < MAX_ANCESTRY_WALK; guard++) {
+      if (cur === to) return true
+      const next = parentIndex[cur]
+      if (next == null || next < 0 || next === cur) break
+      cur = next
+    }
+  }
+  return false
+}
+
+function markOccluded(entries: NodeLayout[], viewport: Viewport, parentIndex: number[]): void {
   const minArea = viewport.width * viewport.height * OCCLUDER_MIN_AREA_RATIO
   const occluders = entries
     .filter((e) => e.rendered && !e.zeroSize && e.width * e.height >= minArea)
@@ -216,10 +237,15 @@ function markOccluded(entries: NodeLayout[], viewport: Viewport): void {
       // paints after it — which read as an overlay and blanked entire pages
       // (GitHub and Coupang returned a bare RootWebArea). A real overlay is
       // bigger than what it hides.
-      if (o.width * o.height > e.width * e.height && contains(o, e)) {
-        e.occluded = true
-        break
-      }
+      if (o.width * o.height <= e.width * e.height || !contains(o, e)) continue
+      // Geometry alone cannot tell an overlay from ordinary nesting: a wrapper
+      // the height of the document contains the viewport-sized root box and
+      // paints after it, which read as the page being covered and blanked
+      // Naver entirely. An overlay is a box from a DIFFERENT branch of the
+      // tree, so anything on the target's own ancestor line is not one.
+      if (isRelated(o.nodeIndex, e.nodeIndex, parentIndex)) continue
+      e.occluded = true
+      break
     }
   }
 }
@@ -249,6 +275,9 @@ export function buildPageLayout(
   let clickMatched = 0
   const byBackendId = new Map<number, NodeLayout>()
   const entries: NodeLayout[] = []
+  // Ancestry is only compared within the main document, which is where
+  // full-page wrappers and real overlays both live.
+  const mainParentIndex = snap.documents?.[0]?.nodes?.parentIndex ?? []
 
   for (const doc of snap.documents ?? []) {
     const backendIds = doc.nodes?.backendNodeId
@@ -298,6 +327,7 @@ export function buildPageLayout(
         inViewport: false,
         occluded: false,
         clickable: clickableBackendIds.has(backendId),
+        nodeIndex: layout.nodeIndex[i],
         scrollableBy: scrollableBy >= MIN_SCROLLABLE_PX ? scrollableBy : 0
       }
       if (entry.clickable) clickMatched++
@@ -313,7 +343,7 @@ export function buildPageLayout(
 
   if (byBackendId.size === 0) return null
 
-  markOccluded(entries, viewport)
+  markOccluded(entries, viewport, mainParentIndex)
   return {
     byBackendId,
     viewport,

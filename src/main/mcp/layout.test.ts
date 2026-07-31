@@ -467,3 +467,51 @@ describe('스크롤 가능 컨테이너', () => {
     expect(layout?.byBackendId.get(901)?.scrollableBy).toBe(0)
   })
 })
+
+describe('가려짐 판정의 조상 관계 예외', () => {
+  /**
+   * node 1 = <html>, viewport-sized, painted first
+   * node 2 = a wrapper the height of the document, a CHILD of html
+   * node 3 = an overlay the height of the document, a SIBLING branch
+   */
+  const build = (overlayParent: number): CaptureResult => ({
+    strings: ['visible', 'hidden', '1', '0'],
+    documents: [
+      {
+        nodes: {
+          backendNodeId: [900, 901, 902, 903],
+          parentIndex: [-1, 0, 1, overlayParent],
+          nodeType: [9, 1, 1, 1]
+        },
+        layout: {
+          nodeIndex: [1, 3],
+          bounds: [
+            [0, 0, 1000, 800],
+            [0, 0, 1000, 5000]
+          ],
+          styles: [
+            [0, 2, -1, -1],
+            [0, 2, -1, -1]
+          ],
+          paintOrders: [1, 9]
+        }
+      }
+    ]
+  })
+
+  it('같은 가지의 전체 페이지 래퍼는 오버레이로 치지 않는다', () => {
+    // Naver blanked entirely on this shape: a wrapper as tall as the document
+    // contains the viewport-sized root box and paints after it.
+    const layout = buildPageLayout(build(1), VIEWPORT)
+
+    expect(layout?.byBackendId.get(901)?.occluded).toBe(false)
+  })
+
+  it('다른 가지의 큰 박스는 여전히 가리는 것으로 본다', () => {
+    // Same geometry, but the big box hangs off the document node instead of
+    // sitting on the target's own ancestor line — that is a real overlay.
+    const layout = buildPageLayout(build(0), VIEWPORT)
+
+    expect(layout?.byBackendId.get(901)?.occluded).toBe(true)
+  })
+})
