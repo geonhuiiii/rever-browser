@@ -36,6 +36,16 @@ export interface NodeLayout {
   /** Index into the document's node arrays, used to test ancestry. */
   nodeIndex: number
   /**
+   * true only for a box that could actually hide something: lifted out of flow
+   * AND painted with a non-transparent background.
+   *
+   * Geometry and paint order alone kept mistaking ordinary layout for overlays
+   * and blanking pages - three separate times, on GitHub, on Naver's root, and
+   * on the banner holding Naver's search box. A transparent wrapper covers its
+   * siblings geometrically while hiding nothing.
+   */
+  canOcclude: boolean
+  /**
    * Pixels of content past this box's own fold, 0 when it does not scroll.
    *
    * `overflow:auto` alone is not enough to report: most such boxes never
@@ -66,11 +76,23 @@ export interface PageLayout {
  * Requested in this order; `layout.styles[i]` is parallel to it, so the indices
  * below must move together with the array.
  */
-const STYLE_PROPS = ['visibility', 'opacity', 'overflow-x', 'overflow-y'] as const
+const STYLE_PROPS = [
+  'visibility',
+  'opacity',
+  'overflow-x',
+  'overflow-y',
+  'position',
+  'background-color'
+] as const
 const STYLE_VISIBILITY = 0
 const STYLE_OPACITY = 1
 const STYLE_OVERFLOW_X = 2
 const STYLE_OVERFLOW_Y = 3
+const STYLE_POSITION = 4
+const STYLE_BACKGROUND = 5
+
+/** An overlay is lifted out of flow; an ordinary wrapper is not. */
+const OVERLAY_POSITION = new Set(['fixed', 'absolute', 'sticky'])
 
 /** Any of these on an ancestor means it clips whatever sticks out of its box. */
 const CLIPPING_OVERFLOW = new Set(['hidden', 'auto', 'scroll', 'clip', 'overlay'])
@@ -83,6 +105,15 @@ const OCCLUDER_MIN_AREA_RATIO = 0.25
 
 /** Upper bound on the occluder scan so a huge page can't make it quadratic. */
 const MAX_OCCLUDERS = 40
+
+/** Reads the alpha channel of a computed colour; anything unparsed counts as opaque. */
+function isOpaqueBackground(color: string): boolean {
+  if (!color || color === 'transparent') return false
+  const m = color.match(/rgba?\(([^)]+)\)/)
+  if (!m) return true
+  const parts = m[1].split(',').map((v) => parseFloat(v.trim()))
+  return parts.length < 4 || parts[3] > 0
+}
 
 /** Ancestry walks are bounded; real documents nest far shallower than this. */
 const MAX_ANCESTRY_WALK = 64
@@ -220,7 +251,7 @@ function isRelated(a: number, b: number, parentIndex: number[]): boolean {
 function markOccluded(entries: NodeLayout[], viewport: Viewport, parentIndex: number[]): void {
   const minArea = viewport.width * viewport.height * OCCLUDER_MIN_AREA_RATIO
   const occluders = entries
-    .filter((e) => e.rendered && !e.zeroSize && e.width * e.height >= minArea)
+    .filter((e) => e.rendered && !e.zeroSize && e.canOcclude && e.width * e.height >= minArea)
     .sort((a, b) => b.paintOrder - a.paintOrder)
     .slice(0, MAX_OCCLUDERS)
 
@@ -328,6 +359,13 @@ export function buildPageLayout(
         occluded: false,
         clickable: clickableBackendIds.has(backendId),
         nodeIndex: layout.nodeIndex[i],
+        canOcclude:
+          OVERLAY_POSITION.has(
+            styleIdx[STYLE_POSITION] >= 0 ? snap.strings[styleIdx[STYLE_POSITION]] : ''
+          ) &&
+          isOpaqueBackground(
+            styleIdx[STYLE_BACKGROUND] >= 0 ? snap.strings[styleIdx[STYLE_BACKGROUND]] : ''
+          ),
         scrollableBy: scrollableBy >= MIN_SCROLLABLE_PX ? scrollableBy : 0
       }
       if (entry.clickable) clickMatched++

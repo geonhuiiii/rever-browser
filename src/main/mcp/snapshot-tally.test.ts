@@ -18,6 +18,7 @@ function lay(partial: Partial<NodeLayout> & Pick<NodeLayout, 'y'>): NodeLayout {
     occluded: false,
     clickable: false,
     nodeIndex: 0,
+    canOcclude: false,
     ...partial
   }
 }

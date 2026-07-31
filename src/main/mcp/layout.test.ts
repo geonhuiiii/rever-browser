@@ -5,7 +5,9 @@ import { buildElementPaths, buildPageLayout, type CaptureResult, type Viewport }
 const VIEWPORT: Viewport = { x: 0, y: 0, width: 1000, height: 800 }
 
 /** Index into the shared string table used by every fixture below. */
-const STRINGS = ['visible', 'hidden', '1', '0', 'collapse']
+const STRINGS = ['visible', 'hidden', '1', '0', 'collapse', 'fixed', 'rgb(20, 20, 20)']
+const S_FIXED = 5
+const S_OPAQUE = 6
 const S_VISIBLE = 0
 const S_HIDDEN = 1
 const S_OPACITY_1 = 2
@@ -17,6 +19,8 @@ interface NodeSpec {
   paintOrder?: number
   visibility?: number
   opacity?: number
+  /** marks the box as a real overlay: positioned and opaque */
+  overlay?: boolean
 }
 
 /** Build a captureSnapshot-shaped payload from a compact node list. */
@@ -29,7 +33,14 @@ function snapshot(specs: NodeSpec[]): CaptureResult {
         layout: {
           nodeIndex: specs.map((_, i) => i),
           bounds: specs.map((s) => s.bounds),
-          styles: specs.map((s) => [s.visibility ?? S_VISIBLE, s.opacity ?? S_OPACITY_1]),
+          styles: specs.map((s) => [
+            s.visibility ?? S_VISIBLE,
+            s.opacity ?? S_OPACITY_1,
+            -1,
+            -1,
+            s.overlay ? S_FIXED : -1,
+            s.overlay ? S_OPAQUE : -1
+          ]),
           paintOrders: specs.map((s, i) => s.paintOrder ?? i)
         }
       }
@@ -168,7 +179,7 @@ describe('buildPageLayout', () => {
       const layout = buildPageLayout(
         snapshot([
           { backendNodeId: 1, bounds: [100, 100, 200, 50], paintOrder: 1 },
-          { backendNodeId: 2, bounds: [0, 0, 1000, 800], paintOrder: 9 }
+          { backendNodeId: 2, bounds: [0, 0, 1000, 800], paintOrder: 9, overlay: true }
         ]),
         VIEWPORT
       )
@@ -179,7 +190,7 @@ describe('buildPageLayout', () => {
     it('오버레이보다 나중에 그려진 모달 내용은 occluded가 아니다', () => {
       const layout = buildPageLayout(
         snapshot([
-          { backendNodeId: 1, bounds: [0, 0, 1000, 800], paintOrder: 5 }, // overlay
+          { backendNodeId: 1, bounds: [0, 0, 1000, 800], paintOrder: 5, overlay: true }, // overlay
           { backendNodeId: 2, bounds: [300, 300, 200, 60], paintOrder: 9 } // modal button
         ]),
         VIEWPORT
@@ -204,7 +215,7 @@ describe('buildPageLayout', () => {
       const layout = buildPageLayout(
         snapshot([
           { backendNodeId: 1, bounds: [100, 100, 50, 20], paintOrder: 1 },
-          { backendNodeId: 2, bounds: [90, 90, 200, 100], paintOrder: 9 }
+          { backendNodeId: 2, bounds: [90, 90, 200, 100], paintOrder: 9, overlay: true }
         ]),
         VIEWPORT
       )
@@ -216,7 +227,7 @@ describe('buildPageLayout', () => {
       const layout = buildPageLayout(
         snapshot([
           { backendNodeId: 1, bounds: [900, 100, 200, 50], paintOrder: 1 },
-          { backendNodeId: 2, bounds: [0, 0, 1000, 800], paintOrder: 9 }
+          { backendNodeId: 2, bounds: [0, 0, 1000, 800], paintOrder: 9, overlay: true }
         ]),
         VIEWPORT
       )
@@ -475,7 +486,7 @@ describe('가려짐 판정의 조상 관계 예외', () => {
    * node 3 = an overlay the height of the document, a SIBLING branch
    */
   const build = (overlayParent: number): CaptureResult => ({
-    strings: ['visible', 'hidden', '1', '0'],
+    strings: STRINGS,
     documents: [
       {
         nodes: {
@@ -490,8 +501,8 @@ describe('가려짐 판정의 조상 관계 예외', () => {
             [0, 0, 1000, 5000]
           ],
           styles: [
-            [0, 2, -1, -1],
-            [0, 2, -1, -1]
+            [S_VISIBLE, S_OPACITY_1, -1, -1, -1, -1],
+            [S_VISIBLE, S_OPACITY_1, -1, -1, S_FIXED, S_OPAQUE]
           ],
           paintOrders: [1, 9]
         }
