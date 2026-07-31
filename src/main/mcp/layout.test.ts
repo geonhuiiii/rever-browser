@@ -98,13 +98,16 @@ describe('buildPageLayout', () => {
       expect(layout?.byBackendId.get(1)?.rendered).toBe(false)
     })
 
-    it('크기가 0인 박스는 rendered=false로 표시한다', () => {
+    it('크기가 0인 박스는 zeroSize=true로 표시한다', () => {
+      // Separate from `rendered` on purpose: a zero-size wrapper is invisible
+      // itself, but its children can overflow it and be visible.
       const layout = buildPageLayout(
         snapshot([{ backendNodeId: 1, bounds: [10, 10, 0, 0] }]),
         VIEWPORT
       )
 
-      expect(layout?.byBackendId.get(1)?.rendered).toBe(false)
+      expect(layout?.byBackendId.get(1)?.zeroSize).toBe(true)
+      expect(layout?.byBackendId.get(1)?.rendered).toBe(true)
     })
 
     it('보이는 박스는 rendered=true로 표시한다', () => {

@@ -172,7 +172,7 @@ export function tallyFiltered(nodes: AXNode[], layout: PageLayout): FilterTally 
     const lay = layout.byBackendId.get(n.backendDOMNodeId)
     if (!lay) continue
 
-    if (!lay.rendered || lay.occluded) {
+    if (!lay.rendered || lay.occluded || lay.zeroSize) {
       t.hidden++
       continue
     }
@@ -302,7 +302,12 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         filter && n.backendDOMNodeId != null
           ? filter.byBackendId.get(n.backendDOMNodeId)
           : undefined
-      if (prune && lay && (!lay.rendered || lay.occluded || !lay.inViewport)) return
+      // A zero-size box is invisible on its own but its children can overflow
+      // it, so it must not take the subtree down with it — only style-hidden,
+      // covered and off-screen boxes do.
+      if (prune && lay && !lay.zeroSize && (!lay.rendered || lay.occluded || !lay.inViewport)) {
+        return
+      }
 
       // A click signal with no interactive ARIA role — the `<div onClick>`
       // case. Only the outermost such node in a chain gets a ref, so a button
@@ -444,7 +449,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
     const explained = result.stats.hidden > 0 || result.stats.offscreen > 0
     if (!explained) {
       result = build(layout, false)
-      result.stats.fellBackToFull = true
+      // Only a real mismatch if dropping the filter actually reveals controls.
+      // An error page with no controls at all also lands here, and claiming a
+      // coordinate problem there is a false alarm.
+      result.stats.fellBackToFull = result.stats.refs > 0
     }
   }
 

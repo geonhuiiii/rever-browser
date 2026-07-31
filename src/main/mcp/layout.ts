@@ -11,8 +11,19 @@ export interface NodeLayout {
   width: number
   height: number
   paintOrder: number
-  /** false when visibility/opacity or a zero-size box means nothing is drawn */
+  /**
+   * false when a style hides it — visibility or opacity. These inherit, so a
+   * false here means the whole subtree is hidden too.
+   */
   rendered: boolean
+  /**
+   * true for a box with no width or height. Deliberately separate from
+   * `rendered`: a zero-size wrapper is invisible itself but its children can
+   * overflow it and be perfectly visible. Treating the two the same pruned
+   * whole pages — GitHub and Coupang returned a bare RootWebArea because one
+   * `0,0,1137x0` wrapper sat above everything.
+   */
+  zeroSize: boolean
   /** true when the box intersects the current viewport */
   inViewport: boolean
   /** true when a later-painted box fully covers it (modal overlays, drawers) */
@@ -171,19 +182,24 @@ function contains(outer: NodeLayout, inner: NodeLayout): boolean {
 function markOccluded(entries: NodeLayout[], viewport: Viewport): void {
   const minArea = viewport.width * viewport.height * OCCLUDER_MIN_AREA_RATIO
   const occluders = entries
-    .filter((e) => e.rendered && e.width * e.height >= minArea)
+    .filter((e) => e.rendered && !e.zeroSize && e.width * e.height >= minArea)
     .sort((a, b) => b.paintOrder - a.paintOrder)
     .slice(0, MAX_OCCLUDERS)
 
   if (occluders.length === 0) return
 
   for (const e of entries) {
-    if (!e.rendered) continue
+    if (!e.rendered || e.zeroSize) continue
     for (const o of occluders) {
       // Sorted by paint order descending, so once we drop below e's own paint
       // order nothing later in the list can cover it either.
       if (o.paintOrder <= e.paintOrder) break
-      if (contains(o, e)) {
+      // Strictly larger, not merely containing. Nested full-page wrappers share
+      // identical bounds, so the inner one both "contains" its parent and
+      // paints after it — which read as an overlay and blanked entire pages
+      // (GitHub and Coupang returned a bare RootWebArea). A real overlay is
+      // bigger than what it hides.
+      if (o.width * o.height > e.width * e.height && contains(o, e)) {
         e.occluded = true
         break
       }
@@ -237,12 +253,8 @@ export function buildPageLayout(
         styleIdx[STYLE_VISIBILITY] >= 0 ? snap.strings[styleIdx[STYLE_VISIBILITY]] : ''
       const opacity = styleIdx[STYLE_OPACITY] >= 0 ? snap.strings[styleIdx[STYLE_OPACITY]] : ''
 
-      const rendered =
-        width > 0 &&
-        height > 0 &&
-        visibility !== 'hidden' &&
-        visibility !== 'collapse' &&
-        opacity !== '0'
+      const rendered = visibility !== 'hidden' && visibility !== 'collapse' && opacity !== '0'
+      const zeroSize = width <= 0 || height <= 0
 
       const entry: NodeLayout = {
         x,
@@ -251,6 +263,7 @@ export function buildPageLayout(
         height,
         paintOrder: layout.paintOrders?.[i] ?? 0,
         rendered,
+        zeroSize,
         inViewport: false,
         occluded: false,
         clickable: clickableBackendIds.has(backendId)
