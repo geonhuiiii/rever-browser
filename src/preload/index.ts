@@ -446,14 +446,6 @@ const api = {
       ipcRenderer.removeListener('reload-webview', listener)
     }
   },
-  external: {
-    start: (): Promise<{ port: number; pid: number }> =>
-      ipcRenderer.invoke('external:start'),
-    stop: (): Promise<void> =>
-      ipcRenderer.invoke('external:stop'),
-    navigate: (url: string): Promise<void> =>
-      ipcRenderer.invoke('external:navigate', url),
-    startScreencast: (opts: {
   // Browser-level shortcuts (Cmd/Ctrl+T, +W, tab switching, ...) forwarded
   // from main's menu accelerators / before-input-event interceptors.
   onBrowserCommand: (
@@ -484,6 +476,14 @@ const api = {
   closeWindow: (): void => {
     ipcRenderer.send('window:close')
   },
+  external: {
+    start: (): Promise<{ port: number; pid: number }> =>
+      ipcRenderer.invoke('external:start'),
+    stop: (): Promise<void> =>
+      ipcRenderer.invoke('external:stop'),
+    navigate: (url: string): Promise<void> =>
+      ipcRenderer.invoke('external:navigate', url),
+    startScreencast: (opts: {
       quality?: number
       everyNthFrame?: number
       maxWidth?: number
