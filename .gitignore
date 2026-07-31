@@ -30,3 +30,4 @@ release/
 /ai-activity-viz-mockup.html
 /browser-use-deep-dive.html
 /browser-use-import-progress.html
+__pycache__/
