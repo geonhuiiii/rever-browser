@@ -1,6 +1,5 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget } from '../chrome-cdp'
-import { visualize } from './cdp-eval'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
 import { capturePageLayout, scanClickable, type PageLayout } from './layout'
 
@@ -59,6 +58,23 @@ const ACTIONABLE_ROLES = new Set([
   'slider',
   'option'
 ])
+
+/** Depth-limited: labels come from a node's own text, not a whole subtree dump. */
+const TEXT_LABEL_DEPTH = 3
+
+/** First piece of visible text under a node, used to name role-less click targets. */
+export function firstText(node: AXNode, scope: Map<string, AXNode>, depth = 0): string {
+  if (depth > TEXT_LABEL_DEPTH) return ''
+  for (const id of node.childIds ?? []) {
+    const child = scope.get(id)
+    if (!child) continue
+    const name = String((child.name?.value as string | undefined) ?? '').trim()
+    if ((child.role?.value as string | undefined) === 'StaticText' && name) return name
+    const nested = firstText(child, scope, depth + 1)
+    if (nested) return nested
+  }
+  return ''
+}
 
 function quote(s: string): string {
   return JSON.stringify(s.length > 80 ? s.slice(0, 80) + '…' : s)
@@ -188,12 +204,6 @@ export function describeOffscreen(t: FilterTally): string[] {
 export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<SnapshotResult> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target — open a page first')
-  // Emit here (not per-tool) so implicit snapshots after navigate/click/type
-  // also surface in the AI-activity overlay. The in-page scan runs alongside
-  // the AX tree walk (not awaited) so it never slows the agent down.
-  emitAiAction({ kind: 'snapshot', label: 'AI snapshot' })
-  visualize('scanPage')
-
   await target.dbg.sendCommand('Accessibility.enable').catch(() => {})
 
   const metaRes = (await target.dbg.sendCommand('Runtime.evaluate', {
@@ -282,8 +292,14 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       let nextDepth = depth
 
       if (!skip) {
-        const parts: string[] = [`- ${role || 'clickable'}`]
-        if (name) parts.push(quote(name))
+        // A click-scan node has no ARIA role or name by definition, so it would
+        // print as a bare `- generic [ref=r4]`. Label it by its own text so the
+        // agent can tell what it is about to click.
+        const label = claimable && (!role || SKIP_ROLES.has(role)) ? 'clickable' : role
+        const shownName = name || (claimable ? firstText(n, byId) : '')
+
+        const parts: string[] = [`- ${label}`]
+        if (shownName) parts.push(quote(shownName))
 
         if (n.value?.value !== undefined && n.value.value !== '') {
           parts.push(`value=${quote(String(n.value.value))}`)
@@ -304,7 +320,11 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           counter++
           if (claimable) clickOnlyRefs++
           const r = `r${counter}`
-          refMap.set(r, { backendNodeId: n.backendDOMNodeId, role: role || 'clickable', name })
+          refMap.set(r, {
+            backendNodeId: n.backendDOMNodeId,
+            role: role || 'clickable',
+            name: shownName
+          })
           parts.push(`[ref=${r}]`)
           if (claimable) parts.push('(click-scan)')
         }
@@ -317,6 +337,7 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       for (const c of n.childIds ?? []) {
         walk(c, nextDepth, childParentName, ancestorClaimed || claimable)
       }
+
     }
 
     if (nodes[0]) walk(nodes[0].nodeId, 0, '', false)

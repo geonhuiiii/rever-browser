@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { emitAiAction } from '../../ai-events'
 import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
-import { evalInPage, visualize } from '../cdp-eval'
+import { evalInPage } from '../cdp-eval'
 import { humanScroll } from '../human-input'
 import {
   clickRef,
@@ -17,12 +17,6 @@ import {
   typeSelector
 } from '../snapshot'
 import { ok, err, errorMessage } from '../utils'
-
-// One-line preview of an eval result / error for the in-page code HUD.
-function preview(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > 120 ? flat.slice(0, 120) + '…' : flat
-}
 
 /**
  * Wait for the page to settle, then take a fresh snapshot. Used by
@@ -90,12 +84,6 @@ export function registerBrowserTools(mcp: McpServer) {
       if (!target) return err('no active browser target — open a page first')
       try {
         emitAiAction({ kind: 'navigate', label: `AI navigate`, detail: url })
-        // Sweep as soon as the new document is parsed, not after loadURL
-        // resolves — loadURL waits for the full load (images, subframes), so
-        // sweeping then reads as a beat too late. The overlay script is
-        // injected at document-start, so __reverAi already exists here. It has
-        // to be the NEW document: the old one's overlay dies on navigation.
-        target.wc.once('dom-ready', () => visualize('navSweep'))
         await target.wc.loadURL(url)
         return await snapshotAfter(`navigated to ${url}`)
       } catch (e) {
@@ -320,13 +308,10 @@ export function registerBrowserTools(mcp: McpServer) {
           label: 'AI evaluate',
           detail: expression.slice(0, 80)
         })
-        visualize('evalHudStart', expression.slice(0, 160))
         const result = await evalInPage<unknown>(expression)
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
-        visualize('evalHudDone', preview(text), false)
         return ok(text)
       } catch (e) {
-        visualize('evalHudDone', preview(errorMessage(e)), true)
         return err(errorMessage(e))
       }
     }
@@ -399,7 +384,6 @@ export function registerBrowserTools(mcp: McpServer) {
           truncated: boolean
           items: Record<string, unknown>[]
         }>(expr)
-        visualize('extractHighlight', selector, result.matched)
         return ok(JSON.stringify(result, null, 2))
       } catch (e) {
         return err(errorMessage(e))
@@ -419,8 +403,6 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         emitAiAction({ kind: 'screenshot', label: 'AI screenshot' })
         const img = await target.wc.capturePage()
-        // Shutter AFTER the capture so the flash never lands in the PNG.
-        visualize('shutter')
         const png = img.toPNG()
         return {
           content: [

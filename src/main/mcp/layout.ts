@@ -208,11 +208,16 @@ const DOCUMENT_NODE = 9
  * `<html>` — `"1.3.0"` is documentElement.children[1].children[3].children[0].
  *
  * Geometry was the obvious way to correlate in-page findings with snapshot
- * nodes and it failed outright: a fixture run reported `10 candidate(s), 0
- * correlated`, because DOMSnapshot bounds and getBoundingClientRect do not
- * share a coordinate space here. Paths are exact and immune to scale, origin
- * and rounding, and they cost nothing extra — the node tree is already in the
- * payload we fetch.
+ * nodes and it failed outright: a fixture run in the app reported `10
+ * candidate(s), 0 correlated`. The cause was never pinned down — a later probe
+ * against plain headless Chrome matched 10 of 10 on the same fixture, so the
+ * two coordinate spaces do agree under at least some conditions, and something
+ * about the embedded webview (scale factor, zoom, or an emulated viewport) is
+ * the likely difference.
+ *
+ * Paths sidestep the question entirely: they are exact regardless of scale,
+ * origin or rounding, and cost nothing extra since the node tree already rides
+ * along in the payload we fetch.
  */
 export function buildElementPaths(doc: DocumentSnapshot): Map<string, number> {
   const parentIndex = doc.nodes?.parentIndex
