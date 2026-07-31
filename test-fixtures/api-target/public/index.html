@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever API target</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe}
+  button{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:7px 12px;
+    color:#e6edf3;font-size:13px;margin:2px;cursor:pointer}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .exp b{color:#7ee787}
+  pre{background:#0b0f16;border:1px solid #2b3444;border-radius:6px;padding:8px;
+    font-size:11px;max-height:180px;overflow:auto;margin:8px 0 0;white-space:pre-wrap}
+  code{color:#f0883e}
+</style>
+</head>
+<body>
+
+<h1>rever API reversing target</h1>
+<p class="sub">Every answer a tool should produce is printed next to the control that produces it.</p>
+
+<section>
+  <h2>A. Auth</h2>
+  <button id="btn-login">A1 login</button>
+  <p class="exp">POST <code>/api/v3/login</code> returns an HS256 JWT with
+    <b>sub=u_42</b>, <b>role=admin</b>, and stores it in <code>localStorage["auth.token"]</code>
+    plus an HttpOnly <code>session</code> cookie.</p>
+</section>
+
+<section>
+  <h2>B. Signed API calls</h2>
+  <button id="btn-profile">B1 GET /profile</button>
+  <button id="btn-items">B2 GET /items?page=1</button>
+  <p class="exp">Both send <code>x-signature</code> = HMAC-SHA256 over
+    <b>METHOD\nPATH\nBODY\nTIMESTAMP</b> with key <b>s3cr3t-signing-key</b>.
+    Replaying either without re-signing must return <b>403 bad_signature</b> —
+    that is the check a replay tool has to survive.</p>
+</section>
+
+<section>
+  <h2>C. WebSocket</h2>
+  <button id="btn-ws">C1 open /ws</button>
+  <p class="exp">Server greets with <b>{"type":"hello"}</b> and echoes anything sent.</p>
+</section>
+
+<section>
+  <h2>D. Injection surfaces</h2>
+  <button id="btn-echo">D1 GET /echo?name=rever</button>
+  <p class="exp"><code>/api/v3/echo</code> reflects <code>name</code> into the <b>x-echo</b>
+    response header. <code>/api/v3/file?p=</code> serves files by relative path.
+    <code>/api/v3/admin/keys</code> exists but is referenced by <b>no page code</b> —
+    only guessing finds it.</p>
+</section>
+
+<pre id="log">ready</pre>
+
+<script src="/assets/app.js"></script>
+</body>
+</html>
