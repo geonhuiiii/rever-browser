@@ -1,5 +1,6 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget } from '../chrome-cdp'
+import { visualize } from './cdp-eval'
 import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
 import { collectFrames } from './frames'
 import { capturePageLayout, scanClickable, type PageLayout } from './layout'
@@ -225,6 +226,12 @@ export function describeOffscreen(t: FilterTally): string[] {
 export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<SnapshotResult> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target — open a page first')
+  // Emit here (not per-tool) so implicit snapshots after navigate/click/type
+  // also surface in the AI-activity overlay. The in-page scan runs alongside
+  // the AX tree walk (not awaited) so it never slows the agent down.
+  emitAiAction({ kind: 'snapshot', label: 'AI snapshot' })
+  visualize('scanPage')
+
   await target.dbg.sendCommand('Accessibility.enable').catch(() => {})
 
   const metaRes = (await target.dbg.sendCommand('Runtime.evaluate', {
