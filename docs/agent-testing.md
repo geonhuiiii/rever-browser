@@ -111,3 +111,16 @@ implementing against an assumption and debugging the result.
 - **A silent miss is the failure mode to design for.** Prefer a check that
   proves the effect (a captured request, a changed count) over one that merely
   shows no error.
+
+## Known limitations (deferred)
+
+- **OOPIFs are not snapshotted.** An out-of-process iframe — one whose src is a
+  different *site* (different eTLD+1; port and subdomain do not count) — runs in
+  its own renderer process, so the single CDP session the snapshot uses cannot
+  read its accessibility tree. Same-site frames work; a cross-site frame shows
+  up as `unreachable` in the snapshot output and its contents (ads, payment
+  widgets, embedded players, captchas) are invisible to `browser_snapshot` and
+  unreachable by `browser_click`. The fix is `Target.setAutoAttach` plus a
+  per-OOPIF CDP session whose trees are merged into the snapshot — deferred, not
+  yet implemented. Click-scan inside frames is blocked on the same work, because
+  an isolated world loses `getEventListeners`.
