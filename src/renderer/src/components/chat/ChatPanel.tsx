@@ -463,8 +463,7 @@ export function ChatPanel() {
     setAutoScroll(isAtBottom())
   }
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault()
+  const submit = () => {
     const text = input.trim()
     if (!text || busy) return
     // Assign a storage id for the draft on first send. This does NOT change
@@ -479,6 +478,26 @@ export function ChatPanel() {
     setAutoScroll(true)
     void sendMessage({ text })
   }
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    submit()
+  }
+
+  // Auto-grow the input up to 4 lines; beyond that it scrolls.
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const INPUT_MAX_HEIGHT = 18 * 4 + 14 // 4 lines × line-height + padding + border
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    // border-box: scrollHeight excludes the border, so add it back or the box
+    // is permanently 2px short and shows a scrollbar even on a single line.
+    const chrome = el.offsetHeight - el.clientHeight
+    const needed = el.scrollHeight + chrome
+    el.style.height = `${Math.min(needed, INPUT_MAX_HEIGHT)}px`
+    el.style.overflowY = needed > INPUT_MAX_HEIGHT ? 'auto' : 'hidden'
+  }, [input])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderLeft: '1px solid var(--border-2)' }}>
@@ -600,11 +619,35 @@ export function ChatPanel() {
       </div>
 
       <form onSubmit={onSubmit} style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border-2)', alignItems: 'center' }}>
-        <input
+        <textarea
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter sends, Shift+Enter inserts a newline. Skip while the IME
+            // is composing (e.g. Korean) so Enter doesn't send mid-composition.
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              submit()
+            }
+          }}
           placeholder="Type a message…"
-          style={{ flex: 1, padding: '6px 10px' }}
+          rows={1}
+          style={{
+            flex: 1,
+            padding: '6px 10px',
+            resize: 'none',
+            lineHeight: '18px',
+            maxHeight: INPUT_MAX_HEIGHT,
+            // The auto-grow effect flips this to 'auto' once it overflows.
+            overflowY: 'hidden',
+            // block, not inline-block — kills the baseline descender gap that
+            // would make the row taller than the buttons next to it.
+            display: 'block',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            boxSizing: 'border-box'
+          }}
           disabled={busy}
         />
         {busy && <Spinner />}
