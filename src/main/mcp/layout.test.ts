@@ -353,3 +353,74 @@ describe('위임 루트 억제 (React 형태)', () => {
     expect(layout?.byBackendId.get(904)?.clickable).toBe(false)
   })
 })
+
+/**
+ * A page-sized body, a small overflow:auto box inside it, and two children of
+ * that box: one inside its visible band, one scrolled past it. The clipped
+ * child's own rect is still within the page viewport — which is exactly why
+ * comparing against the viewport alone reported it as visible.
+ */
+const CLIP_TREE: CaptureResult = {
+  strings: ['visible', 'hidden', '1', '0', 'auto'],
+  documents: [
+    {
+      nodes: {
+        backendNodeId: [900, 901, 902, 903, 904],
+        parentIndex: [-1, 0, 1, 2, 2],
+        nodeType: [9, 1, 1, 1, 1]
+      },
+      layout: {
+        nodeIndex: [1, 2, 3, 4],
+        bounds: [
+          [0, 0, 1000, 700], // html
+          [0, 100, 400, 90], // scroller, overflow-y:auto
+          [10, 110, 200, 30], // child inside the visible band
+          [10, 330, 200, 30] // child scrolled past the container's fold
+        ],
+        styles: [
+          [0, 2, -1, -1],
+          [0, 2, -1, 4], // overflow-y: auto
+          [0, 2, -1, -1],
+          [0, 2, -1, -1]
+        ],
+        paintOrders: [1, 2, 3, 4]
+      }
+    }
+  ]
+}
+
+describe('조상 클립 박스', () => {
+  it('스크롤 컨테이너 밖으로 잘린 자식은 inViewport=false다', () => {
+    const layout = buildPageLayout(CLIP_TREE, VIEWPORT)
+
+    expect(layout?.byBackendId.get(903)?.inViewport).toBe(true) // inside the band
+    expect(layout?.byBackendId.get(904)?.inViewport).toBe(false) // clipped out
+  })
+
+  it('컨테이너 자신은 뷰포트 안이면 그대로 보인다', () => {
+    expect(buildPageLayout(CLIP_TREE, VIEWPORT)?.byBackendId.get(902)?.inViewport).toBe(true)
+  })
+
+  it('클리핑 조상이 없으면 판정이 달라지지 않는다', () => {
+    const noClip: CaptureResult = {
+      ...CLIP_TREE,
+      documents: [
+        {
+          ...CLIP_TREE.documents[0],
+          layout: {
+            ...CLIP_TREE.documents[0].layout,
+            // same geometry, but the container no longer clips
+            styles: [
+              [0, 2, -1, -1],
+              [0, 2, -1, -1],
+              [0, 2, -1, -1],
+              [0, 2, -1, -1]
+            ]
+          }
+        }
+      ]
+    }
+
+    expect(buildPageLayout(noClip, VIEWPORT)?.byBackendId.get(904)?.inViewport).toBe(true)
+  })
+})

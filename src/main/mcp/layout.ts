@@ -40,8 +40,18 @@ export interface PageLayout {
   clickMatched: number
 }
 
-/** Requested in this order; `layout.styles[i]` is parallel to it. */
-const STYLE_PROPS = ['visibility', 'opacity'] as const
+/**
+ * Requested in this order; `layout.styles[i]` is parallel to it, so the indices
+ * below must move together with the array.
+ */
+const STYLE_PROPS = ['visibility', 'opacity', 'overflow-x', 'overflow-y'] as const
+const STYLE_VISIBILITY = 0
+const STYLE_OPACITY = 1
+const STYLE_OVERFLOW_X = 2
+const STYLE_OVERFLOW_Y = 3
+
+/** Any of these on an ancestor means it clips whatever sticks out of its box. */
+const CLIPPING_OVERFLOW = new Set(['hidden', 'auto', 'scroll', 'clip', 'overlay'])
 
 /**
  * A box only counts as an occluder if it covers at least this much of the
@@ -78,6 +88,69 @@ function intersects(a: NodeLayout, v: Viewport): boolean {
     a.y + a.height > v.y &&
     a.y < v.y + v.height
   )
+}
+
+function intersectRect(a: Viewport, b: Viewport): Viewport {
+  const x = Math.max(a.x, b.x)
+  const y = Math.max(a.y, b.y)
+  return {
+    x,
+    y,
+    width: Math.max(0, Math.min(a.x + a.width, b.x + b.width) - x),
+    height: Math.max(0, Math.min(a.y + a.height, b.y + b.height) - y)
+  }
+}
+
+/**
+ * Effective visible region for each laid-out node: the viewport intersected
+ * with every clipping ancestor's box.
+ *
+ * Without this a button scrolled out of an `overflow:auto` container still
+ * counts as visible, because its own rect is inside the page viewport — the
+ * container is on screen, the button is just clipped out of it. A fixture run
+ * showed exactly that: `C1-BOTTOM needs inner scroll` got a ref while being
+ * invisible, and the filter reported nothing hidden at all. Reporting an
+ * element the agent cannot see is worse than missing one; it plans against a
+ * screen state that does not exist.
+ */
+function buildClipRects(
+  doc: DocumentSnapshot,
+  strings: string[],
+  viewport: Viewport
+): Map<number, Viewport> {
+  const parentIndex = doc.nodes?.parentIndex
+  const layout = doc.layout
+  const clipByNodeIndex = new Map<number, Viewport>()
+  if (!parentIndex || !layout?.nodeIndex) return clipByNodeIndex
+
+  // Only laid-out nodes have a box, so clipping ancestors are looked up here.
+  const ownClip = new Map<number, Viewport>()
+  for (let i = 0; i < layout.nodeIndex.length; i++) {
+    const bounds = layout.bounds?.[i]
+    if (!bounds || bounds.length < 4) continue
+    const styleIdx = layout.styles?.[i] ?? []
+    const ox = styleIdx[STYLE_OVERFLOW_X] >= 0 ? strings[styleIdx[STYLE_OVERFLOW_X]] : ''
+    const oy = styleIdx[STYLE_OVERFLOW_Y] >= 0 ? strings[styleIdx[STYLE_OVERFLOW_Y]] : ''
+    if (!CLIPPING_OVERFLOW.has(ox) && !CLIPPING_OVERFLOW.has(oy)) continue
+    const [x, y, width, height] = bounds
+    ownClip.set(layout.nodeIndex[i], { x, y, width, height })
+  }
+  if (ownClip.size === 0) return clipByNodeIndex
+
+  const resolve = (nodeIndex: number): Viewport => {
+    const cached = clipByNodeIndex.get(nodeIndex)
+    if (cached) return cached
+    const parent = parentIndex[nodeIndex]
+    const inherited =
+      parent == null || parent < 0 || parent === nodeIndex ? viewport : resolve(parent)
+    const own = ownClip.get(nodeIndex)
+    const clip = own ? intersectRect(inherited, own) : inherited
+    clipByNodeIndex.set(nodeIndex, clip)
+    return clip
+  }
+
+  for (const nodeIndex of layout.nodeIndex) resolve(nodeIndex)
+  return clipByNodeIndex
 }
 
 function contains(outer: NodeLayout, inner: NodeLayout): boolean {
@@ -149,6 +222,8 @@ export function buildPageLayout(
     const layout = doc.layout
     if (!backendIds || !layout?.nodeIndex) continue
 
+    const clipByNodeIndex = buildClipRects(doc, snap.strings, viewport)
+
     for (let i = 0; i < layout.nodeIndex.length; i++) {
       const backendId = backendIds[layout.nodeIndex[i]]
       if (backendId == null) continue
@@ -158,8 +233,9 @@ export function buildPageLayout(
       const [x, y, width, height] = bounds
 
       const styleIdx = layout.styles?.[i] ?? []
-      const visibility = styleIdx[0] >= 0 ? snap.strings[styleIdx[0]] : ''
-      const opacity = styleIdx[1] >= 0 ? snap.strings[styleIdx[1]] : ''
+      const visibility =
+        styleIdx[STYLE_VISIBILITY] >= 0 ? snap.strings[styleIdx[STYLE_VISIBILITY]] : ''
+      const opacity = styleIdx[STYLE_OPACITY] >= 0 ? snap.strings[styleIdx[STYLE_OPACITY]] : ''
 
       const rendered =
         width > 0 &&
@@ -180,7 +256,8 @@ export function buildPageLayout(
         clickable: clickableBackendIds.has(backendId)
       }
       if (entry.clickable) clickMatched++
-      entry.inViewport = intersects(entry, viewport)
+      // Visible means inside the viewport AND inside every clipping ancestor.
+      entry.inViewport = intersects(entry, clipByNodeIndex.get(layout.nodeIndex[i]) ?? viewport)
 
       // A backendNodeId can appear more than once across documents; the first
       // laid-out box wins, which is the one the user actually sees.
