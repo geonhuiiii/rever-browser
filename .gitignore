@@ -21,3 +21,10 @@ release/
 /PLAN.md
 /HANDOFF.md
 .claude/
+
+# One-off research reports and design mockups written to the repo root.
+# They are working artifacts, not part of the app; test-fixtures/ is where
+# anything meant to be re-run lives.
+/competitor-scan.html
+/browser-use-ab-report.html
+/ai-activity-viz-mockup.html
