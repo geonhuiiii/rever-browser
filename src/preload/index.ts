@@ -446,6 +446,36 @@ const api = {
     navigate: (url: string): Promise<void> =>
       ipcRenderer.invoke('external:navigate', url),
     startScreencast: (opts: {
+  // Browser-level shortcuts (Cmd/Ctrl+T, +W, tab switching, ...) forwarded
+  // from main's menu accelerators / before-input-event interceptors.
+  onBrowserCommand: (
+    handler: (opts: {
+      cmd:
+        | 'new-tab'
+        | 'close-tab'
+        | 'reopen-tab'
+        | 'next-tab'
+        | 'prev-tab'
+        | 'select-tab'
+        | 'back'
+        | 'forward'
+        | 'focus-address'
+        | 'find'
+        | 'open-tab'
+      index?: number
+      url?: string
+    }) => void
+  ): (() => void) => {
+    const listener = (_e: unknown, opts: Parameters<typeof handler>[0]) => handler(opts)
+    ipcRenderer.on('browser-command', listener)
+    return () => {
+      ipcRenderer.removeListener('browser-command', listener)
+    }
+  },
+  // Cmd/Ctrl+W on the last remaining tab closes the window, Chromium-style.
+  closeWindow: (): void => {
+    ipcRenderer.send('window:close')
+  },
       quality?: number
       everyNthFrame?: number
       maxWidth?: number

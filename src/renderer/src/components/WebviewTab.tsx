@@ -20,6 +20,10 @@ export interface WebviewTabHandle {
   goBack: () => void
   goForward: () => void
   reload: (ignoreCache?: boolean) => void
+  findInPage: (text: string, opts?: { forward?: boolean; findNext?: boolean }) => void
+  stopFindInPage: (action?: 'clearSelection' | 'keepSelection') => void
+  // Subscribe to find-result updates; returns an unsubscribe function.
+  onFoundInPage: (cb: (r: { activeMatchOrdinal: number; matches: number }) => void) => () => void
 }
 
 interface PageTitleEvent extends Event {
@@ -66,6 +70,20 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(function WebviewTa
         const wv = wvRef.current
         if (!wv) return
         ignoreCache ? wv.reloadIgnoringCache() : wv.reload()
+      },
+      findInPage: (text, opts) => {
+        wvRef.current?.findInPage(text, opts)
+      },
+      stopFindInPage: (action = 'clearSelection') => {
+        wvRef.current?.stopFindInPage(action)
+      },
+      onFoundInPage: (cb) => {
+        const wv = wvRef.current
+        if (!wv) return () => {}
+        const listener = (e: Electron.FoundInPageEvent) =>
+          cb({ activeMatchOrdinal: e.result.activeMatchOrdinal, matches: e.result.matches })
+        wv.addEventListener('found-in-page', listener)
+        return () => wv.removeEventListener('found-in-page', listener)
       }
     }),
     []

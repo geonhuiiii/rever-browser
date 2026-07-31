@@ -84,6 +84,15 @@ function App() {
   }, [])
 
   const [urlDraft, setUrlDraft] = useState(activeTab?.url ?? '')
+  const addressInputRef = useRef<HTMLInputElement>(null)
+
+  // Find-in-page bar (Cmd/Ctrl+F). Acts on the active tab's webview; closes
+  // when the user switches tabs.
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [findResult, setFindResult] = useState<{ active: number; total: number } | null>(null)
+  const findInputRef = useRef<HTMLInputElement>(null)
+  const findTabRef = useRef<string | null>(null)
   const viewportMode = useViewportStore((s) => s.mode)
   const setViewportMode = useViewportStore((s) => s.setMode)
 
@@ -142,6 +151,106 @@ function App() {
       handle?.reload(ignoreCache)
     })
     return off
+  }, [])
+
+  // ── Find in page ──────────────────────────────────────────────────────────
+  const doFind = useCallback(
+    (query: string, opts?: { forward?: boolean; findNext?: boolean }) => {
+      const id = useTabsStore.getState().activeId
+      const handle = tabRefs.current.get(id)
+      if (!handle) return
+      if (!query) {
+        handle.stopFindInPage('clearSelection')
+        setFindResult(null)
+        return
+      }
+      handle.findInPage(query, opts)
+    },
+    []
+  )
+
+  const closeFind = useCallback(() => {
+    const id = findTabRef.current ?? useTabsStore.getState().activeId
+    tabRefs.current.get(id)?.stopFindInPage('clearSelection')
+    findTabRef.current = null
+    setFindOpen(false)
+    setFindResult(null)
+  }, [])
+
+  // Live match count from the active tab while the bar is open.
+  useEffect(() => {
+    if (!findOpen) return
+    const handle = activeId ? tabRefs.current.get(activeId) : undefined
+    return handle?.onFoundInPage((r) =>
+      setFindResult({ active: r.activeMatchOrdinal, total: r.matches })
+    )
+  }, [findOpen, activeId])
+
+  // Switching tabs closes the bar (and clears highlights on the old tab).
+  useEffect(() => {
+    if (findOpen && findTabRef.current && activeId !== findTabRef.current) closeFind()
+  }, [activeId, findOpen, closeFind])
+
+  // Browser shortcuts forwarded from main (menu accelerators + key
+  // interceptors): tab management, tab switching, back/forward, address bar.
+  useEffect(() => {
+    const focusAddress = (): void => {
+      addressInputRef.current?.focus()
+      addressInputRef.current?.select()
+    }
+    return window.rev.onBrowserCommand(({ cmd, index, url }) => {
+      const { tabs, activeId, addTab, closeTab, reopenTab, selectTab } = useTabsStore.getState()
+      const activeHandle = tabRefs.current.get(activeId)
+      switch (cmd) {
+        case 'new-tab':
+          addTab('about:blank')
+          // Focus after the new tab renders, like Chrome's new-tab omnibox.
+          setTimeout(focusAddress, 0)
+          break
+        case 'close-tab':
+          if (tabs.length <= 1) window.rev.closeWindow()
+          else closeTab(activeId)
+          break
+        case 'reopen-tab':
+          reopenTab()
+          break
+        case 'next-tab':
+        case 'prev-tab': {
+          const idx = tabs.findIndex((t) => t.id === activeId)
+          if (idx < 0) break
+          const delta = cmd === 'next-tab' ? 1 : -1
+          selectTab(tabs[(idx + delta + tabs.length) % tabs.length].id)
+          break
+        }
+        case 'select-tab': {
+          // Cmd/Ctrl+9 → last tab, 1..8 → nth tab if it exists (Chromium rule).
+          const target = index === 9 ? tabs[tabs.length - 1] : tabs[(index ?? 0) - 1]
+          if (target) selectTab(target.id)
+          break
+        }
+        case 'back':
+          activeHandle?.goBack()
+          break
+        case 'forward':
+          activeHandle?.goForward()
+          break
+        case 'focus-address':
+          focusAddress()
+          break
+        case 'find':
+          if (useBrowserModeStore.getState().mode !== 'embedded') break
+          findTabRef.current = activeId
+          setFindOpen(true)
+          setTimeout(() => {
+            findInputRef.current?.focus()
+            findInputRef.current?.select()
+          }, 0)
+          break
+        case 'open-tab':
+          if (url) addTab(url)
+          break
+      }
+    })
   }, [])
 
   // Launch / teardown external Chrome when mode switches
@@ -316,6 +425,7 @@ function App() {
               </>
             )}
             <input
+              ref={addressInputRef}
               value={urlDraft}
               onChange={(e) => setUrlDraft(e.target.value)}
               placeholder="https://..."
@@ -416,6 +526,73 @@ function App() {
             <DetailDrawer />
           </div>
         </section>
+            {findOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 12,
+                  zIndex: 30,
+                  display: 'flex',
+                  gap: 4,
+                  alignItems: 'center',
+                  padding: '5px 6px',
+                  background: 'var(--bg-bar)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  boxShadow: '0 2px 10px rgba(0,0,0,0.25)'
+                }}
+              >
+                <input
+                  ref={findInputRef}
+                  value={findQuery}
+                  onChange={(e) => {
+                    setFindQuery(e.target.value)
+                    doFind(e.target.value)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      doFind(findQuery, { findNext: true, forward: !e.shiftKey })
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      closeFind()
+                    }
+                  }}
+                  placeholder="Find in page"
+                  style={{ width: 180, height: 24, padding: '0 8px', boxSizing: 'border-box' }}
+                />
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-dim)',
+                    minWidth: 42,
+                    textAlign: 'center'
+                  }}
+                >
+                  {findQuery ? `${findResult?.active ?? 0}/${findResult?.total ?? 0}` : ''}
+                </span>
+                <button
+                  className="toolbar-btn"
+                  type="button"
+                  title="Previous match (Shift+Enter)"
+                  onClick={() => doFind(findQuery, { findNext: true, forward: false })}
+                >
+                  ↑
+                </button>
+                <button
+                  className="toolbar-btn"
+                  type="button"
+                  title="Next match (Enter)"
+                  onClick={() => doFind(findQuery, { findNext: true, forward: true })}
+                >
+                  ↓
+                </button>
+                <button className="toolbar-btn" type="button" title="Close (Esc)" onClick={closeFind}>
+                  ✕
+                </button>
+              </div>
+            )}
 
         <div className="splitter" onMouseDown={chat.startDrag} />
 

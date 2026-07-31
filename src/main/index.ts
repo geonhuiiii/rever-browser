@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -149,17 +149,31 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  // Intercept reload shortcuts so Cmd/Ctrl+R reloads the embedded webview,
-  // not the app renderer (which would wipe chat / network state).
+  // Intercept browser shortcuts at the keyboard level. Menu accelerators cover
+  // the discoverable items; this covers Cmd/Ctrl+R (reload the webview, not the
+  // app renderer — that would wipe chat / network state), Cmd/Ctrl+L and
+  // Cmd/Ctrl+1..9. The same handler is attached to webview contents in
+  // whenReady so shortcuts work while the page has focus too.
   mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown') return
-    const isReload =
-      (input.meta || input.control) && input.key.toLowerCase() === 'r' && !input.alt
-    if (!isReload) return
+    if (handleBrowserShortcut(input)) event.preventDefault()
+  })
+
+  // Right-click in the app UI: text-editing menu only. No Back/Reload here —
+  // reloading the app renderer would wipe chat / network state.
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    if (!mainWindow) return
+    if (!params.isEditable && !params.selectionText.trim()) return
     event.preventDefault()
-    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-      mainWindow.webContents.send('reload-webview', { ignoreCache: input.shift })
-    }
+    const contents = mainWindow.webContents
+    const items: MenuItemConstructorOptions[] = params.isEditable
+      ? [
+          { label: 'Cut', enabled: params.editFlags.canCut, click: () => contents.cut() },
+          { label: 'Copy', enabled: params.editFlags.canCopy, click: () => contents.copy() },
+          { label: 'Paste', enabled: params.editFlags.canPaste, click: () => contents.paste() },
+          { label: 'Select All', click: () => contents.selectAll() }
+        ]
+      : [{ label: 'Copy', click: () => contents.copy() }]
+    Menu.buildFromTemplate(items).popup({ window: mainWindow })
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
@@ -173,6 +187,109 @@ function createWindow() {
   }
 }
 
+// Forward a browser-level command (new tab, close tab, tab switching, ...) to
+// the renderer, which owns the tab store.
+function sendBrowserCommand(cmd: string, extra?: { index?: number; url?: string }): void {
+  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('browser-command', { cmd, ...extra })
+  }
+}
+
+// Chromium-style right-click menu for the browsed page (webview contents).
+function buildPageContextMenu(
+  contents: Electron.WebContents,
+  params: Electron.ContextMenuParams
+): Menu {
+  const items: MenuItemConstructorOptions[] = []
+  if (params.linkURL) {
+    items.push(
+      {
+        label: 'Open Link in New Tab',
+        click: () => sendBrowserCommand('open-tab', { url: params.linkURL })
+      },
+      { label: 'Copy Link Address', click: () => clipboard.writeText(params.linkURL) },
+      { type: 'separator' }
+    )
+  }
+  if (params.mediaType === 'image' && params.srcURL) {
+    items.push(
+      {
+        label: 'Open Image in New Tab',
+        click: () => sendBrowserCommand('open-tab', { url: params.srcURL })
+      },
+      { label: 'Copy Image Address', click: () => clipboard.writeText(params.srcURL) },
+      { label: 'Save Image As…', click: () => contents.downloadURL(params.srcURL) },
+      { type: 'separator' }
+    )
+  }
+  if (params.isEditable) {
+    items.push(
+      { label: 'Cut', enabled: params.editFlags.canCut, click: () => contents.cut() },
+      { label: 'Copy', enabled: params.editFlags.canCopy, click: () => contents.copy() },
+      { label: 'Paste', enabled: params.editFlags.canPaste, click: () => contents.paste() },
+      { label: 'Select All', click: () => contents.selectAll() },
+      { type: 'separator' }
+    )
+  } else if (params.selectionText.trim()) {
+    items.push({ label: 'Copy', click: () => contents.copy() }, { type: 'separator' })
+  }
+  if (!params.linkURL && !params.isEditable && params.mediaType === 'none') {
+    items.push(
+      {
+        label: 'Back',
+        enabled: contents.navigationHistory.canGoBack(),
+        click: () => contents.navigationHistory.goBack()
+      },
+      {
+        label: 'Forward',
+        enabled: contents.navigationHistory.canGoForward(),
+        click: () => contents.navigationHistory.goForward()
+      },
+      { label: 'Reload', click: () => contents.reload() },
+      { type: 'separator' }
+    )
+  }
+  items.push({
+    label: 'Inspect Element',
+    click: () => contents.inspectElement(params.x, params.y)
+  })
+  return Menu.buildFromTemplate(items)
+}
+
+// Keyboard-level shortcuts shared by the app window and every webview (see the
+// before-input-event listeners). Returns true when the input was consumed —
+// callers then preventDefault, which also suppresses matching menu accelerators
+// so nothing fires twice.
+function handleBrowserShortcut(input: Electron.Input): boolean {
+  if (input.type !== 'keyDown') return false
+  if (!(input.meta || input.control) || input.alt) return false
+  const key = input.key.toLowerCase()
+  if (key === 'r') {
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('reload-webview', { ignoreCache: input.shift })
+    }
+    return true
+  }
+  if (input.shift) return false
+  if (key === 'l') {
+    // Pull focus out of the webview so the address bar can take it.
+    mainWindow?.webContents.focus()
+    sendBrowserCommand('focus-address')
+    return true
+  }
+  if (key === 'f') {
+    // Pull focus out of the webview so the find bar input can take it.
+    mainWindow?.webContents.focus()
+    sendBrowserCommand('find')
+    return true
+  }
+  if (/^[1-9]$/.test(key)) {
+    sendBrowserCommand('select-tab', { index: Number(key) })
+    return true
+  }
+  return false
+}
+
 function installMenu() {
   const isMac = process.platform === 'darwin'
   const sendReload = (ignoreCache: boolean) => {
@@ -182,7 +299,31 @@ function installMenu() {
   }
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? ([{ role: 'appMenu' }] as MenuItemConstructorOptions[]) : []),
-    { role: 'fileMenu' },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => sendBrowserCommand('new-tab')
+        },
+        {
+          label: 'Reopen Closed Tab',
+          accelerator: 'CmdOrCtrl+Shift+T',
+          click: () => sendBrowserCommand('reopen-tab')
+        },
+        { type: 'separator' },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => sendBrowserCommand('close-tab')
+        },
+        { label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W', role: 'close' },
+        ...(isMac
+          ? []
+          : ([{ type: 'separator' }, { role: 'quit' }] as MenuItemConstructorOptions[]))
+      ]
+    },
     { role: 'editMenu' },
     {
       label: 'View',
@@ -207,7 +348,42 @@ function installMenu() {
         { role: 'togglefullscreen' }
       ]
     },
-    { role: 'windowMenu' }
+    {
+      label: 'History',
+      submenu: [
+        {
+          label: 'Back',
+          accelerator: isMac ? 'Cmd+[' : 'Alt+Left',
+          click: () => sendBrowserCommand('back')
+        },
+        {
+          label: 'Forward',
+          accelerator: isMac ? 'Cmd+]' : 'Alt+Right',
+          click: () => sendBrowserCommand('forward')
+        }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        {
+          label: 'Select Next Tab',
+          accelerator: 'Control+Tab',
+          click: () => sendBrowserCommand('next-tab')
+        },
+        {
+          label: 'Select Previous Tab',
+          accelerator: 'Control+Shift+Tab',
+          click: () => sendBrowserCommand('prev-tab')
+        },
+        ...(isMac
+          ? ([{ type: 'separator' }, { role: 'front' }] as MenuItemConstructorOptions[])
+          : [])
+      ]
+    }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
@@ -234,6 +410,21 @@ app.whenReady().then(() => {
     if (createdSession === session.defaultSession) return
     createdSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
     createdSession.setPermissionCheckHandler(() => false)
+  })
+
+  // Webviews have their own webContents, so keys pressed while the page has
+  // focus never reach the main window's before-input-event. Attach the same
+  // shortcut interceptor to every webview.
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return
+    contents.on('before-input-event', (event, input) => {
+      if (handleBrowserShortcut(input)) event.preventDefault()
+    })
+    // Right-click menu inside the browsed page.
+    contents.on('context-menu', (_e, params) => {
+      if (!mainWindow) return
+      buildPageContextMenu(contents, params).popup({ window: mainWindow })
+    })
   })
 
   // Answer per-tab proxy 407 challenges. Site (non-proxy) auth is left to
@@ -264,6 +455,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('cdp:set-active', async (_event, webContentsId: number) => {
     return setActiveTarget(webContentsId)
+  })
+
+  // Cmd/Ctrl+W on the last remaining tab → close the window (Chromium parity).
+  ipcMain.on('window:close', () => {
+    mainWindow?.close()
   })
 
   // ── Per-tab proxy + active-partition tracking ─────────────────────────────

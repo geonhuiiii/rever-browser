@@ -30,6 +30,7 @@ interface TabsState {
 
   addTab: (url: string, opts?: { activate?: boolean }) => string
   closeTab: (id: string) => void
+  reopenTab: () => void
   selectTab: (id: string) => void
   updateTab: (id: string, patch: Partial<Omit<Tab, 'id' | 'initialUrl'>>) => void
   setTabProxy: (id: string, proxy: ProxyConfig | undefined) => void
@@ -39,6 +40,9 @@ const INITIAL_URL = 'https://github.com/greekr4/rever-browser'
 
 let nextId = 1
 const newId = (): string => `t${nextId++}`
+
+// URLs of recently closed tabs, newest last — backs Cmd/Ctrl+Shift+T.
+const closedUrls: string[] = []
 
 const firstId = newId()
 
@@ -75,6 +79,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     if (tabs.length === 1) return // never close the last tab
     const idx = tabs.findIndex((t) => t.id === id)
     if (idx < 0) return
+    closedUrls.push(tabs[idx].url)
     const next = tabs.filter((t) => t.id !== id)
     let nextActive = activeId
     if (activeId === id) {
@@ -82,6 +87,11 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       nextActive = neighbour.id
     }
     set({ tabs: next, activeId: nextActive })
+  },
+
+  reopenTab: () => {
+    const url = closedUrls.pop()
+    if (url) get().addTab(url)
   },
 
   selectTab: (id) => {
