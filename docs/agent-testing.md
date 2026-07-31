@@ -57,6 +57,23 @@ python3 -m http.server 8778 --bind 0.0.0.0 &
 |---|---|---|
 | `snapshot-fixture.html` | `http://127.0.0.1:8777/snapshot-fixture.html` | viewport filtering, hidden/occluded nodes, off-screen scroll hints, click-scan detection and over-detection guards |
 | `iframe-fixture.html` | `http://127.0.0.1:8777/iframe-fixture.html` | same-origin, cross-origin and cross-site (OOPIF) frames |
+| `shadow-fixture.html` | `http://127.0.0.1:8777/shadow-fixture.html` | open/closed/nested shadow roots, inner scroll containers, `*new` node marking |
+| `api-target/` (see below) | `http://127.0.0.1:8779/` | the API-analysis tools — traffic capture, scripts, sourcemaps, crypto, replay/repeater, fuzz probes, WebSocket, storage |
+
+The API target is a Bun server, not a static page, because it needs to sign
+requests, upgrade WebSockets, and register a service worker. Every secret it
+uses is printed in the file header, so a tool's answer is checkable:
+
+```bash
+bun test-fixtures/api-target/server.ts   # listens on 8779
+# rebuild the bundle + source map after editing src/:
+cd test-fixtures/api-target && bun build src/app.ts --outdir public --minify --sourcemap=linked --entry-naming app.js
+```
+
+Its service worker caches `app.js`, so a second load serves the bundle from
+cache — which is exactly the path that exercises the response-refetch fallback
+in `chrome-cdp.ts`. The `§` fuzz marker is captured percent-encoded (`%C2%A7`);
+the fuzz tools decode it, so a captured `?name=§` request is a valid base.
 
 Clicking a fixture target fires a distinctly-named `fetch`, so `list_requests`
 proves a trusted click actually reached the handler. That matters: a click with
