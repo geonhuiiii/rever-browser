@@ -343,8 +343,10 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
       // control or a click-scan hit is never swallowed.
       const insideControl = ancestorControl && !claimable && !ACTIONABLE_ROLES.has(role)
 
+      const isScroller = (lay?.scrollableBy ?? 0) > 0
       const skip =
-        insideControl || (!claimable && (!role || n.ignored || (SKIP_ROLES.has(role) && !name)))
+        !isScroller &&
+        (insideControl || (!claimable && (!role || n.ignored || (SKIP_ROLES.has(role) && !name))))
       let nextDepth = depth
 
       if (!skip) {
@@ -354,7 +356,7 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
         const label = claimable && (!role || SKIP_ROLES.has(role)) ? 'clickable' : role
         const shownName = name || (claimable ? firstText(n, scope) : '')
 
-        const parts: string[] = [`- ${label}`]
+        const parts: string[] = [`- ${label || (isScroller ? 'scroller' : 'generic')}`]
         if (shownName) parts.push(quote(shownName))
 
         if (n.value?.value !== undefined && n.value.value !== '') {
@@ -385,6 +387,11 @@ export async function takeSnapshot(opts: { full?: boolean } = {}): Promise<Snaps
           parts.push(`[ref=${r}]`)
           if (claimable) parts.push('(click-scan)')
         }
+
+        // A scrollable box is worth calling out even when it carries no ref:
+        // browser_scroll moves the window, so if the real scroller is this
+        // container the agent needs to know it exists to reach what is inside.
+        if (lay && lay.scrollableBy > 0) parts.push(`[scrollable +${lay.scrollableBy}px]`)
 
         lines.push(`${'  '.repeat(depth)}${parts.join(' ')}`)
         nextDepth = depth + 1

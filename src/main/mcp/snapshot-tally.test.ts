@@ -13,6 +13,7 @@ function lay(partial: Partial<NodeLayout> & Pick<NodeLayout, 'y'>): NodeLayout {
     paintOrder: 1,
     rendered: true,
     zeroSize: false,
+    scrollableBy: 0,
     inViewport: false,
     occluded: false,
     clickable: false,

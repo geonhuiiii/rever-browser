@@ -427,3 +427,43 @@ describe('조상 클립 박스', () => {
     expect(buildPageLayout(noClip, VIEWPORT)?.byBackendId.get(904)?.inViewport).toBe(true)
   })
 })
+
+describe('스크롤 가능 컨테이너', () => {
+  const S_AUTO = 4
+  const withRects = (overflowY: number, scrollH: number, clientH: number): CaptureResult => ({
+    strings: ['visible', 'hidden', '1', '0', 'auto'],
+    documents: [
+      {
+        nodes: { backendNodeId: [900, 901], parentIndex: [-1, 0], nodeType: [9, 1] },
+        layout: {
+          nodeIndex: [1],
+          bounds: [[0, 0, 400, 90]],
+          styles: [[0, 2, -1, overflowY]],
+          paintOrders: [1],
+          scrollRects: [[0, 0, 400, scrollH]],
+          clientRects: [[0, 0, 400, clientH]]
+        }
+      }
+    ]
+  })
+
+  it('넘치는 auto 박스는 남은 픽셀을 보고한다', () => {
+    const layout = buildPageLayout(withRects(S_AUTO, 270, 90), VIEWPORT)
+
+    expect(layout?.byBackendId.get(901)?.scrollableBy).toBe(180)
+  })
+
+  it('overflow:visible이면 내용이 넘쳐도 스크롤로 치지 않는다', () => {
+    // The distinction that removed 38 false positives from one page: content
+    // spilling out of a visible box is not something the agent can scroll.
+    const layout = buildPageLayout(withRects(-1, 270, 90), VIEWPORT)
+
+    expect(layout?.byBackendId.get(901)?.scrollableBy).toBe(0)
+  })
+
+  it('넘치지 않는 auto 박스는 표시하지 않는다', () => {
+    const layout = buildPageLayout(withRects(S_AUTO, 92, 90), VIEWPORT)
+
+    expect(layout?.byBackendId.get(901)?.scrollableBy).toBe(0)
+  })
+})

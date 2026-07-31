@@ -33,6 +33,15 @@ export interface NodeLayout {
    * misses — a `<div onClick>` with no ARIA role, for example.
    */
   clickable: boolean
+  /**
+   * Pixels of content past this box's own fold, 0 when it does not scroll.
+   *
+   * `overflow:auto` alone is not enough to report: most such boxes never
+   * overflow. What matters is that content exists beyond the visible band,
+   * because browser_scroll moves the window — if the real scroller is an inner
+   * container, scrolling does nothing and reports no error either.
+   */
+  scrollableBy: number
 }
 
 export interface Viewport {
@@ -73,6 +82,12 @@ const OCCLUDER_MIN_AREA_RATIO = 0.25
 /** Upper bound on the occluder scan so a huge page can't make it quadratic. */
 const MAX_OCCLUDERS = 40
 
+/** Below this, the overflow is rounding noise rather than hidden content. */
+const MIN_SCROLLABLE_PX = 16
+
+/** Only these actually scroll; `hidden` clips and `visible` spills. */
+const SCROLLING_OVERFLOW = new Set(['auto', 'scroll', 'overlay'])
+
 export interface DocumentSnapshot {
   nodes: {
     backendNodeId?: number[]
@@ -84,6 +99,8 @@ export interface DocumentSnapshot {
     styles: number[][]
     bounds: number[][]
     paintOrders?: number[]
+    scrollRects?: number[][]
+    clientRects?: number[][]
   }
 }
 
@@ -252,9 +269,23 @@ export function buildPageLayout(
       const visibility =
         styleIdx[STYLE_VISIBILITY] >= 0 ? snap.strings[styleIdx[STYLE_VISIBILITY]] : ''
       const opacity = styleIdx[STYLE_OPACITY] >= 0 ? snap.strings[styleIdx[STYLE_OPACITY]] : ''
+      const ox = styleIdx[STYLE_OVERFLOW_X] >= 0 ? snap.strings[styleIdx[STYLE_OVERFLOW_X]] : ''
+      const oy = styleIdx[STYLE_OVERFLOW_Y] >= 0 ? snap.strings[styleIdx[STYLE_OVERFLOW_Y]] : ''
 
       const rendered = visibility !== 'hidden' && visibility !== 'collapse' && opacity !== '0'
       const zeroSize = width <= 0 || height <= 0
+
+      // Overflowing content is not the same as a scrollable box: an
+      // `overflow: visible` element reports a taller scroll rect while simply
+      // spilling out, and marking those buried the real scrollers under 38
+      // false positives on one page. The style has to allow scrolling.
+      const scrolls = SCROLLING_OVERFLOW.has(ox) || SCROLLING_OVERFLOW.has(oy)
+      const scrollRect = layout.scrollRects?.[i]
+      const clientRect = layout.clientRects?.[i]
+      const scrollableBy =
+        scrolls && scrollRect && clientRect && scrollRect.length >= 4 && clientRect.length >= 4
+          ? Math.max(0, Math.round(scrollRect[3] - clientRect[3]))
+          : 0
 
       const entry: NodeLayout = {
         x,
@@ -266,7 +297,8 @@ export function buildPageLayout(
         zeroSize,
         inViewport: false,
         occluded: false,
-        clickable: clickableBackendIds.has(backendId)
+        clickable: clickableBackendIds.has(backendId),
+        scrollableBy: scrollableBy >= MIN_SCROLLABLE_PX ? scrollableBy : 0
       }
       if (entry.clickable) clickMatched++
       // Visible means inside the viewport AND inside every clipping ancestor.
@@ -509,7 +541,8 @@ export async function capturePageLayout(
     const snap = (await target.dbg.sendCommand('DOMSnapshot.captureSnapshot', {
       computedStyles: [...STYLE_PROPS],
       includePaintOrder: true,
-      includeDOMRects: false
+      // scrollRects/clientRects: the pair that says whether a box really scrolls
+      includeDOMRects: true
     })) as CaptureResult
     return buildPageLayout(snap, viewport, clickableRects)
   } catch {
