@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-import { buildRequestSpec, repeaterSendRaw } from '../../repeater'
+import { buildRequestSpec, repeaterSendRaw, restoreMarker } from '../../repeater'
 import { ok, err, errorMessage } from '../utils'
 
 const CRLF_PAYLOADS = [
@@ -27,7 +27,7 @@ export function registerCrlfTools(mcp: McpServer) {
     },
     async ({ requestId, payloads }) => {
       try {
-        const base = buildRequestSpec(requestId, undefined)
+        const base = restoreMarker(buildRequestSpec(requestId, undefined))
         const containsMarker =
           base.url.includes('§') ||
           (base.body ?? '').includes('§') ||

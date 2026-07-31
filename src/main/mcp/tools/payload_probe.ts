@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-import { buildRequestSpec, repeaterSendRaw } from '../../repeater'
+import { buildRequestSpec, repeaterSendRaw, restoreMarker } from '../../repeater'
 import { ok, err, errorMessage } from '../utils'
 
 const DEFAULT_XSS_PAYLOADS = [
@@ -51,7 +51,7 @@ export function registerPayloadProbeTools(mcp: McpServer) {
     },
     async ({ requestId, payloads }) => {
       try {
-        const base = buildRequestSpec(requestId, undefined)
+        const base = restoreMarker(buildRequestSpec(requestId, undefined))
         if (
           !base.url.includes('§') &&
           !(base.body ?? '').includes('§') &&

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { getActiveTarget } from '../../chrome-cdp'
-import { repeaterSendRaw, buildRequestSpec } from '../../repeater'
+import { repeaterSendRaw, buildRequestSpec, restoreMarker } from '../../repeater'
 import { ok, err, errorMessage } from '../utils'
 
 const DEFAULT_WORDLIST = [
@@ -177,7 +177,13 @@ export function registerPathProbeTools(mcp: McpServer) {
     },
     async ({ requestId, payloads }) => {
       try {
-        const spec = buildRequestSpec(requestId, undefined)
+        const spec = restoreMarker(buildRequestSpec(requestId, undefined))
+        if (
+          !spec.url.includes('§') &&
+          !(spec.body ?? '').includes('§')
+        ) {
+          return err('marker § not found in request URL or body')
+        }
         const list = payloads ?? LFI_TEMPLATES
         const results: Array<{ payload: string; status: number; length: number; preview: string }> = []
         for (const p of list) {

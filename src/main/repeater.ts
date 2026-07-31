@@ -43,6 +43,25 @@ function dropForbidden(headers: Record<string, string>): Record<string, string> 
   return out
 }
 
+// The fuzzing tools (crlf_test, lfi_probe, payload_probe) mark the injection
+// slot with a literal §. But a § typed into a page URL is captured percent-
+// encoded (%C2%A7 in UTF-8), so the marker never survives into stored traffic
+// and the tools reported "marker § not found" on every real request. Decode
+// the encoded form back to a literal § in the fields the marker can appear in,
+// so a captured request works as the base for a fuzz run.
+const ENCODED_MARKER_RE = /%c2%a7/gi
+
+export function restoreMarker(spec: RepeaterRequestSpec): RepeaterRequestSpec {
+  return {
+    ...spec,
+    url: spec.url.replace(ENCODED_MARKER_RE, '§'),
+    headers: Object.fromEntries(
+      Object.entries(spec.headers).map(([k, v]) => [k, v.replace(ENCODED_MARKER_RE, '§')])
+    ),
+    body: spec.body?.replace(ENCODED_MARKER_RE, '§')
+  }
+}
+
 export function buildRequestSpec(
   requestId: string,
   mods: RepeaterModifications | undefined
