@@ -623,7 +623,13 @@ async function clickObjectId(
     objectId,
     functionDeclaration: `async function() {
       this.scrollIntoView({block:"center"})
-      await new Promise(r => requestAnimationFrame(() => r()))
+      // Race rAF against a timer: a backgrounded or occluded window never fires
+      // an animation frame, and waiting on one hangs the whole call. That is
+      // the normal state when an agent drives the app without watching it.
+      await Promise.race([
+        new Promise(r => requestAnimationFrame(() => r())),
+        new Promise(r => setTimeout(r, 120))
+      ])
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,
@@ -667,7 +673,13 @@ async function hoverObjectId(
     objectId,
     functionDeclaration: `async function() {
       this.scrollIntoView({block:"center"})
-      await new Promise(r => requestAnimationFrame(() => r()))
+      // Race rAF against a timer: a backgrounded or occluded window never fires
+      // an animation frame, and waiting on one hangs the whole call. That is
+      // the normal state when an agent drives the app without watching it.
+      await Promise.race([
+        new Promise(r => requestAnimationFrame(() => r())),
+        new Promise(r => setTimeout(r, 120))
+      ])
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,
@@ -708,7 +720,13 @@ async function typeObjectId(
     objectId,
     functionDeclaration: `async function() {
       this.scrollIntoView({block:"center"})
-      await new Promise(r => requestAnimationFrame(() => r()))
+      // Race rAF against a timer: a backgrounded or occluded window never fires
+      // an animation frame, and waiting on one hangs the whole call. That is
+      // the normal state when an agent drives the app without watching it.
+      await Promise.race([
+        new Promise(r => requestAnimationFrame(() => r())),
+        new Promise(r => setTimeout(r, 120))
+      ])
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,
