@@ -25,3 +25,19 @@ export async function evalInPage<T>(expression: string): Promise<T> {
 export function jsLiteral(s: string): string {
   return JSON.stringify(s)
 }
+
+/**
+ * Fire a `window.__reverAi.<fn>(...)` overlay call into the active page without
+ * waiting for it or letting it fail a tool. Purely cosmetic, so a missing
+ * target / not-yet-injected visualizer is silently ignored.
+ */
+export function visualize(fn: string, ...args: unknown[]): void {
+  const target = getActiveTarget()
+  if (!target) return
+  const argList = args.map((a) => JSON.stringify(a ?? null)).join(',')
+  void target.dbg
+    .sendCommand('Runtime.evaluate', {
+      expression: `window.__reverAi && window.__reverAi.${fn}(${argList})`
+    })
+    .catch(() => null)
+}

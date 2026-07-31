@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { emitAiAction } from '../../ai-events'
 import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
-import { evalInPage } from '../cdp-eval'
+import { evalInPage, visualize } from '../cdp-eval'
 import { humanScroll } from '../human-input'
 import {
   clickRef,
@@ -17,6 +17,12 @@ import {
   typeSelector
 } from '../snapshot'
 import { ok, err, errorMessage } from '../utils'
+
+// One-line preview of an eval result / error for the in-page code HUD.
+function preview(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > 120 ? flat.slice(0, 120) + '…' : flat
+}
 
 /**
  * Wait for the page to settle, then take a fresh snapshot. Used by
@@ -84,6 +90,12 @@ export function registerBrowserTools(mcp: McpServer) {
       description:
         'Click the element identified by ref (from the latest browser_snapshot). Scrolls into view, performs a human-like mouse move, then clicks. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards. Refs from the previous snapshot are now stale.',
       inputSchema: {
+        // Sweep as soon as the new document is parsed, not after loadURL
+        // resolves — loadURL waits for the full load (images, subframes), so
+        // sweeping then reads as a beat too late. The overlay script is
+        // injected at document-start, so __reverAi already exists here. It has
+        // to be the NEW document: the old one's overlay dies on navigation.
+        target.wc.once('dom-ready', () => visualize('navSweep'))
         ref: z.string().describe('Element ref from browser_snapshot, e.g. "r12"')
       }
     },
@@ -269,7 +281,9 @@ export function registerBrowserTools(mcp: McpServer) {
           detail: expression.slice(0, 80)
         })
         const result = await evalInPage<unknown>(expression)
-        return ok(typeof result === 'string' ? result : JSON.stringify(result, null, 2))
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+        visualize('evalHudDone', preview(text), false)
+        return ok(text)
       } catch (e) {
         return err(errorMessage(e))
       }
@@ -308,9 +322,11 @@ export function registerBrowserTools(mcp: McpServer) {
       const cap = limit ?? 50
       const PER_NODE_CHARS = 500
       emitAiAction({ kind: 'extract', label: 'AI dom_extract', detail: selector.slice(0, 80) })
+        visualize('evalHudStart', expression.slice(0, 160))
       // Build an in-page expression with all params embedded as JSON literals so
       // the selector/attribute names can't break out of the string. evalInPage
       // runs with returnByValue, so we return plain serialisable objects.
+        visualize('evalHudDone', preview(errorMessage(e)), true)
       const expr = `(() => {
   const selector = ${JSON.stringify(selector)};
   const fields = ${JSON.stringify(fieldList)};
@@ -378,3 +394,6 @@ export function registerBrowserTools(mcp: McpServer) {
     }
   )
 }
+        visualize('extractHighlight', selector, result.matched)
+        // Shutter AFTER the capture so the flash never lands in the PNG.
+        visualize('shutter')
