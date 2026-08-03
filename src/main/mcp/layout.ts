@@ -509,7 +509,10 @@ const CLICK_SCAN_EXPRESSION = `(() => {
 
   // Natively interactive tags already surface through the accessibility tree.
   const NATIVE = new Set(['A','BUTTON','INPUT','SELECT','TEXTAREA','SUMMARY','OPTION','LABEL'])
-  const EVENTS = ['click','mousedown','pointerdown','keydown']
+  // contextmenu / dblclick / dragstart carry no click listener and no pointer
+  // cursor, so a target that only answers a right-click, a double-click or a
+  // drag got no ref at all — it was not merely unclickable, it was invisible.
+  const EVENTS = ['click','mousedown','pointerdown','keydown','contextmenu','dblclick','dragstart','dragover','drop']
   const paths = []
   const hits = []
 

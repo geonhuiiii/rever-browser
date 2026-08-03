@@ -218,9 +218,8 @@ function createWindow() {
     void mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
 
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' })
-  }
+  // DevTools no longer opens by itself in dev — it stole focus and covered the
+  // window on every restart. View › Toggle Developer Tools still opens it.
 }
 
 // Forward a browser-level command (new tab, close tab, tab switching, ...) to

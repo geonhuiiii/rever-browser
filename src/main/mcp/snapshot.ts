@@ -1,7 +1,13 @@
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget, waitForSettle } from '../chrome-cdp'
 import { visualize } from './cdp-eval'
-import { humanMouseMove, humanPressRelease, humanType, thinkingPause } from './human-input'
+import {
+  humanDrag,
+  humanMouseMove,
+  humanPressRelease,
+  humanType,
+  thinkingPause
+} from './human-input'
 import { collectFrames } from './frames'
 import { capturePageLayout, scanClickable, type PageLayout } from './layout'
 
@@ -111,8 +117,49 @@ const ACTIONABLE_ROLES = new Set([
   'tab',
   'switch',
   'slider',
-  'option'
+  'option',
+  // A `<select multiple>` renders as a listbox whose options carry refs while
+  // the element itself carried none — leaving browser_select_option with
+  // nothing to address, so a multi-select could not be answered at all.
+  'listbox'
 ])
+
+/**
+ * Bring `this` into view before measuring it. Interpolated into the
+ * callFunctionOn bodies of the click / hover / type / drag paths.
+ *
+ * Two things it is careful about. It only scrolls when the element is actually
+ * outside the viewport — centring on every click made the page jump on targets
+ * that were already visible. And when it does scroll it animates, then waits
+ * for the position to stop moving, because the caller measures coordinates
+ * straight afterwards and a still-animating page yields a stale point.
+ *
+ * The rAF wait is raced against a timer: a backgrounded or occluded window
+ * never produces an animation frame, and that is the normal state when an
+ * agent drives the app without watching it.
+ */
+const SCROLL_INTO_VIEW = `
+      const r0 = this.getBoundingClientRect()
+      const margin = 8
+      const offscreen =
+        r0.top < margin || r0.left < margin ||
+        r0.bottom > innerHeight - margin || r0.right > innerWidth - margin
+      if (offscreen) {
+        this.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+        let last = NaN
+        let settled = 0
+        for (let i = 0; i < 40 && settled < 3; i++) {
+          await new Promise(r => setTimeout(r, 25))
+          const top = this.getBoundingClientRect().top
+          settled = Math.abs(top - last) < 0.5 ? settled + 1 : 0
+          last = top
+        }
+      } else {
+        await Promise.race([
+          new Promise(r => requestAnimationFrame(() => r())),
+          new Promise(r => setTimeout(r, 120))
+        ])
+      }`
 
 /** Depth-limited: labels come from a node's own text, not a whole subtree dump. */
 const TEXT_LABEL_DEPTH = 3
@@ -755,7 +802,8 @@ async function clickObjectId(
   label: string,
   role?: string,
   frameOwners?: FrameOwner[],
-  sessionId?: string
+  sessionId?: string,
+  mouse: { button?: 'left' | 'right' | 'middle'; clickCount?: number } = {}
 ): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'click', label, detail: role })
@@ -763,14 +811,7 @@ async function clickObjectId(
   const result = (await target.dbg.sendCommand('Runtime.callFunctionOn', {
     objectId,
     functionDeclaration: `async function() {
-      this.scrollIntoView({block:"center"})
-      // Race rAF against a timer: a backgrounded or occluded window never fires
-      // an animation frame, and waiting on one hangs the whole call. That is
-      // the normal state when an agent drives the app without watching it.
-      await Promise.race([
-        new Promise(r => requestAnimationFrame(() => r())),
-        new Promise(r => setTimeout(r, 120))
-      ])
+      ${SCROLL_INTO_VIEW}
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,
@@ -794,7 +835,55 @@ async function clickObjectId(
     }`,
     arguments: [{ value: label }]
   }, sessionId)
-  await humanPressRelease(x, y)
+  await humanPressRelease(x, y, mouse)
+}
+
+/**
+ * Page-space centre of a ref, after scrolling it into view. Shared by the
+ * gesture entry points so they inherit the frame-offset handling rather than
+ * re-deriving coordinates that would be wrong inside an iframe.
+ */
+async function pointForRef(ref: string): Promise<{ x: number; y: number }> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  const res = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `async function() {
+        ${SCROLL_INTO_VIEW}
+        const r = this.getBoundingClientRect()
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+      }`,
+      returnByValue: true,
+      awaitPromise: true
+    },
+    entry?.sessionId
+  )) as { result: { value: { x: number; y: number } } }
+  const off = await measureFrameOffset(entry?.frameOwners)
+  return { x: res.result.value.x + off.x, y: res.result.value.y + off.y }
+}
+
+/** Right-click, middle-click or double-click a ref. */
+export async function clickRefWith(
+  ref: string,
+  mouse: { button?: 'left' | 'right' | 'middle'; clickCount?: number }
+): Promise<void> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const kind = mouse.clickCount === 2 ? 'double-click' : `${mouse.button ?? 'left'}-click`
+  const label = `AI ${kind}${entry?.name ? ` "${entry.name.slice(0, 28)}"` : ''}`
+  await clickObjectId(objectId, label, entry?.role, entry?.frameOwners, entry?.sessionId, mouse)
+}
+
+/** Drag one ref onto another as a single held gesture. */
+export async function dragRef(fromRef: string, toRef: string): Promise<void> {
+  const from = await pointForRef(fromRef)
+  const to = await pointForRef(toRef)
+  emitAiAction({ kind: 'click', label: `AI drag ${fromRef} → ${toRef}` })
+  await thinkingPause()
+  await humanDrag(from, to)
 }
 
 /**
@@ -816,14 +905,7 @@ async function hoverObjectId(
   const result = (await target.dbg.sendCommand('Runtime.callFunctionOn', {
     objectId,
     functionDeclaration: `async function() {
-      this.scrollIntoView({block:"center"})
-      // Race rAF against a timer: a backgrounded or occluded window never fires
-      // an animation frame, and waiting on one hangs the whole call. That is
-      // the normal state when an agent drives the app without watching it.
-      await Promise.race([
-        new Promise(r => requestAnimationFrame(() => r())),
-        new Promise(r => setTimeout(r, 120))
-      ])
+      ${SCROLL_INTO_VIEW}
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,
@@ -866,14 +948,7 @@ async function typeObjectId(
   const result = (await target.dbg.sendCommand('Runtime.callFunctionOn', {
     objectId,
     functionDeclaration: `async function() {
-      this.scrollIntoView({block:"center"})
-      // Race rAF against a timer: a backgrounded or occluded window never fires
-      // an animation frame, and waiting on one hangs the whole call. That is
-      // the normal state when an agent drives the app without watching it.
-      await Promise.race([
-        new Promise(r => requestAnimationFrame(() => r())),
-        new Promise(r => setTimeout(r, 120))
-      ])
+      ${SCROLL_INTO_VIEW}
       const r = this.getBoundingClientRect()
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
     }`,

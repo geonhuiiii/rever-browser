@@ -13,6 +13,8 @@ import {
   clickSelector,
   hoverRef,
   hoverSelector,
+  clickRefWith,
+  dragRef,
   focusRef,
   selectRef,
   takeSnapshot,
@@ -213,6 +215,54 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await typeRef(ref, text, submit ?? false)
         return await snapshotAfter(`typed into ${ref}${submit ? ' + submit' : ''}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_click_modified',
+    {
+      description:
+        'Click a ref with a non-default button or click count: right-click to open a context menu, or double-click. browser_click always sends a single left click, and two browser_click calls are seconds apart so the page never pairs them into a double-click. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Element ref from browser_snapshot, e.g. "r12"'),
+        button: z
+          .enum(['left', 'right', 'middle'])
+          .optional()
+          .describe('Mouse button (default left)'),
+        clickCount: z
+          .number()
+          .optional()
+          .describe('2 for a double-click (default 1)')
+      }
+    },
+    async ({ ref, button, clickCount }) => {
+      try {
+        await clickRefWith(ref, { button, clickCount })
+        const what = clickCount === 2 ? 'double-clicked' : `${button ?? 'left'}-clicked`
+        return await snapshotAfter(`${what} ${ref}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_drag',
+    {
+      description:
+        'Drag one ref onto another as a single held gesture: press at the source, move while the button is down, release at the target. Needed for HTML5 drag-and-drop and for pointer-based sortables — a click on the source followed by a click on the target is two unrelated clicks and neither sees a drag. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        from: z.string().describe('Ref of the element to drag, e.g. "r6"'),
+        to: z.string().describe('Ref of the drop target, e.g. "r9"')
+      }
+    },
+    async ({ from, to }) => {
+      try {
+        await dragRef(from, to)
+        return await snapshotAfter(`dragged ${from} onto ${to}`)
       } catch (e) {
         return err(errorMessage(e))
       }

@@ -62,9 +62,39 @@ export async function humanMouseMove(toX: number, toY: number): Promise<void> {
 /** Press + release at the current cursor position (no movement). Caller
  * should `humanMouseMove` first. Includes a settle delay and realistic
  * press hold so the highlight has a moment to render before the click. */
-export async function humanPressRelease(x: number, y: number): Promise<void> {
+export async function humanPressRelease(
+  x: number,
+  y: number,
+  opts: { button?: 'left' | 'right' | 'middle'; clickCount?: number } = {}
+): Promise<void> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target')
+  const button = opts.button ?? 'left'
+  // A double click is one press/release pair with clickCount 2, not two
+  // separate clicks — two browser_click calls are seconds apart and the page
+  // pairs nothing. Chromium wants the run of counts, so 1 then 2.
+  const counts = opts.clickCount && opts.clickCount > 1 ? [1, opts.clickCount] : [1]
+  if (button !== 'left' || counts.length > 1) {
+    for (const clickCount of counts) {
+      await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x,
+        y,
+        button,
+        clickCount
+      })
+      await sleep(rand(30, 70))
+      await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x,
+        y,
+        button,
+        clickCount
+      })
+      await sleep(rand(30, 60))
+    }
+    return
+  }
   // Same reason as the cursor move: the press/release sprite is cosmetic, and
   // awaiting it queues behind the page's main thread.
 
@@ -94,6 +124,59 @@ export async function humanPressRelease(x: number, y: number): Promise<void> {
     button: 'left',
     clickCount: 1
   })
+}
+
+/**
+ * Press at one point, move while held, release at another — one gesture.
+ *
+ * HTML5 drag-and-drop and pointer-based sortables both need the button to stay
+ * down across the move; a click at the source followed by a click at the target
+ * is two unrelated clicks and neither library sees a drag.
+ */
+export async function humanDrag(
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): Promise<void> {
+  const target = getActiveTarget()
+  if (!target) throw new Error('no active browser target')
+
+  await humanMouseMove(from.x, from.y)
+  await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+    type: 'mousePressed',
+    x: from.x,
+    y: from.y,
+    button: 'left',
+    clickCount: 1
+  })
+  await sleep(rand(80, 160))
+
+  // Intermediate moves with the button held. A single jump to the target is
+  // ignored by libraries that require a drag threshold to be crossed.
+  const steps = 14
+  for (let i = 1; i <= steps; i++) {
+    const t = easeInOutCubic(i / steps)
+    const x = from.x + (to.x - from.x) * t
+    const y = from.y + (to.y - from.y) * t
+    await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+      type: 'mouseMoved',
+      x,
+      y,
+      button: 'left',
+      buttons: 1
+    })
+    await sleep(rand(10, 22))
+  }
+
+  await sleep(rand(60, 140))
+  await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+    type: 'mouseReleased',
+    x: to.x,
+    y: to.y,
+    button: 'left',
+    clickCount: 1
+  })
+  cursorX = to.x
+  cursorY = to.y
 }
 
 /** Pre-action "thinking" pause — looking at the page before acting. */
@@ -348,15 +431,21 @@ export async function humanScroll(
     delta = absoluteY - cur.result.value
   }
 
+  // Smaller steps, more of them. The previous 80–160px jumps read as the page
+  // dropping in one go rather than scrolling, and a long scroll was a handful
+  // of lurches. A long distance would otherwise cost a lot of round trips, so
+  // the step grows with what is left while staying small near the ends.
   const sign = delta >= 0 ? 1 : -1
-  let remaining = Math.abs(delta)
+  const total = Math.abs(delta)
+  let remaining = total
   while (remaining > 0) {
-    const chunk = Math.min(remaining, rand(80, 160))
+    const eased = Math.max(24, Math.min(remaining, total * 0.08))
+    const chunk = Math.min(remaining, eased + rand(-6, 6))
     await target.dbg.sendCommand('Runtime.evaluate', {
       expression: `window.scrollBy(0, ${sign * chunk})`
     })
     remaining -= chunk
-    await sleep(rand(28, 70))
+    await sleep(rand(12, 24))
   }
 
   const final = (await target.dbg.sendCommand('Runtime.evaluate', {
