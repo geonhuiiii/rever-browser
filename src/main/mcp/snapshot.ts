@@ -1017,33 +1017,47 @@ export async function scrollRefBy(ref: string, deltaY: number): Promise<number> 
   const target = getActiveTarget()!
   emitAiAction({ kind: 'scroll', label: `AI scroll ${ref}`, detail: `${deltaY}px` })
 
-  const res = (await target.dbg.sendCommand(
+  const can = (await target.dbg.sendCommand(
     'Runtime.callFunctionOn',
     {
       objectId,
-      functionDeclaration: `async function(total) {
-        if (this.scrollHeight <= this.clientHeight) {
-          return { error: 'element does not scroll vertically' }
-        }
-        const sign = total >= 0 ? 1 : -1
-        let left = Math.abs(total)
-        while (left > 0) {
-          const step = Math.min(left, Math.max(24, Math.abs(total) * 0.1))
-          this.scrollTop += sign * step
-          left -= step
-          await new Promise(r => setTimeout(r, 30))
-        }
-        return { scrollTop: this.scrollTop }
-      }`,
-      arguments: [{ value: deltaY }],
-      returnByValue: true,
-      awaitPromise: true
+      functionDeclaration:
+        'function() { return this.scrollHeight > this.clientHeight }',
+      returnByValue: true
     },
     entry?.sessionId
-  )) as { result: { value: { scrollTop?: number; error?: string } } }
+  )) as { result: { value: boolean } }
+  if (!can.result.value) throw new Error('element does not scroll vertically')
 
-  if (res.result.value.error) throw new Error(res.result.value.error)
-  return res.result.value.scrollTop ?? 0
+  // Real wheel input over the element, not `scrollTop = n`.
+  //
+  // Assigning scrollTop moves the box but fires NO scroll event here: the
+  // event is dispatched on a frame boundary, and an agent-driven window
+  // produces none. Infinite scroll and lazy loading hang off that event, so
+  // the container moved to its end and nothing ever appended — the position
+  // was right and the page had not reacted at all.
+  const point = await pointForRef(ref)
+  const sign = deltaY >= 0 ? 1 : -1
+  let left = Math.abs(deltaY)
+  while (left > 0) {
+    const step = Math.min(left, 120)
+    await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: point.x,
+      y: point.y,
+      deltaX: 0,
+      deltaY: sign * step
+    })
+    left -= step
+    await new Promise((r) => setTimeout(r, 40))
+  }
+
+  const after = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    { objectId, functionDeclaration: 'function() { return this.scrollTop }', returnByValue: true },
+    entry?.sessionId
+  )) as { result: { value: number } }
+  return after.result.value
 }
 
 /**

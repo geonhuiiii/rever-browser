@@ -546,21 +546,28 @@ export async function humanScroll(
     delta = absoluteY - cur.result.value
   }
 
-  // Smaller steps, more of them. The previous 80–160px jumps read as the page
-  // dropping in one go rather than scrolling, and a long scroll was a handful
-  // of lurches. A long distance would otherwise cost a lot of round trips, so
-  // the step grows with what is left while staying small near the ends.
+  // Real wheel input rather than window.scrollBy.
+  //
+  // scrollBy moves the page but fires no scroll event here — the event is
+  // dispatched on a frame boundary and an agent-driven window produces none.
+  // Infinite scroll, sticky headers and lazy images all hang off that event,
+  // so the page moved and never reacted. A wheel goes through the browser's
+  // input path and behaves the way a person's does, including handing the
+  // scroll to whatever container is under the cursor.
+  const { x, y } = getCursor()
   const sign = delta >= 0 ? 1 : -1
-  const total = Math.abs(delta)
-  let remaining = total
+  let remaining = Math.abs(delta)
   while (remaining > 0) {
-    const eased = Math.max(24, Math.min(remaining, total * 0.08))
-    const chunk = Math.min(remaining, eased + rand(-6, 6))
-    await target.dbg.sendCommand('Runtime.evaluate', {
-      expression: `window.scrollBy(0, ${sign * chunk})`
+    const chunk = Math.min(remaining, 100 + rand(-15, 15))
+    await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x,
+      y,
+      deltaX: 0,
+      deltaY: sign * chunk
     })
     remaining -= chunk
-    await sleep(rand(12, 24))
+    await sleep(rand(14, 26))
   }
 
   const final = (await target.dbg.sendCommand('Runtime.evaluate', {
