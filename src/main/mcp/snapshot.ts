@@ -196,6 +196,13 @@ export interface SnapshotStats {
   clickOnlyRefs: number
   /** Elements the in-page click scan reported, before geometry correlation. */
   clickScanned: number
+  /**
+   * True when the page was too large and the scan never ran. Every click-only
+   * ref disappears with it, so the outline silently loses `<div onClick>`
+   * targets — an infinite-scroll list growing past the cap did exactly that
+   * mid-session, and nothing said so.
+   */
+  clickScanSkipped: boolean
   /** How many of those correlated to a snapshot node. */
   clickMatched: number
   /** True when the filter was discarded because it suppressed everything. */
@@ -382,11 +389,15 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
   // agent reaches for full=true when it cannot find something, so having that
   // switch also drop the click-scan refs would remove exactly the elements it
   // is looking for.
+  let clickScanSkipped = false
   const [axRes, layout, frameRes] = await Promise.all([
     target.dbg.sendCommand('Accessibility.getFullAXTree') as Promise<{ nodes: AXNode[] }>,
     scanClickable()
       .catch(() => null)
-      .then((click) => capturePageLayout(viewport, click?.paths).catch(() => null)),
+      .then((click) => {
+        clickScanSkipped = click?.skipped === true
+        return capturePageLayout(viewport, click?.paths).catch(() => null)
+      }),
     collectFrames().catch(() => ({ frames: [], unreachable: 0, empty: 0 }))
   ])
   const { nodes } = axRes
@@ -536,7 +547,12 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
           }
         }
 
-        if (n.backendDOMNodeId != null && (ACTIONABLE_ROLES.has(role) || claimable)) {
+        // A scroll container gets a ref too. browser_scroll moves the window,
+        // so a list that appends as its OWN box scrolls could be seen but never
+        // advanced — the outline said `[scrollable +132px]` with nothing to
+        // address. Same for a canvas: the click scan finds it, but a stroke
+        // needs the element itself as the drag surface.
+        if (n.backendDOMNodeId != null && (ACTIONABLE_ROLES.has(role) || claimable || isScroller)) {
           counter++
           if (claimable) clickOnlyRefs++
           const refKey = `${frameSessionId ?? ''}:${n.backendDOMNodeId}`
@@ -613,6 +629,26 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
 
     if (nodes[0]) walk(nodes[0].nodeId, 0, '', false, byId)
 
+    // Elements the click scan found that the accessibility tree has no node
+    // for at all. A `<canvas>` with no accessible content is the common case —
+    // charts, signature pads, maps and games are all reachable by mouse and
+    // completely absent from the outline, so there was nothing to address.
+    // Emitted after the walk with their own refs.
+    if (filter) {
+      for (const [backendId, lay] of filter.byBackendId) {
+        if (!lay.clickable) continue
+        if (seenRefTargets.has(`:${backendId}`)) continue
+        if (prune && (!lay.rendered || lay.occluded || !lay.inViewport)) continue
+        if (lay.width < 8 || lay.height < 8) continue
+        counter++
+        clickOnlyRefs++
+        const r = `r${counter}`
+        seenRefTargets.add(`:${backendId}`)
+        refMap.set(r, { backendNodeId: backendId, role: 'clickable', name: '' })
+        lines.push(`- clickable [ref=${r}] (click-scan, not in the a11y tree)`)
+      }
+    }
+
     // A frame whose `<iframe>` carries aria-hidden has NO node in the parent
     // accessibility tree — Chrome drops the element outright rather than
     // marking it ignored — so the walk never reaches an anchor to nest it
@@ -647,6 +683,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
           offscreen: 0,
           clickOnlyRefs,
           clickScanned: filter?.clickScanned ?? 0,
+          clickScanSkipped,
           clickMatched: filter?.clickMatched ?? 0,
           fellBackToFull: false,
           frames: framesEntered,
@@ -667,6 +704,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
         offscreen: tally.below + tally.above + tally.side,
         clickOnlyRefs,
         clickScanned: filter.clickScanned,
+        clickScanSkipped,
         clickMatched: filter.clickMatched,
         fellBackToFull: false,
         frames: framesEntered,
@@ -963,6 +1001,91 @@ async function synthesiseDrag(fromRef: string, toRef: string): Promise<void> {
     },
     fromEntry?.sessionId
   )
+}
+
+/**
+ * Scroll a specific container rather than the window.
+ *
+ * `browser_scroll` moves the page, which does nothing for a list that scrolls
+ * inside its own box — the outline could show one and the agent had no way to
+ * advance it. Stepped rather than jumped, so lazy-loading handlers fire the way
+ * they would for a person.
+ */
+export async function scrollRefBy(ref: string, deltaY: number): Promise<number> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  emitAiAction({ kind: 'scroll', label: `AI scroll ${ref}`, detail: `${deltaY}px` })
+
+  const res = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `async function(total) {
+        if (this.scrollHeight <= this.clientHeight) {
+          return { error: 'element does not scroll vertically' }
+        }
+        const sign = total >= 0 ? 1 : -1
+        let left = Math.abs(total)
+        while (left > 0) {
+          const step = Math.min(left, Math.max(24, Math.abs(total) * 0.1))
+          this.scrollTop += sign * step
+          left -= step
+          await new Promise(r => setTimeout(r, 30))
+        }
+        return { scrollTop: this.scrollTop }
+      }`,
+      arguments: [{ value: deltaY }],
+      returnByValue: true,
+      awaitPromise: true
+    },
+    entry?.sessionId
+  )) as { result: { value: { scrollTop?: number; error?: string } } }
+
+  if (res.result.value.error) throw new Error(res.result.value.error)
+  return res.result.value.scrollTop ?? 0
+}
+
+/**
+ * Press, move and release inside one element — a canvas stroke, a signature
+ * pad, a colour picker. `dragRef` goes between two elements and cannot express
+ * a gesture that starts and ends on the same surface.
+ *
+ * Offsets are fractions of the element's box, so they survive a resize.
+ */
+export async function drawOnRef(
+  ref: string,
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): Promise<void> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  const res = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `async function() {
+        ${SCROLL_INTO_VIEW}
+        const r = this.getBoundingClientRect()
+        return { left: r.left, top: r.top, w: r.width, h: r.height }
+      }`,
+      returnByValue: true,
+      awaitPromise: true
+    },
+    entry?.sessionId
+  )) as { result: { value: { left: number; top: number; w: number; h: number } } }
+
+  const box = res.result.value
+  const off = await measureFrameOffset(entry?.frameOwners)
+  const pt = (f: { x: number; y: number }) => ({
+    x: box.left + box.w * Math.min(1, Math.max(0, f.x)) + off.x,
+    y: box.top + box.h * Math.min(1, Math.max(0, f.y)) + off.y
+  })
+
+  emitAiAction({ kind: 'click', label: `AI draw on ${ref}` })
+  await thinkingPause()
+  await humanDrag(pt(from), pt(to))
 }
 
 /**
