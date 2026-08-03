@@ -41,6 +41,7 @@ import { registerDialogTools } from './tools/dialog'
 import { registerVisionTools } from './tools/vision'
 import { registerMacroTools } from './tools/macros'
 import { registerSecretTools } from './tools/secrets'
+import { registerWaitTools } from './tools/wait'
 
 function buildMcpServer(): McpServer {
   const mcp = new McpServer({ name: 'rever-traffic', version: '0.1.0' })
@@ -77,6 +78,7 @@ function buildMcpServer(): McpServer {
   registerVisionTools(mcp)
   registerMacroTools(mcp)
   registerSecretTools(mcp)
+  registerWaitTools(mcp)
   return mcp
 }
 
