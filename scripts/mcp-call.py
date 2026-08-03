@@ -15,11 +15,14 @@ Examples:
     python3 scripts/mcp-call.py browser_click '{"ref":"r4"}'
     python3 scripts/mcp-call.py list_requests
 """
+import base64
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import time
 import urllib.request
 
 ENDPOINT = os.path.expanduser(
@@ -93,7 +96,26 @@ class Client:
         if "error" in res:
             return f"ERROR: {res['error']}"
         content = res.get("result", {}).get("content", [])
-        return "\n".join(c.get("text", "") for c in content if c.get("type") == "text")
+        out = []
+        for c in content:
+            if c.get("type") == "text":
+                out.append(c.get("text", ""))
+            elif c.get("type") == "image":
+                # Images were dropped entirely, so browser_screenshot printed
+                # nothing and there was no way to look at the page from here.
+                path = self._save_image(c)
+                out.append(f"[image saved: {path}]")
+        return "\n".join(out)
+
+    @staticmethod
+    def _save_image(part: dict) -> str:
+        ext = {"image/png": "png", "image/jpeg": "jpg"}.get(part.get("mimeType", ""), "bin")
+        out_dir = os.environ.get("REVER_SHOT_DIR", tempfile.gettempdir())
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"rever-shot-{int(time.time() * 1000)}.{ext}")
+        with open(path, "wb") as f:
+            f.write(base64.b64decode(part.get("data", "")))
+        return path
 
 
 def main() -> None:
