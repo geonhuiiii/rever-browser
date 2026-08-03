@@ -1,5 +1,6 @@
 import { getActiveTarget } from '../chrome-cdp'
 
+import { listOopifSessions } from './oopif'
 import type { AXNode } from './snapshot'
 
 /**
@@ -12,6 +13,13 @@ export interface FrameTree {
   ownerBackendNodeId: number
   byId: Map<string, AXNode>
   rootNodeId: string
+  /**
+   * CDP session the frame's nodes belong to. Absent means the page session.
+   * Present for an out-of-process frame, and every later command about one of
+   * its nodes must carry it — backend ids are per-process, so the page session
+   * answers with a different node instead of an error.
+   */
+  sessionId?: string
 }
 
 /** Frames deeper than this are ignored; matches the iframe nesting seen in practice. */
@@ -54,6 +62,84 @@ const RETRY_DELAY_MS = 150
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * Pick the frame's document root by ROLE, not by position or by reachability.
+ * nodes[0] is not reliably the root, and "the node nothing claims as a child"
+ * is not either: a per-frame response carries some of the parent document's
+ * nodes too, so several are unclaimed and the walk can start on one that
+ * renders nothing. RootWebArea is the document itself and is unambiguous.
+ */
+function pickRoot(nodes: AXNode[]): AXNode {
+  const claimed = new Set<string>()
+  for (const n of nodes) for (const c of n.childIds ?? []) claimed.add(c)
+  return (
+    nodes.find((n) => (n.role?.value as string | undefined) === 'RootWebArea') ??
+    nodes.find((n) => !claimed.has(n.nodeId) && (n.childIds?.length ?? 0) > 0) ??
+    nodes[0]
+  )
+}
+
+/**
+ * Trees for the out-of-process frames attached by `Target.setAutoAttach`.
+ *
+ * The AX tree comes from the frame's own session; the owning `<iframe>` is
+ * looked up on the PAGE session, because that element lives in the parent
+ * document. An OOPIF is absent from `Page.getFrameTree`, so these frames are
+ * invisible to collectFrames and are collected separately.
+ */
+async function collectOopifFrames(): Promise<{ frames: FrameTree[]; unreachable: number }> {
+  const target = getActiveTarget()
+  if (!target) return { frames: [], unreachable: 0 }
+  const sessions = listOopifSessions(target.wc.id).slice(0, MAX_FRAMES)
+  if (sessions.length === 0) return { frames: [], unreachable: 0 }
+
+  let unreachable = 0
+  const frames: FrameTree[] = []
+
+  await Promise.all(
+    sessions.map(async (s) => {
+      try {
+        const axTree = (): Promise<{ nodes: AXNode[] }> =>
+          target.dbg.sendCommand('Accessibility.getFullAXTree', {}, s.sessionId) as Promise<{
+            nodes: AXNode[]
+          }>
+
+        const [owner, first] = await Promise.all([
+          target.dbg.sendCommand('DOM.getFrameOwner', { frameId: s.frameId }) as Promise<{
+            backendNodeId: number
+          }>,
+          axTree()
+        ])
+
+        let tree = first
+        if ((tree?.nodes?.length ?? 0) <= EMPTY_TREE_NODES) {
+          await sleep(RETRY_DELAY_MS)
+          tree = await axTree().catch(() => tree)
+        }
+        if (!tree?.nodes?.length || owner?.backendNodeId == null) {
+          unreachable++
+          return
+        }
+
+        const byId = new Map<string, AXNode>()
+        for (const n of tree.nodes) byId.set(n.nodeId, n)
+
+        frames.push({
+          frameId: s.frameId,
+          ownerBackendNodeId: owner.backendNodeId,
+          byId,
+          rootNodeId: pickRoot(tree.nodes).nodeId,
+          sessionId: s.sessionId
+        })
+      } catch {
+        unreachable++
+      }
+    })
+  )
+
+  return { frames, unreachable }
+}
+
 export async function collectFrames(): Promise<{
   frames: FrameTree[]
   unreachable: number
@@ -62,6 +148,10 @@ export async function collectFrames(): Promise<{
   const target = getActiveTarget()
   if (!target) return { frames: [], unreachable: 0, empty: 0 }
 
+  // Out-of-process frames are absent from Page.getFrameTree, so they are
+  // gathered from the auto-attached sessions instead and merged in below.
+  const oopif = await collectOopifFrames().catch(() => ({ frames: [], unreachable: 0 }))
+
   let ids: string[] = []
   try {
     const { frameTree } = (await target.dbg.sendCommand('Page.getFrameTree')) as {
@@ -69,14 +159,16 @@ export async function collectFrames(): Promise<{
     }
     flatten(frameTree, 1, ids)
   } catch {
-    return { frames: [], unreachable: 0, empty: 0 }
+    return { frames: oopif.frames, unreachable: oopif.unreachable, empty: 0 }
   }
-  if (ids.length === 0) return { frames: [], unreachable: 0, empty: 0 }
+  if (ids.length === 0) {
+    return { frames: oopif.frames, unreachable: oopif.unreachable, empty: 0 }
+  }
   ids = ids.slice(0, MAX_FRAMES)
 
-  let unreachable = 0
+  let unreachable = oopif.unreachable
   let empty = 0
-  const frames: FrameTree[] = []
+  const frames: FrameTree[] = [...oopif.frames]
 
   await Promise.all(
     ids.map(async (frameId) => {
@@ -111,24 +203,11 @@ export async function collectFrames(): Promise<{
         const byId = new Map<string, AXNode>()
         for (const n of tree.nodes) byId.set(n.nodeId, n)
 
-        // Pick the frame's document root by ROLE, not by position or by
-        // reachability. nodes[0] is not reliably the root, and "the node nothing
-        // claims as a child" is not either: the per-frame response carries some
-        // of the parent document's nodes too, so several are unclaimed and the
-        // walk can start on one that renders nothing. RootWebArea is the
-        // document itself and is unambiguous.
-        const claimed = new Set<string>()
-        for (const n of tree.nodes) for (const c of n.childIds ?? []) claimed.add(c)
-        const root =
-          tree.nodes.find((n) => (n.role?.value as string | undefined) === 'RootWebArea') ??
-          tree.nodes.find((n) => !claimed.has(n.nodeId) && (n.childIds?.length ?? 0) > 0) ??
-          tree.nodes[0]
-
         frames.push({
           frameId,
           ownerBackendNodeId: owner.backendNodeId,
           byId,
-          rootNodeId: root.nodeId
+          rootNodeId: pickRoot(tree.nodes).nodeId
         })
       } catch {
         // Cross-site frames live in another renderer and reject this session.

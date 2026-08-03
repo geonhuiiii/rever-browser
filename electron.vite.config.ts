@@ -23,6 +23,14 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    // Pin the dev-server port. If it slides to a free port (5173 busy → 5174),
+    // the renderer origin changes and every localStorage-backed store
+    // (bookmarks, theme, overlay position) silently starts empty. strictPort
+    // makes that a loud failure instead of silent data "loss".
+    server: {
+      port: 5173,
+      strictPort: true
+    },
     build: {
       outDir: 'out/renderer',
       rollupOptions: {

@@ -38,19 +38,27 @@ interface RefEntry {
    * top document.
    */
   frameOffset?: { x: number; y: number }
+  /**
+   * CDP session owning this node. Absent for the page session. Every command
+   * about the node must carry it: backend ids are per-process, so the page
+   * session answers about an out-of-process node with a different node rather
+   * than an error.
+   */
+  sessionId?: string
 }
 
 const refMap = new Map<string, RefEntry>()
 
 /**
- * backendNodeIds that carried a ref in the previous snapshot, so the next one
- * can point at what just appeared.
+ * Nodes that carried a ref in the previous snapshot, so the next one can point
+ * at what just appeared. Keyed by session + backendNodeId, because the ids of
+ * an out-of-process frame collide with the page's own.
  *
  * In browser-use the equivalent marker is an attention aid. Here it is closer
  * to evidence: paired with the traffic store, "what showed up right after this
  * request" is how a response field gets traced to the UI that renders it.
  */
-let previousRefTargets = new Set<number>()
+let previousRefTargets = new Set<string>()
 let previousUrl = ''
 /**
  * Which filtering mode produced the baseline. A viewport-filtered snapshot and
@@ -332,12 +340,12 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
   const build = (
     filter: PageLayout | null,
     prune: boolean
-  ): { tree: string; stats: SnapshotStats; refTargets: Set<number> } => {
+  ): { tree: string; stats: SnapshotStats; refTargets: Set<string> } => {
     refMap.clear()
     let counter = 0
     let clickOnlyRefs = 0
     let newRefs = 0
-    const seenRefTargets = new Set<number>()
+    const seenRefTargets = new Set<string>()
     let framesEntered = 0
     let framesMissed = 0
     const lines: string[] = []
@@ -349,7 +357,8 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       ancestorClaimed: boolean,
       scope: Map<string, AXNode>,
       frameOffset?: { x: number; y: number },
-      ancestorControl = false
+      ancestorControl = false,
+      frameSessionId?: string
     ): void => {
       const n = scope.get(id)
       if (!n) return
@@ -360,8 +369,13 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       // data must never be read as "invisible", or whole pages would vanish.
       // Counting happens in tallyFiltered, not here: this prunes subtrees, so
       // anything below a pruned container is never reached.
+      //
+      // Skipped entirely inside an out-of-process frame: the layout pass runs
+      // in the page's renderer, and that frame's backend ids belong to another
+      // process. A lookup there does not miss, it MATCHES A DIFFERENT ELEMENT —
+      // so the filter would prune or keep the frame's nodes at random.
       const lay =
-        filter && n.backendDOMNodeId != null
+        filter && !frameSessionId && n.backendDOMNodeId != null
           ? filter.byBackendId.get(n.backendDOMNodeId)
           : undefined
       // A zero-size box is invisible on its own but its children can overflow
@@ -431,17 +445,19 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
         if (n.backendDOMNodeId != null && (ACTIONABLE_ROLES.has(role) || claimable)) {
           counter++
           if (claimable) clickOnlyRefs++
-          if (sameDocument && !previousRefTargets.has(n.backendDOMNodeId)) {
+          const refKey = `${frameSessionId ?? ''}:${n.backendDOMNodeId}`
+          if (sameDocument && !previousRefTargets.has(refKey)) {
             parts.push('*new')
             newRefs++
           }
-          seenRefTargets.add(n.backendDOMNodeId)
+          seenRefTargets.add(refKey)
           const r = `r${counter}`
           refMap.set(r, {
             backendNodeId: n.backendDOMNodeId,
             role: role || 'clickable',
             name: shownName,
-            frameOffset
+            frameOffset,
+            sessionId: frameSessionId
           })
           parts.push(`[ref=${r}]`)
           if (claimable) parts.push('(click-scan)')
@@ -466,15 +482,24 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
           ancestorClaimed || claimable,
           scope,
           frameOffset,
-          nextAncestorControl
+          nextAncestorControl,
+          frameSessionId
         )
       }
 
       // Descend into a child frame. Its accessibility tree is a separate
       // document with its own node ids, so the scope map switches here rather
       // than being merged — ids collide across frames.
-      const frame = n.backendDOMNodeId != null ? framesByOwner.get(n.backendDOMNodeId) : undefined
-      if (!frame && role === 'Iframe') framesMissed++
+      //
+      // Only consulted from the page's own id space. Owners are resolved on the
+      // page session, so a backend id seen inside an out-of-process frame is a
+      // foreign number that can collide with a real owner here — descending on
+      // that match would splice an unrelated frame into itself.
+      const frame =
+        !frameSessionId && n.backendDOMNodeId != null
+          ? framesByOwner.get(n.backendDOMNodeId)
+          : undefined
+      if (!frame && !frameSessionId && role === 'Iframe') framesMissed++
       if (frame) {
         framesEntered++
         // Frame-local coordinates need the iframe's own position added back.
@@ -492,7 +517,8 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
           ancestorClaimed || claimable,
           frame.byId,
           nextOffset,
-          false
+          false,
+          frame.sessionId
         )
       }
     }
@@ -577,9 +603,14 @@ async function resolveObjectId(ref: string): Promise<string> {
   if (!entry) throw new Error(`unknown ref "${ref}" — call browser_snapshot first`)
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target')
-  const res = (await target.dbg.sendCommand('DOM.resolveNode', {
-    backendNodeId: entry.backendNodeId
-  })) as { object: { objectId: string } }
+  // The session is load-bearing, not an optimisation: asked about an
+  // out-of-process node without it, the page session returns a DIFFERENT node
+  // instead of failing, and the click lands somewhere else entirely.
+  const res = (await target.dbg.sendCommand(
+    'DOM.resolveNode',
+    { backendNodeId: entry.backendNodeId },
+    entry.sessionId
+  )) as { object: { objectId: string } }
   return res.object.objectId
 }
 
@@ -614,7 +645,8 @@ async function clickObjectId(
   objectId: string,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number }
+  frameOffset?: { x: number; y: number },
+  sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'click', label, detail: role })
@@ -635,7 +667,7 @@ async function clickObjectId(
     }`,
     returnByValue: true,
     awaitPromise: true
-  })) as { result: { value: { x: number; y: number } } }
+  }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
   // that frame — mouse events are dispatched in page space.
   const x = result.result.value.x + (frameOffset?.x ?? 0)
@@ -650,7 +682,7 @@ async function clickObjectId(
       if (window.__reverAi) window.__reverAi.flashElement(this, label, 'click')
     }`,
     arguments: [{ value: label }]
-  })
+  }, sessionId)
   await humanPressRelease(x, y)
 }
 
@@ -664,7 +696,8 @@ async function hoverObjectId(
   objectId: string,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number }
+  frameOffset?: { x: number; y: number },
+  sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'hover', label, detail: role })
@@ -685,7 +718,7 @@ async function hoverObjectId(
     }`,
     returnByValue: true,
     awaitPromise: true
-  })) as { result: { value: { x: number; y: number } } }
+  }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
   // that frame — mouse events are dispatched in page space.
   const x = result.result.value.x + (frameOffset?.x ?? 0)
@@ -700,7 +733,7 @@ async function hoverObjectId(
       if (window.__reverAi) window.__reverAi.flashElement(this, label, 'hover')
     }`,
     arguments: [{ value: label }]
-  })
+  }, sessionId)
 }
 
 /** Core type: same human-shaped sequence as clickObjectId, then focus + type
@@ -711,7 +744,8 @@ async function typeObjectId(
   submit: boolean,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number }
+  frameOffset?: { x: number; y: number },
+  sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
   emitAiAction({ kind: 'type', label, detail: text.slice(0, 80) })
@@ -732,7 +766,7 @@ async function typeObjectId(
     }`,
     returnByValue: true,
     awaitPromise: true
-  })) as { result: { value: { x: number; y: number } } }
+  }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
   // that frame — mouse events are dispatched in page space.
   const x = result.result.value.x + (frameOffset?.x ?? 0)
@@ -747,30 +781,38 @@ async function typeObjectId(
       if (window.__reverAi) window.__reverAi.flashElement(this, label, 'type')
     }`,
     arguments: [{ value: label }]
-  })
+  }, sessionId)
   await humanPressRelease(x, y)
-  await humanType(objectId, text, submit)
+  await humanType(objectId, text, submit, sessionId)
 }
 
 export async function clickRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI click${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await clickObjectId(objectId, label, entry?.role, entry?.frameOffset)
+  await clickObjectId(objectId, label, entry?.role, entry?.frameOffset, entry?.sessionId)
 }
 
 export async function typeRef(ref: string, text: string, submit: boolean): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI type${entry?.name ? ` → "${entry.name.slice(0, 24)}"` : ''}`
-  await typeObjectId(objectId, text, submit, label, entry?.role, entry?.frameOffset)
+  await typeObjectId(
+    objectId,
+    text,
+    submit,
+    label,
+    entry?.role,
+    entry?.frameOffset,
+    entry?.sessionId
+  )
 }
 
 export async function hoverRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI hover${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await hoverObjectId(objectId, label, entry?.role, entry?.frameOffset)
+  await hoverObjectId(objectId, label, entry?.role, entry?.frameOffset, entry?.sessionId)
 }
 
 export async function hoverSelector(selector: string): Promise<void> {

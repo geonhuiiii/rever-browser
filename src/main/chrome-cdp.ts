@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { VISUALIZER_INIT_SCRIPT } from './mcp/visualizer'
+import { clearOopifs, registerOopif, unregisterOopif } from './mcp/oopif'
 import {
   getRequest,
   upsertRequest,
@@ -486,6 +487,16 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
     })
     .catch((e) => console.error('[cdp] setUserAgentOverride:', e))
   void dbg.sendCommand('Runtime.enable').catch((e) => console.error('[cdp] Runtime.enable:', e))
+  // Attach a session to every cross-site iframe so the snapshot can read it.
+  // `flatten` multiplexes those sessions over this same debugger connection;
+  // waitForDebuggerOnStart would stall each frame until we resumed it.
+  void dbg
+    .sendCommand('Target.setAutoAttach', {
+      autoAttach: true,
+      waitForDebuggerOnStart: false,
+      flatten: true
+    })
+    .catch((e) => console.error('[cdp] setAutoAttach:', e))
   void dbg.sendCommand('Debugger.enable').catch((e) => console.error('[cdp] Debugger.enable:', e))
   void dbg
     .sendCommand('Page.enable')
@@ -520,7 +531,9 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
     })
     .catch((e) => console.error('[cdp] init scripts:', e))
 
-  dbg.on('message', (_event, method, params) => {
+  // `sessionId` is set for events coming from an auto-attached out-of-process
+  // frame. Reads about such an event (getResponseBody) must carry it back.
+  dbg.on('message', (_event, method, params, sessionId) => {
     if (method === 'Network.requestWillBeSent') {
       const p = params as RequestWillBeSentParams
       // 리다이렉트 체인은 같은 requestId로 requestWillBeSent를 여러 번 보낸다.
@@ -606,9 +619,11 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
           const stored = getRequest(p.requestId)
           if (!stored) return
           if (!shouldFetchBody(stored.mimeType, stored.resourceType)) return
-          const res = (await dbg.sendCommand('Network.getResponseBody', {
-            requestId: p.requestId
-          })) as { body: string; base64Encoded: boolean }
+          const res = (await dbg.sendCommand(
+            'Network.getResponseBody',
+            { requestId: p.requestId },
+            sessionId
+          )) as { body: string; base64Encoded: boolean }
           upsertRequest({
             requestId: p.requestId,
             responseBody: res.body,
@@ -736,6 +751,31 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
           })
           .catch((e) => console.error('[cdp] handleJavaScriptDialog:', e))
       }
+    } else if (method === 'Target.attachedToTarget') {
+      const p = params as {
+        sessionId: string
+        targetInfo: { type: string; targetId: string; url: string }
+      }
+      // Only iframe targets matter here — workers and service workers attach
+      // through the same event and have no accessibility tree to splice in.
+      if (p.targetInfo.type === 'iframe') {
+        registerOopif(targetId, {
+          sessionId: p.sessionId,
+          frameId: p.targetInfo.targetId,
+          url: p.targetInfo.url
+        })
+        // Enable the domains the snapshot and click paths need, on the frame's
+        // own session — enabling them on the page session does not reach it.
+        void dbg.sendCommand('Accessibility.enable', {}, p.sessionId).catch(() => {})
+        void dbg.sendCommand('DOM.enable', {}, p.sessionId).catch(() => {})
+        // Network too, or the frame's own requests are invisible. Only the
+        // iframe document load shows up without this (the parent initiates
+        // that one); every call the widget makes afterwards — the payment API
+        // this tool exists to read — is emitted on the frame's session alone.
+        void dbg.sendCommand('Network.enable', {}, p.sessionId).catch(() => {})
+      }
+    } else if (method === 'Target.detachedFromTarget') {
+      unregisterOopif(targetId, (params as { sessionId: string }).sessionId)
     } else if (method === 'Debugger.paused') {
       const p = params as DebuggerPausedParams
       debuggerPaused = { callFrames: p.callFrames, reason: p.reason }
@@ -778,6 +818,7 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
     dbg.removeAllListeners('detach')
     attached.delete(targetId)
     inFlight.delete(targetId)
+    clearOopifs(targetId)
     debuggerPaused = null
     pendingFetchRequests.clear()
   })

@@ -17,5 +17,13 @@
   <input id="p2" placeholder="P2 expiry MM/YY">
   <button id="p3">P3 Pay $42.00</button>
   <div class="secret">PAYMENT-WIDGET-SECRET-7734</div>
+  <script>
+    // A click that lands on the right element is provable in list_requests;
+    // a click with a wrong coordinate offset does not error, it hits something
+    // else silently. The card number is echoed so typing is checkable too.
+    document.getElementById('p3').addEventListener('click', () => {
+      fetch('/oopif-pay-clicked?card=' + encodeURIComponent(document.getElementById('p1').value))
+    })
+  </script>
 </body>
 </html>

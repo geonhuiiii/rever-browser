@@ -137,16 +137,21 @@ function keyParamsFor(ch: string): {
 export async function humanType(
   objectId: string,
   text: string,
-  submit: boolean
+  submit: boolean,
+  sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()
   if (!target) throw new Error('no active browser target')
 
   // Focus the target element. Required so the keyDown events land in it.
+  // The objectId belongs to whichever session resolved it — an out-of-process
+  // frame's node is unknown to the page session. The key events that follow
+  // stay on the page session: they go to whatever is focused, and focusing the
+  // frame's input is what routes them into it.
   await target.dbg.sendCommand('Runtime.callFunctionOn', {
     objectId,
     functionDeclaration: 'function(){ this.focus() }'
-  })
+  }, sessionId)
 
   for (const ch of Array.from(text)) {
     const k = keyParamsFor(ch)
