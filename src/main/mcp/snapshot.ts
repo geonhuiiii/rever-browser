@@ -26,18 +26,30 @@ export interface AXNode {
   backendDOMNodeId?: number
 }
 
+/** An `<iframe>` element on the path from the page to a node, outermost first. */
+interface FrameOwner {
+  backendNodeId: number
+  /** Session of the document CONTAINING this `<iframe>`, not of its content. */
+  sessionId?: string
+}
+
 interface RefEntry {
   backendNodeId: number
   role: string
   name: string
   /**
-   * Viewport offset of the owning `<iframe>`. Coordinates from
-   * getBoundingClientRect inside a frame are relative to THAT frame, while
-   * mouse events are dispatched in page space - without this a click on a
-   * framed element lands wherever the same offset happens to point in the
-   * top document.
+   * The `<iframe>` chain this node sits behind, outermost first.
+   *
+   * Coordinates from getBoundingClientRect inside a frame are relative to THAT
+   * frame, while mouse events are dispatched in page space, so the frames'
+   * positions have to be added back. They are measured at click time rather
+   * than stored from the snapshot: the click path calls scrollIntoView first,
+   * which moves the page under the frame, and a stored offset is wrong by
+   * exactly that scroll. The symptom is not an error — the click lands on
+   * whatever is now at those coordinates. It selected the wrong card issuer
+   * and silently unticked a consent box before this was measured live.
    */
-  frameOffset?: { x: number; y: number }
+  frameOwners?: FrameOwner[]
   /**
    * CDP session owning this node. Absent for the page session. Every command
    * about the node must carry it: backend ids are per-process, so the page
@@ -357,7 +369,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       parentName: string,
       ancestorClaimed: boolean,
       scope: Map<string, AXNode>,
-      frameOffset?: { x: number; y: number },
+      frameOwners: FrameOwner[] = [],
       ancestorControl = false,
       frameSessionId?: string
     ): void => {
@@ -457,7 +469,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
             backendNodeId: n.backendDOMNodeId,
             role: role || 'clickable',
             name: shownName,
-            frameOffset,
+            frameOwners: frameOwners.length ? frameOwners : undefined,
             sessionId: frameSessionId
           })
           parts.push(`[ref=${r}]`)
@@ -482,7 +494,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
           childParentName,
           ancestorClaimed || claimable,
           scope,
-          frameOffset,
+          frameOwners,
           nextAncestorControl,
           frameSessionId
         )
@@ -504,21 +516,15 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       if (frame) {
         framesEntered++
         splicedFrames.add(frame.frameId)
-        // Frame-local coordinates need the iframe's own position added back.
-        const box = filter?.byBackendId.get(n.backendDOMNodeId as number)
-        const nextOffset = box
-          ? {
-              x: (frameOffset?.x ?? 0) + box.x - viewport.x,
-              y: (frameOffset?.y ?? 0) + box.y - viewport.y
-            }
-          : frameOffset
+        // Record the `<iframe>` rather than its position — the position is
+        // measured at click time, see RefEntry.frameOwners.
         walk(
           frame.rootNodeId,
           nextDepth,
           name,
           ancestorClaimed || claimable,
           frame.byId,
-          nextOffset,
+          [...frameOwners, { backendNodeId: n.backendDOMNodeId as number, sessionId: frameSessionId }],
           false,
           frame.sessionId
         )
@@ -538,10 +544,17 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
     for (const frame of frameRes.frames) {
       if (splicedFrames.has(frame.frameId)) continue
       framesEntered++
-      const box = filter?.byBackendId.get(frame.ownerBackendNodeId)
-      const offset = box ? { x: box.x - viewport.x, y: box.y - viewport.y } : undefined
       lines.push(`- Iframe (hidden from the a11y tree) ${quote(frame.url ?? frame.frameId)}`)
-      walk(frame.rootNodeId, 1, '', false, frame.byId, offset, false, frame.sessionId)
+      walk(
+        frame.rootNodeId,
+        1,
+        '',
+        false,
+        frame.byId,
+        [{ backendNodeId: frame.ownerBackendNodeId }],
+        false,
+        frame.sessionId
+      )
     }
 
     if (!filter || !prune) {
@@ -655,6 +668,54 @@ async function resolveSelectorObjectId(selector: string): Promise<string> {
 }
 
 /**
+ * Current page-space position of a frame's content origin, measured now.
+ *
+ * Walks the `<iframe>` chain outermost-in, each element read in the session of
+ * the document that holds it, and adds the border + padding because the child
+ * document starts at the content box, not the border box. Called after
+ * scrollIntoView so the numbers describe where the frame actually is at the
+ * moment the mouse event is dispatched.
+ */
+async function measureFrameOffset(owners: FrameOwner[] | undefined): Promise<{
+  x: number
+  y: number
+}> {
+  if (!owners?.length) return { x: 0, y: 0 }
+  const target = getActiveTarget()
+  if (!target) return { x: 0, y: 0 }
+
+  let x = 0
+  let y = 0
+  for (const owner of owners) {
+    const node = (await target.dbg.sendCommand(
+      'DOM.resolveNode',
+      { backendNodeId: owner.backendNodeId },
+      owner.sessionId
+    )) as { object: { objectId: string } }
+    const res = (await target.dbg.sendCommand(
+      'Runtime.callFunctionOn',
+      {
+        objectId: node.object.objectId,
+        functionDeclaration: `function() {
+          const r = this.getBoundingClientRect()
+          const s = getComputedStyle(this)
+          const n = (v) => parseFloat(v) || 0
+          return {
+            x: r.left + n(s.borderLeftWidth) + n(s.paddingLeft),
+            y: r.top + n(s.borderTopWidth) + n(s.paddingTop)
+          }
+        }`,
+        returnByValue: true
+      },
+      owner.sessionId
+    )) as { result: { value: { x: number; y: number } } }
+    x += res.result.value.x
+    y += res.result.value.y
+  }
+  return { x, y }
+}
+
+/**
  * Core click: given an already-resolved objectId + a human-readable label,
  * run the full scroll → thinking pause → cursor move → flash → press/release
  * sequence. The overlay flash appears only once the cursor has arrived. Shared
@@ -664,7 +725,7 @@ async function clickObjectId(
   objectId: string,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number },
+  frameOwners?: FrameOwner[],
   sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
@@ -688,9 +749,11 @@ async function clickObjectId(
     awaitPromise: true
   }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
-  // that frame — mouse events are dispatched in page space.
-  const x = result.result.value.x + (frameOffset?.x ?? 0)
-  const y = result.result.value.y + (frameOffset?.y ?? 0)
+  // that frame — mouse events are dispatched in page space. Measured after the
+  // scrollIntoView above, which moves the page under the frame.
+  const frameOffset = await measureFrameOffset(frameOwners)
+  const x = result.result.value.x + frameOffset.x
+  const y = result.result.value.y + frameOffset.y
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -715,7 +778,7 @@ async function hoverObjectId(
   objectId: string,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number },
+  frameOwners?: FrameOwner[],
   sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
@@ -739,9 +802,11 @@ async function hoverObjectId(
     awaitPromise: true
   }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
-  // that frame — mouse events are dispatched in page space.
-  const x = result.result.value.x + (frameOffset?.x ?? 0)
-  const y = result.result.value.y + (frameOffset?.y ?? 0)
+  // that frame — mouse events are dispatched in page space. Measured after the
+  // scrollIntoView above, which moves the page under the frame.
+  const frameOffset = await measureFrameOffset(frameOwners)
+  const x = result.result.value.x + frameOffset.x
+  const y = result.result.value.y + frameOffset.y
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -763,7 +828,7 @@ async function typeObjectId(
   submit: boolean,
   label: string,
   role?: string,
-  frameOffset?: { x: number; y: number },
+  frameOwners?: FrameOwner[],
   sessionId?: string
 ): Promise<void> {
   const target = getActiveTarget()!
@@ -787,9 +852,11 @@ async function typeObjectId(
     awaitPromise: true
   }, sessionId)) as { result: { value: { x: number; y: number } } }
   // getBoundingClientRect ran inside the element's own frame, so its origin is
-  // that frame — mouse events are dispatched in page space.
-  const x = result.result.value.x + (frameOffset?.x ?? 0)
-  const y = result.result.value.y + (frameOffset?.y ?? 0)
+  // that frame — mouse events are dispatched in page space. Measured after the
+  // scrollIntoView above, which moves the page under the frame.
+  const frameOffset = await measureFrameOffset(frameOwners)
+  const x = result.result.value.x + frameOffset.x
+  const y = result.result.value.y + frameOffset.y
 
   await thinkingPause()
   await humanMouseMove(x, y)
@@ -809,7 +876,7 @@ export async function clickRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI click${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await clickObjectId(objectId, label, entry?.role, entry?.frameOffset, entry?.sessionId)
+  await clickObjectId(objectId, label, entry?.role, entry?.frameOwners, entry?.sessionId)
 }
 
 export async function typeRef(ref: string, text: string, submit: boolean): Promise<void> {
@@ -822,7 +889,7 @@ export async function typeRef(ref: string, text: string, submit: boolean): Promi
     submit,
     label,
     entry?.role,
-    entry?.frameOffset,
+    entry?.frameOwners,
     entry?.sessionId
   )
 }
@@ -831,7 +898,7 @@ export async function hoverRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
   const label = `AI hover${entry?.name ? ` "${entry.name.slice(0, 32)}"` : ''}`
-  await hoverObjectId(objectId, label, entry?.role, entry?.frameOffset, entry?.sessionId)
+  await hoverObjectId(objectId, label, entry?.role, entry?.frameOwners, entry?.sessionId)
 }
 
 export async function hoverSelector(selector: string): Promise<void> {
