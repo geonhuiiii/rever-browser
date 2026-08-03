@@ -85,6 +85,12 @@ export const VISUALIZER_INIT_SCRIPT = `
       animation: refin 180ms ease-out forwards, fade 500ms ease-in 900ms forwards;
     }
     @keyframes refin { from { opacity: 0; transform: scale(0.97) } to { opacity: 1; transform: scale(1) } }
+    .reftag {
+      position: absolute; top: -9px; left: -3px;
+      font: 600 9px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 0.3px;
+      padding: 0 4px; border-radius: 3px;
+      background: rgba(100,210,255,0.92); color: #06222e; white-space: nowrap;
+    }
 
     .flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: flash 620ms ease-out forwards; }
     @keyframes flash { 0% { opacity: 0 } 16% { opacity: 0.78 } 100% { opacity: 0 } }
@@ -327,10 +333,39 @@ export const VISUALIZER_INIT_SCRIPT = `
     return out
   }
 
-  function scanPage() {
+  function scanPage(boxes) {
     transient(div('scan'), 1350)
-    const SEL = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="textbox"], [onclick]'
     const vh = window.innerHeight || 1
+
+    // Boxes supplied by the snapshot: these are the elements that actually
+    // received a ref, tagged with it. The heuristic below re-derives its own
+    // guess from the DOM and disagrees with the real set — it outlines things
+    // the agent cannot address and misses the click-scan finds it can. Only
+    // used as a fallback when no snapshot is driving the animation.
+    if (Array.isArray(boxes) && boxes.length) {
+      for (const b of boxes) {
+        if (!b || b.w < 6 || b.h < 6) continue
+        if (b.y + b.h < 0 || b.y > vh) continue
+        const delay = 1250 * Math.max(0, Math.min(1, (b.y + b.h / 2) / vh))
+        setTimeout(() => {
+          const el = div('refbox')
+          el.style.left = (b.x - 3) + 'px'
+          el.style.top = (b.y - 3) + 'px'
+          el.style.width = (b.w + 6) + 'px'
+          el.style.height = (b.h + 6) + 'px'
+          if (b.ref) {
+            const tag = document.createElement('div')
+            tag.className = 'reftag'
+            tag.textContent = b.ref
+            el.appendChild(tag)
+          }
+          transient(el, 1700)
+        }, delay)
+      }
+      return
+    }
+
+    const SEL = 'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="textbox"], [onclick]'
     // Every visible candidate gets a box — no count cap. A cap would be spent
     // in DOM order, which is roughly top-to-bottom, so a header-heavy page
     // would light up only its top strip. The boxes are staggered by vertical

@@ -354,7 +354,8 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
   // also surface in the AI-activity overlay. The in-page scan runs alongside
   // the AX tree walk (not awaited) so it never slows the agent down.
   emitAiAction({ kind: 'snapshot', label: 'AI snapshot' })
-  visualize('scanPage')
+  // The boxes are drawn once the refs exist (below), not here — the animation
+  // should show what the agent can actually address.
 
   await target.dbg.sendCommand('Accessibility.enable').catch(() => {})
 
@@ -700,6 +701,28 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
   previousRefTargets = result.refTargets
   previousUrl = meta.url
   previousPruned = !opts.full
+
+  // Outline exactly the elements that got a ref, tagged with it. Reuses the
+  // layout pass already taken, so this costs one extra evaluate rather than a
+  // measurement per element. Nodes inside a frame are skipped: the layout runs
+  // in the page's renderer, and a framed node's box is either absent from it or
+  // expressed in another coordinate space.
+  if (layout) {
+    const boxes: Array<{ ref: string; x: number; y: number; w: number; h: number }> = []
+    for (const [ref, entry] of refMap) {
+      if (entry.frameOwners?.length) continue
+      const lay = layout.byBackendId.get(entry.backendNodeId)
+      if (!lay) continue
+      boxes.push({
+        ref,
+        x: lay.x - viewport.x,
+        y: lay.y - viewport.y,
+        w: lay.width,
+        h: lay.height
+      })
+    }
+    visualize('scanPage', boxes)
+  }
 
   return {
     url: meta.url,
