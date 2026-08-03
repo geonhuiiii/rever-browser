@@ -30,6 +30,9 @@ type PanelId = 'traffic' | 'apimap' | 'console' | 'exceptions' | 'websocket' | '
 // matching side so the tab strip never slides under the window buttons.
 const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Macintosh')
 
+// AI activity floating panel (AiActionOverlay) — off for now, code kept intact.
+const SHOW_AI_ACTIVITY_OVERLAY = false
+
 function App() {
   useCdpEvents()
   const tabs = useTabsStore((s) => s.tabs)
@@ -652,7 +655,9 @@ function App() {
                 </button>
               </div>
             )}
-            <AiActionOverlay />
+            {/* AI activity floating panel — hidden for now, feature kept.
+                Re-enable by flipping SHOW_AI_ACTIVITY_OVERLAY. */}
+            {SHOW_AI_ACTIVITY_OVERLAY && <AiActionOverlay />}
             <BotCheckButton onNavigate={(url) => {
               if (browserMode === 'external') {
                 void window.rev.external.navigate(url).catch(() => {})

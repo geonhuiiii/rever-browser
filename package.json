@@ -1,5 +1,6 @@
 {
   "name": "rever-browser",
+  "productName": "Rever Browser",
   "version": "0.1.0",
   "private": true,
   "description": "AI agent browser for web API reverse engineering",

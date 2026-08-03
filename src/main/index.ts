@@ -86,6 +86,18 @@ app.userAgentFallback = app.userAgentFallback
   .replace(/\s*Electron\/\S+/, '')
   .replace(new RegExp(`\\s*${app.getName()}\\/\\S+`, 'i'), '')
 
+// Display name for menus, About panel and notifications. Must come after the
+// UA strip above (which matches the original package name) and before
+// installMenu (whose appMenu role reads app.name). userData is pinned to the
+// original 'rever-browser' directory so mcp-endpoint.json, cookies and
+// localStorage keep their existing location.
+app.setName('Rever Browser')
+app.setPath('userData', path.join(app.getPath('appData'), 'rever-browser'))
+app.setAboutPanelOptions({
+  applicationName: 'Rever Browser',
+  applicationVersion: app.getVersion()
+})
+
 // Bot-detection bypass: prevent Chromium from injecting webdriver=true and
 // other AutomationControlled blink features.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
