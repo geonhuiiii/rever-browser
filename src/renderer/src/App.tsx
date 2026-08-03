@@ -520,18 +520,42 @@ function App() {
             >
               {viewportMode === 'mobile' ? 'Mobile' : 'Desktop'}
             </button>
-            <button
-              className="toolbar-btn"
-              type="button"
-              onClick={() => setBrowserMode(browserMode === 'embedded' ? 'external' : 'embedded')}
-              title="Toggle embedded/external Chrome"
-              style={{
-                background: browserMode === 'external' ? '#242' : undefined,
-                borderColor: browserMode === 'external' ? '#373' : undefined
-              }}
+            <div
+              role="group"
+              aria-label="Browser mode"
+              title="Embedded runs pages in the in-app webview; External attaches to a real Chrome window"
+              style={{ display: 'inline-flex', flexShrink: 0 }}
             >
-              {browserMode === 'embedded' ? 'Embedded' : 'External (real Chrome)'}
-            </button>
+              <button
+                className="toolbar-btn"
+                type="button"
+                aria-pressed={browserMode === 'embedded'}
+                onClick={() => setBrowserMode('embedded')}
+                style={{
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                  background: browserMode === 'embedded' ? 'var(--accent-soft)' : undefined,
+                  borderColor: browserMode === 'embedded' ? 'var(--accent-border)' : undefined
+                }}
+              >
+                Embedded
+              </button>
+              <button
+                className="toolbar-btn"
+                type="button"
+                aria-pressed={browserMode === 'external'}
+                onClick={() => setBrowserMode('external')}
+                style={{
+                  marginLeft: -1,
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                  background: browserMode === 'external' ? 'var(--accent-soft)' : undefined,
+                  borderColor: browserMode === 'external' ? 'var(--accent-border)' : undefined
+                }}
+              >
+                External
+              </button>
+            </div>
           </form>
           {browserMode === 'embedded' && <BookmarkBar />}
           {/* paddingBottom reserves the chip bar's strip so the webview ends
