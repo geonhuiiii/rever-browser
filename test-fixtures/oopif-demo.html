@@ -54,7 +54,19 @@ captchas, embedded players.</p>
   Post-patch expected: <b>P1, P2, P3</b> get refs and the secret string is visible.</p>
 </section>
 
-<p class="sub">Report: does C1 have a ref / do Q1+Q2 have refs / do P1–P3 or the secret appear?</p>
+<section>
+  <h2>TRACKER. Cross-site widget marked aria-hidden (localhost:8778 → OOPIF)</h2>
+  <iframe id="tracker" title="status embed" aria-hidden="true" tabindex="-1"
+          src="http://localhost:8778/oopif-tracker-widget.html?v=1"></iframe>
+  <p class="exp">aria-hidden removes the <code>&lt;iframe&gt;</code> from the parent accessibility tree
+  entirely — Chrome drops it rather than marking it ignored — so there is no node to nest the frame
+  under. Real case: the Toss sandbox marks its status embed this way.
+  Expect <b>T1 and the string TRACKER-WIDGET-SECRET-5150</b> to still appear, under an
+  "(hidden from the a11y tree)" line. If they are missing, the frame was dropped silently.</p>
+</section>
+
+<p class="sub">Report: does C1 have a ref / do Q1+Q2 have refs / do P1–P3 or the secret appear /
+does T1 appear?</p>
 
 </body>
 </html>

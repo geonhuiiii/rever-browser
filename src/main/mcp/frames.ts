@@ -20,6 +20,8 @@ export interface FrameTree {
    * answers with a different node instead of an error.
    */
   sessionId?: string
+  /** Document URL, used to label a frame that has no anchor in the outline. */
+  url?: string
 }
 
 /** Frames deeper than this are ignored; matches the iframe nesting seen in practice. */
@@ -104,11 +106,20 @@ async function collectOopifFrames(): Promise<{ frames: FrameTree[]; unreachable:
             nodes: AXNode[]
           }>
 
-        const [owner, first] = await Promise.all([
+        // targetInfo.url is empty at attach time, so the URL is read from the
+        // frame itself. Concurrent with the other two, so it costs no latency.
+        const [owner, first, loc] = await Promise.all([
           target.dbg.sendCommand('DOM.getFrameOwner', { frameId: s.frameId }) as Promise<{
             backendNodeId: number
           }>,
-          axTree()
+          axTree(),
+          target.dbg
+            .sendCommand(
+              'Runtime.evaluate',
+              { expression: 'location.href', returnByValue: true },
+              s.sessionId
+            )
+            .catch(() => null) as Promise<{ result: { value: string } } | null>
         ])
 
         let tree = first
@@ -129,7 +140,8 @@ async function collectOopifFrames(): Promise<{ frames: FrameTree[]; unreachable:
           ownerBackendNodeId: owner.backendNodeId,
           byId,
           rootNodeId: pickRoot(tree.nodes).nodeId,
-          sessionId: s.sessionId
+          sessionId: s.sessionId,
+          url: loc?.result?.value || s.url || undefined
         })
       } catch {
         unreachable++

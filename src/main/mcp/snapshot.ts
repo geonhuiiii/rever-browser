@@ -348,6 +348,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
     const seenRefTargets = new Set<string>()
     let framesEntered = 0
     let framesMissed = 0
+    const splicedFrames = new Set<string>()
     const lines: string[] = []
 
     const walk = (
@@ -502,6 +503,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       if (!frame && !frameSessionId && role === 'Iframe') framesMissed++
       if (frame) {
         framesEntered++
+        splicedFrames.add(frame.frameId)
         // Frame-local coordinates need the iframe's own position added back.
         const box = filter?.byBackendId.get(n.backendDOMNodeId as number)
         const nextOffset = box
@@ -524,6 +526,23 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
     }
 
     if (nodes[0]) walk(nodes[0].nodeId, 0, '', false, byId)
+
+    // A frame whose `<iframe>` carries aria-hidden has NO node in the parent
+    // accessibility tree — Chrome drops the element outright rather than
+    // marking it ignored — so the walk never reaches an anchor to nest it
+    // under. Emitting it at the end keeps it reachable instead of dropping it
+    // without a word: a cross-site frame the page hides from assistive tech
+    // (trackers, 3DS steps, captchas, status embeds) is exactly what a
+    // reverser is looking for, and on the Toss sandbox this was the only real
+    // OOPIF on the page.
+    for (const frame of frameRes.frames) {
+      if (splicedFrames.has(frame.frameId)) continue
+      framesEntered++
+      const box = filter?.byBackendId.get(frame.ownerBackendNodeId)
+      const offset = box ? { x: box.x - viewport.x, y: box.y - viewport.y } : undefined
+      lines.push(`- Iframe (hidden from the a11y tree) ${quote(frame.url ?? frame.frameId)}`)
+      walk(frame.rootNodeId, 1, '', false, frame.byId, offset, false, frame.sessionId)
+    }
 
     if (!filter || !prune) {
       return {
