@@ -78,6 +78,17 @@ export function getActiveTarget(): AttachedTarget | null {
   return first ?? null
 }
 
+/** Every attached tab, for the tab-listing tool. */
+export function listTargets(): Array<{ id: number; url: string; title: string; active: boolean }> {
+  const activeId = getActiveTarget() ? [...attached.entries()].find(([, v]) => v === getActiveTarget())?.[0] : null
+  return [...attached.entries()].map(([id, t]) => ({
+    id,
+    url: t.wc.getURL(),
+    title: t.wc.getTitle(),
+    active: id === activeId
+  }))
+}
+
 export function setActiveTarget(id: number): boolean {
   if (!attached.has(id)) return false
   activeWebContentsId = id
@@ -305,9 +316,29 @@ const DIALOG_OVERRIDE_SCRIPT = `
     if (window.__revDialogHistory.length > 100) window.__revDialogHistory.shift();
     try { console.log('[rev-' + type + ']', message); } catch (e) {}
   }
-  window.alert = function(msg) { record('alert', msg); };
-  window.confirm = function(msg) { record('confirm', msg); return true; };
-  window.prompt = function(msg, def) { record('prompt', msg, def); return def == null ? '' : String(def); };
+  // The reply the next dialog gets. Without this every confirm() answered true
+  // and every prompt() returned its default, so a flow gated on "cancel" or on
+  // a typed value could not be driven at all. One-shot: it is consumed by the
+  // first dialog, so a stale answer cannot silently apply to a later one.
+  window.__revDialogAnswer = null;
+  function takeAnswer() {
+    const a = window.__revDialogAnswer;
+    window.__revDialogAnswer = null;
+    return a;
+  }
+  window.alert = function(msg) { record('alert', msg); takeAnswer(); };
+  window.confirm = function(msg) {
+    record('confirm', msg);
+    const a = takeAnswer();
+    return a ? a.accept !== false : true;
+  };
+  window.prompt = function(msg, def) {
+    record('prompt', msg, def);
+    const a = takeAnswer();
+    if (a && a.accept === false) return null;
+    if (a && typeof a.promptText === 'string') return a.promptText;
+    return def == null ? '' : String(def);
+  };
 })();
 `
 
@@ -317,6 +348,24 @@ let dialogAutoDismiss = true
 
 export function getDialogAutoDismiss(): boolean {
   return dialogAutoDismiss
+}
+
+/**
+ * Arm the answer the page's next `confirm()` / `prompt()` will receive.
+ *
+ * Set in the page rather than handed to `Page.handleJavaScriptDialog`: the
+ * override script answers these before a native dialog ever opens, which is
+ * what keeps the renderer from blocking, so the CDP handler never sees them.
+ */
+export async function armDialogAnswer(
+  accept: boolean,
+  promptText?: string
+): Promise<void> {
+  const target = getActiveTarget()
+  if (!target) throw new Error('no active browser target')
+  await target.dbg.sendCommand('Runtime.evaluate', {
+    expression: `window.__revDialogAnswer = ${JSON.stringify({ accept, promptText })}`
+  })
 }
 
 export function setDialogAutoDismiss(v: boolean): void {
