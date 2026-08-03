@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever OOPIF demo — fake checkout</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe}
+  iframe{width:100%;height:150px;border:1px solid #2b3444;border-radius:6px;background:#101722}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .exp b{color:#7ee787}
+  .exp .bad{color:#ff7b72}
+  .t{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:7px 12px;
+     color:#e6edf3;font-size:13px;display:inline-block}
+</style>
+</head>
+<body>
+
+<h1>OOPIF demo — fake checkout page</h1>
+<p class="sub">A shop page (this document) embedding a same-origin coupon widget and a
+cross-site payment widget. Mirrors the real-world case: Stripe/Toss payment iframes,
+captchas, embedded players.</p>
+
+<section>
+  <h2>CONTROL. Main-document order button</h2>
+  <button class="t" id="place-order">C1 Place order ($42.00)</button>
+  <p class="exp">Must always get a ref. If missing, the page failed to load.</p>
+</section>
+
+<section>
+  <h2>COUPON. Same-origin widget (srcdoc iframe, same process)</h2>
+  <iframe id="coupon" title="coupon widget" srcdoc='
+    <body style="margin:0;font:13px -apple-system,sans-serif;background:#101722;color:#e6edf3;padding:10px">
+      <div>Coupon widget (same origin)</div>
+      <input id="q1" placeholder="Q1 coupon code" style="margin:6px 0;padding:6px">
+      <button id="q2" style="padding:6px 12px">Q2 Apply coupon</button>
+    </body>'></iframe>
+  <p class="exp">Same process. Expect <b>Q1 input and Q2 button</b> to get refs — this is
+  the contrast case proving frame traversal itself works.</p>
+</section>
+
+<section>
+  <h2>PAYMENT. Cross-site widget (localhost:8778 → OOPIF)</h2>
+  <iframe id="payment" title="payment widget"
+          src="http://localhost:8778/oopif-payment-widget.html"></iframe>
+  <p class="exp">Different site (localhost vs 127.0.0.1), so a separate renderer process.
+  <span class="bad">Pre-patch expected: frame is unreachable — P1/P2/P3 and the string
+  PAYMENT-WIDGET-SECRET-7734 must NOT appear in the snapshot.</span>
+  Post-patch expected: <b>P1, P2, P3</b> get refs and the secret string is visible.</p>
+</section>
+
+<p class="sub">Report: does C1 have a ref / do Q1+Q2 have refs / do P1–P3 or the secret appear?</p>
+
+</body>
+</html>

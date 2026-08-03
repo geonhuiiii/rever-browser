@@ -57,6 +57,7 @@ python3 -m http.server 8778 --bind 0.0.0.0 &
 |---|---|---|
 | `snapshot-fixture.html` | `http://127.0.0.1:8777/snapshot-fixture.html` | viewport filtering, hidden/occluded nodes, off-screen scroll hints, click-scan detection and over-detection guards |
 | `iframe-fixture.html` | `http://127.0.0.1:8777/iframe-fixture.html` | same-origin, cross-origin and cross-site (OOPIF) frames |
+| `oopif-demo.html` | `http://127.0.0.1:8777/oopif-demo.html` | realistic OOPIF case: fake checkout with a same-origin coupon widget (visible) vs a cross-site payment widget (`localhost:8778`, pre-patch invisible — P1–P3 and the SECRET string must not appear) |
 | `shadow-fixture.html` | `http://127.0.0.1:8777/shadow-fixture.html` | open/closed/nested shadow roots, inner scroll containers, `*new` node marking |
 | `api-target/` (see below) | `http://127.0.0.1:8779/` | the API-analysis tools — traffic capture, scripts, sourcemaps, crypto, replay/repeater, fuzz probes, WebSocket, storage |
 

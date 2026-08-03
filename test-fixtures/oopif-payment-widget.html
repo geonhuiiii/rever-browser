@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>payment widget</title>
+<style>
+  body{margin:0;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#101722;color:#e6edf3;padding:10px}
+  input{display:block;margin:6px 0;padding:6px;width:220px}
+  button{padding:6px 14px}
+  .secret{font-size:11px;color:#7ee787;margin-top:8px}
+</style>
+</head>
+<body>
+  <div>Payment widget (cross-site, served from localhost:8778)</div>
+  <input id="p1" placeholder="P1 card number">
+  <input id="p2" placeholder="P2 expiry MM/YY">
+  <button id="p3">P3 Pay $42.00</button>
+  <div class="secret">PAYMENT-WIDGET-SECRET-7734</div>
+</body>
+</html>
