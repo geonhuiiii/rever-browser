@@ -52,7 +52,7 @@ export function ExceptionsPanel() {
             <span style={{ opacity: 0.4, flexShrink: 0, fontSize: 10 }}>
               {new Date(e.ts).toLocaleTimeString()}
             </span>
-            <span style={{ color: '#ff6b6b', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
+            <span style={{ color: 'var(--status-error)', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>
               {e.text}
             </span>
             {Boolean(e.stackTrace) && (
@@ -67,7 +67,7 @@ export function ExceptionsPanel() {
                 background: 'rgba(255,107,107,0.06)',
                 borderRadius: 4,
                 fontSize: 10,
-                color: '#ff9999',
+                color: 'var(--status-error-dim)',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-all',
                 maxHeight: 160,

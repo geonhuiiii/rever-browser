@@ -30,6 +30,9 @@
   --inline-code-bg: #1d1d1d;
   --link: #7ab7ff;
   --accent: #4a8fff;
+  /* Accent used as TEXT. Same hue as --accent but held to 4.5:1, which the
+     fill/border value does not reach on a light surface. */
+  --accent-text: #4a8fff;
   --accent-soft: rgba(80, 140, 255, 0.18);
   --accent-border: rgba(120, 170, 255, 0.35);
   --glass-bar: rgba(18, 18, 20, 0.92);
@@ -55,6 +58,24 @@
   --proxy-tab-border: #453258;
   --proxy-tab-text: #c9aaee;
   --proxy-tab-dot: #a06fe0;
+  /* Status text — console levels, exceptions, websocket direction. These used
+     to be hardcoded per component in dark-theme pastels, which left the light
+     theme printing yellow-on-white. */
+  --status-error: #ff6b6b;
+  --status-error-dim: #ff9999;
+  --status-warn: #ffd93d;
+  --status-info: #74b9ff;
+  --status-ok: #6ee7b7;
+  --status-magenta: #f0abfc;
+  /* HTTP status classes in the traffic and repeater lists. */
+  --http-none: #909090;
+  --http-2xx: #99dd99;
+  --http-3xx: #aa99ff;
+  --http-4xx: #eecc99;
+  --http-5xx: #ff5555;
+  /* Traffic row states. */
+  --row-active: #1d2a3a;
+  --row-selected: #1a1f1a;
 }
 
 :root[data-theme='light'] {
@@ -68,12 +89,15 @@
   --border-3: #bcc0c6;
   --text: #1b1d21;
   --text-2: #3f444b;
-  --text-dim: #6a7078;
+  --text-dim: #61676e;
   --viewport-bg: #ffffff;
   --code-bg: #f3f4f6;
   --inline-code-bg: #eceef1;
-  --link: #2f6fed;
+  /* Darker than --accent on purpose: this one is read as text, so it is held
+     to 4.5:1, while --accent is mostly borders and fills at 3:1. */
+  --link: #2563cd;
   --accent: #2f6fed;
+  --accent-text: #1c56bd;
   --accent-soft: rgba(47, 111, 237, 0.14);
   --accent-border: rgba(47, 111, 237, 0.35);
   --glass-bar: rgba(244, 245, 247, 0.9);
@@ -97,6 +121,21 @@
   --proxy-tab-border: #dcc9f0;
   --proxy-tab-text: #6b3fa8;
   --proxy-tab-dot: #8a55d4;
+  /* Darkened to clear 4.5:1 against --surface (#ffffff); the dark-theme
+     pastels above sit near 1.3:1 on white and are effectively invisible. */
+  --status-error: #c62828;
+  --status-error-dim: #9e2b25;
+  --status-warn: #8a6100;
+  --status-info: #1a5fb4;
+  --status-ok: #1f7a34;
+  --status-magenta: #9c27b0;
+  --http-none: #61676e;
+  --http-2xx: #1f7a34;
+  --http-3xx: #6b3fa8;
+  --http-4xx: #8a6100;
+  --http-5xx: #c62828;
+  --row-active: #e3edfa;
+  --row-selected: #eaf4ec;
 }
 
 html, body, #root {

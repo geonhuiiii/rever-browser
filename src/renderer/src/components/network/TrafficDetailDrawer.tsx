@@ -97,7 +97,7 @@ export function TrafficDetailDrawer({
               borderRadius: 0,
               background: tab === t ? 'var(--surface)' : 'transparent',
               color: tab === t ? 'var(--text)' : 'var(--text-dim)',
-              borderBottom: tab === t ? '2px solid #4a8fff' : '2px solid transparent'
+              borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent'
             }}
           >
             {t}
@@ -111,7 +111,7 @@ export function TrafficDetailDrawer({
           <p style={{ opacity: 0.5 }}>Request no longer in capture buffer.</p>
         )}
         {state === 'error' && (
-          <p style={{ color: '#f88' }}>Failed to load request details.</p>
+          <p style={{ color: 'var(--status-error)' }}>Failed to load request details.</p>
         )}
         {data && tab === 'overview' && <Overview data={data} />}
         {data && tab === 'headers' && <Headers data={data} />}
@@ -262,7 +262,7 @@ function Body({ data }: { data: StoredRequestSummary }) {
       {data.responseBodyError ? (
         <div>
           <h4 style={{ margin: '0 0 6px', fontSize: 12 }}>Response body</h4>
-          <p style={{ color: '#ff7676', fontSize: 11 }}>error: {data.responseBodyError}</p>
+          <p style={{ color: 'var(--status-error)', fontSize: 11 }}>error: {data.responseBodyError}</p>
         </div>
       ) : data.responseBodyBase64 ? (
         <div>

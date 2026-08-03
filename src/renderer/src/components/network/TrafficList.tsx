@@ -133,8 +133,8 @@ export function TrafficList() {
                   padding: '2px 8px',
                   fontSize: 10,
                   borderRadius: 10,
-                  background: active ? '#2a4a6a' : 'var(--surface)',
-                  borderColor: active ? '#4a7ab0' : 'var(--border-2)'
+                  background: active ? 'var(--accent-soft)' : 'var(--surface)',
+                  borderColor: active ? 'var(--accent-border)' : 'var(--border-2)'
                 }}
               >
                 {t}
@@ -194,7 +194,7 @@ export function TrafficList() {
                   onClick={() => onRowClick(e.requestId)}
                   style={{
                     borderBottom: '1px solid var(--border)',
-                    background: isActive ? '#1d2a3a' : isSelected ? '#1a1f1a' : undefined,
+                    background: isActive ? 'var(--row-active)' : isSelected ? 'var(--row-selected)' : undefined,
                     cursor: 'pointer'
                   }}
                 >
@@ -251,8 +251,8 @@ export function TrafficList() {
             right: 12,
             bottom: 12,
             padding: '8px 12px',
-            background: '#1f2a1f',
-            border: '1px solid #2f4a2f',
+            background: 'var(--chip-ok-bg)',
+            border: '1px solid var(--chip-ok-border)',
             borderRadius: 6,
             display: 'flex',
             alignItems: 'center',
@@ -285,11 +285,11 @@ const td: React.CSSProperties = {
 }
 
 function statusColor(status?: number): string {
-  if (!status) return '#888'
-  if (status >= 500) return '#f55'
-  if (status >= 400) return '#ec9'
-  if (status >= 300) return '#a9f'
-  return '#9d9'
+  if (!status) return 'var(--http-none)'
+  if (status >= 500) return 'var(--http-5xx)'
+  if (status >= 400) return 'var(--http-4xx)'
+  if (status >= 300) return 'var(--http-3xx)'
+  return 'var(--http-2xx)'
 }
 
 function formatBytes(n: number): string {

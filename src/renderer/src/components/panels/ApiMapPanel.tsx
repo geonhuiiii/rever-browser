@@ -125,7 +125,7 @@ export function ApiMapPanel() {
     return hosts.slice(0, 16).map((h) => ({
       key: h.host,
       badge: String(h.eps.length),
-      color: 'var(--accent)',
+      color: 'var(--accent-text)',
       label: clip(subLabel(h.host, domain), 24),
       meta: `${h.eps.length} endpoints · ${h.hits} reqs`,
       auth: h.eps.some((e) => e.auth),

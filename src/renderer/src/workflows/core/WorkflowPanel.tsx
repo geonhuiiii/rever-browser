@@ -156,7 +156,7 @@ export function WorkflowPanel(): React.ReactElement {
                     type="button"
                     onClick={() => void runFromList(kind, w)}
                     disabled={busy}
-                    style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-border)', color: 'var(--accent)' }}
+                    style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-border)', color: 'var(--accent-text)' }}
                   >
                     {busy ? 'Running…' : kind.actionLabel ?? 'Run'}
                   </button>

@@ -242,7 +242,7 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
               </label>
             </div>
 
-            {error && <div style={{ color: '#e06c6c' }}>{error}</div>}
+            {error && <div style={{ color: 'var(--status-error)' }}>{error}</div>}
 
             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 2 }}>
               {on && (

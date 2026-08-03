@@ -318,7 +318,7 @@ function ResponseViewer({ history, loading, error }: ResponseProps) {
           <div style={{ opacity: 0.4, fontSize: 11 }}>No response yet — press Send.</div>
         )}
         {error && !loading && (
-          <div style={{ color: '#f88', fontSize: 11, marginBottom: 8, fontFamily: 'ui-monospace, monospace' }}>
+          <div style={{ color: 'var(--status-error)', fontSize: 11, marginBottom: 8, fontFamily: 'ui-monospace, monospace' }}>
             error: {error}
           </div>
         )}
@@ -432,11 +432,11 @@ function HistoryStrip({ history, onRestore }: HistoryStripProps) {
 }
 
 function statusColor(status: number): string {
-  if (!status) return '#888'
-  if (status >= 500) return '#f55'
-  if (status >= 400) return '#ec9'
-  if (status >= 300) return '#a9f'
-  return '#9d9'
+  if (!status) return 'var(--http-none)'
+  if (status >= 500) return 'var(--http-5xx)'
+  if (status >= 400) return 'var(--http-4xx)'
+  if (status >= 300) return 'var(--http-3xx)'
+  return 'var(--http-2xx)'
 }
 
 function formatBytes(n: number): string {

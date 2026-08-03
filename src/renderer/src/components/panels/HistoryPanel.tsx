@@ -106,7 +106,7 @@ export function HistoryPanel() {
                 padding: '4px 10px',
                 fontSize: 10,
                 fontWeight: 600,
-                color: '#8aa',
+                color: 'var(--text-dim)',
                 borderBottom: '1px solid var(--border)',
                 textTransform: 'uppercase',
                 letterSpacing: 0.5

@@ -108,7 +108,7 @@ function ToolBlock({ part }: { part: ToolPart }) {
   const name = part.title || part.toolName || part.type.replace(/^tool-/, '')
   const state = part.state ?? (part.output != null ? 'done' : part.errorText ? 'error' : '…')
   const stateColor =
-    state === 'error' ? '#ff7676' : state === 'done' || state === 'output-available' ? '#7fd47f' : '#bbb'
+    state === 'error' ? 'var(--status-error)' : state === 'done' || state === 'output-available' ? 'var(--status-ok)' : 'var(--text-dim)'
   return (
     <div
       style={{
@@ -157,7 +157,7 @@ function ToolBlock({ part }: { part: ToolPart }) {
             </details>
           )}
           {part.errorText && (
-            <pre style={{ ...preStyle, color: '#ff7676' }}>{part.errorText}</pre>
+            <pre style={{ ...preStyle, color: 'var(--status-error)' }}>{part.errorText}</pre>
           )}
         </div>
       )}

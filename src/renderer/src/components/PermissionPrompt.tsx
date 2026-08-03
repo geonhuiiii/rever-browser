@@ -111,9 +111,9 @@ export function PermissionPrompt() {
                   fontSize: 12,
                   borderRadius: 6,
                   cursor: 'pointer',
-                  border: `1px solid ${isAllow ? '#2f6b3a' : '#6b2f2f'}`,
-                  background: isAllow ? '#1c3a23' : '#3a1c1c',
-                  color: isAllow ? '#bfe9c8' : '#e9bfbf'
+                  border: `1px solid ${isAllow ? 'var(--chip-ok-border)' : 'var(--chip-danger-border)'}`,
+                  background: isAllow ? 'var(--chip-ok-bg)' : 'var(--chip-danger-bg)',
+                  color: isAllow ? 'var(--chip-ok-text)' : 'var(--chip-danger-text)'
                 }}
               >
                 {opt.name}

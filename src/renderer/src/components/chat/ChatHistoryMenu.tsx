@@ -80,7 +80,7 @@ export function ChatHistoryMenu({ currentId, onOpen, disabled }: ChatHistoryMenu
                   <div
                     style={{
                       ...rowStyle,
-                      borderColor: c.id === currentId ? '#4a8ddb' : 'var(--border)'
+                      borderColor: c.id === currentId ? 'var(--accent)' : 'var(--border)'
                     }}
                   >
                     <button
@@ -223,7 +223,7 @@ const deleteStyle: React.CSSProperties = {
   background: 'transparent',
   border: 'none',
   borderLeft: '1px solid var(--border)',
-  color: '#c77',
+  color: 'var(--status-error)',
   cursor: 'pointer',
   fontSize: 16,
   lineHeight: 1

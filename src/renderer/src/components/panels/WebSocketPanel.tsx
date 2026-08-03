@@ -122,7 +122,7 @@ export function WebSocketPanel() {
               <span
                 style={{
                   flexShrink: 0,
-                  color: f.direction === 'sent' ? '#74b9ff' : '#55efc4',
+                  color: f.direction === 'sent' ? 'var(--status-info)' : 'var(--status-ok)',
                   fontSize: 10
                 }}
               >

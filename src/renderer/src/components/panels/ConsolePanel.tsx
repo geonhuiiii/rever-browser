@@ -7,10 +7,10 @@ interface ConsoleEntry {
 }
 
 const TYPE_COLOR: Record<string, string> = {
-  error: '#ff6b6b',
-  warning: '#ffd93d',
-  warn: '#ffd93d',
-  info: '#74b9ff',
+  error: 'var(--status-error)',
+  warning: 'var(--status-warn)',
+  warn: 'var(--status-warn)',
+  info: 'var(--status-info)',
   log: 'var(--text)',
   debug: 'var(--text-dim)'
 }

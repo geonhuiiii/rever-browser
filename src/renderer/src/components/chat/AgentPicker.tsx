@@ -61,10 +61,10 @@ const STATUS_LABEL: Record<AgentTileInfo['status'], string> = {
 }
 
 const STATUS_COLOR: Record<AgentTileInfo['status'], string> = {
-  ready: '#3aa55d',
-  'not-installed': '#888',
-  'needs-key': '#c98a3a',
-  unsupported: '#c98a3a'
+  ready: 'var(--status-ok)',
+  'not-installed': 'var(--http-none)',
+  'needs-key': 'var(--status-warn)',
+  unsupported: 'var(--status-warn)'
 }
 
 interface AgentPickerProps {
@@ -207,7 +207,7 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
                   ...tileStyle,
                   opacity: tile.selectable ? 1 : 0.45,
                   cursor: tile.selectable ? 'pointer' : 'not-allowed',
-                  borderColor: tile.def.id === agentId ? '#4a8ddb' : 'var(--border)'
+                  borderColor: tile.def.id === agentId ? 'var(--accent)' : 'var(--border)'
                 }}
               >
                 <div style={tileIconChip}>{tile.def.icon}</div>

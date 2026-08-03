@@ -185,7 +185,7 @@ function NodeCard({
         )}
       </div>
       {prog?.status === 'branch' && (
-        <div style={{ fontSize: 11, color: 'var(--accent)' }}>→ took “{prog.taken}”</div>
+        <div style={{ fontSize: 11, color: 'var(--accent-text)' }}>→ took “{prog.taken}”</div>
       )}
       <Branch label="then" color="var(--chip-ok-border)">
         <NodeList nodes={node.then} onChange={(then) => onChange({ ...node, then })} tools={tools} progress={progress} />

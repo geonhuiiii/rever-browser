@@ -93,7 +93,7 @@ export function CookiesPanel() {
                 setSticky((s) => ({ ...s, enabled: r.enabled }))
               }}
             />
-            <strong style={{ color: sticky.enabled ? '#6ee7b7' : 'var(--text-2)' }}>
+            <strong style={{ color: sticky.enabled ? 'var(--status-ok)' : 'var(--text-2)' }}>
               Sticky session cookies
             </strong>
           </label>
@@ -150,7 +150,7 @@ export function CookiesPanel() {
                 setDialog((d) => ({ ...d, autoDismiss: r.autoDismiss }))
               }}
             />
-            <strong style={{ color: dialog.autoDismiss ? '#6ee7b7' : 'var(--text-2)' }}>
+            <strong style={{ color: dialog.autoDismiss ? 'var(--status-ok)' : 'var(--text-2)' }}>
               Auto-dismiss alert / confirm / prompt
             </strong>
           </label>
@@ -213,11 +213,11 @@ export function CookiesPanel() {
                   style={{
                     color:
                       d.type === 'alert'
-                        ? '#fbbf24'
+                        ? 'var(--status-warn)'
                         : d.type === 'confirm'
-                          ? '#60a5fa'
+                          ? 'var(--status-info)'
                           : d.type === 'prompt'
-                            ? '#f0abfc'
+                            ? 'var(--status-magenta)'
                             : 'var(--text-dim)',
                     fontWeight: 700,
                     minWidth: 60
@@ -489,7 +489,7 @@ function CookieEditor({
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 14 }}>
           <button onClick={onClose} style={btnStyle}>Cancel</button>
           <button
-            style={{ ...btnStyle, background: '#244', borderColor: '#377' }}
+            style={{ ...btnStyle, background: 'var(--accent-soft)', borderColor: 'var(--accent-border)' }}
             onClick={async () => {
               await window.rev.storage.cookieSet({
                 name: c.name,
@@ -594,7 +594,7 @@ function ChromeImportBar() {
         {busy ? 'Importing…' : 'Import'}
       </button>
       {result && (
-        <span style={{ opacity: 0.8, color: result.startsWith('⚠') ? '#f0a0a0' : '#9fe0b0', width: '100%' }}>
+        <span style={{ opacity: 0.8, color: result.startsWith('⚠') ? 'var(--status-error)' : 'var(--status-ok)', width: '100%' }}>
           {result}
         </span>
       )}
@@ -616,8 +616,8 @@ function SectionTab({ label, count, active, onClick }: { label: string; count: n
     <button
       onClick={onClick}
       style={{
-        background: active ? '#244' : 'var(--surface)',
-        border: '1px solid ' + (active ? '#377' : 'var(--border-2)'),
+        background: active ? 'var(--accent-soft)' : 'var(--surface)',
+        border: '1px solid ' + (active ? 'var(--accent-border)' : 'var(--border-2)'),
         color: 'var(--text-2)',
         padding: '4px 10px',
         borderRadius: 4,
