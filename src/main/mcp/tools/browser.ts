@@ -12,6 +12,7 @@ import {
   clickSelector,
   hoverRef,
   hoverSelector,
+  selectRef,
   takeSnapshot,
   typeRef,
   typeSelector
@@ -210,6 +211,30 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await typeRef(ref, text, submit ?? false)
         return await snapshotAfter(`typed into ${ref}${submit ? ' + submit' : ''}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_select_option',
+    {
+      description:
+        'Choose option(s) in a <select> identified by ref (from the latest browser_snapshot). A native dropdown is drawn by the OS, so browser_click and browser_type cannot reach its options — this is the only way to answer one. Match by option value or by visible label; if nothing matches, the error lists the available options. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Element ref of the <select> from browser_snapshot, e.g. "r20"'),
+        values: z
+          .array(z.string())
+          .describe(
+            'Option values or visible labels to select. Pass one for a normal select, several for a multiple one.'
+          )
+      }
+    },
+    async ({ ref, values }) => {
+      try {
+        const picked = await selectRef(ref, values)
+        return await snapshotAfter(`selected ${picked.join(', ')} in ${ref}`)
       } catch (e) {
         return err(errorMessage(e))
       }

@@ -894,6 +894,64 @@ export async function typeRef(ref: string, text: string, submit: boolean): Promi
   )
 }
 
+/**
+ * Choose option(s) in a `<select>`.
+ *
+ * A native dropdown has no DOM to click: the option list is drawn by the OS,
+ * so the click and type paths cannot reach it. Setting `selected` and firing
+ * input/change is what Playwright does too, and it is the only way a form
+ * gated on a select can be completed — a real one blocked a card payment on
+ * its mandatory installment field, with no tool able to answer it.
+ *
+ * Returns the labels actually chosen. On no match the available options come
+ * back in the error, so the caller can retry without another snapshot.
+ */
+export async function selectRef(ref: string, values: string[]): Promise<string[]> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  emitAiAction({ kind: 'type', label: `AI select${entry?.name ? ` "${entry.name.slice(0, 24)}"` : ''}`, detail: values.join(', ') })
+
+  const res = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `function(values) {
+        if (this.tagName !== 'SELECT') {
+          return { error: 'ref is a <' + this.tagName.toLowerCase() + '>, not a <select>' }
+        }
+        const wanted = new Set(values)
+        const picked = []
+        for (const opt of this.options) {
+          const label = (opt.label || opt.text || '').trim()
+          const on = wanted.has(opt.value) || wanted.has(label)
+          opt.selected = on
+          if (on) picked.push(label || opt.value)
+        }
+        if (picked.length === 0) {
+          return {
+            error: 'no option matched',
+            options: Array.from(this.options).map(o => (o.label || o.text || '').trim())
+          }
+        }
+        this.dispatchEvent(new Event('input', { bubbles: true }))
+        this.dispatchEvent(new Event('change', { bubbles: true }))
+        return { picked }
+      }`,
+      arguments: [{ value: values }],
+      returnByValue: true
+    },
+    entry?.sessionId
+  )) as { result: { value: { picked?: string[]; error?: string; options?: string[] } } }
+
+  const out = res.result.value
+  if (out.error) {
+    const list = out.options?.length ? ` — options: ${out.options.join(' | ')}` : ''
+    throw new Error(`${out.error}${list}`)
+  }
+  return out.picked ?? []
+}
+
 export async function hoverRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)
