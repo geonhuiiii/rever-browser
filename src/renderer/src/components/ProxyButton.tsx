@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { useNavigationRequestStore } from '@/stores/navigation-request'
 import type { ProxyConfig, Tab } from '@/stores/tabs'
 import { useTabsStore } from '@/stores/tabs'
 
@@ -19,7 +20,7 @@ interface Draft {
   password: string
 }
 
-const EMPTY_DRAFT: Draft = { scheme: 'http', host: '', port: '8080', username: '', password: '' }
+const EMPTY_DRAFT: Draft = { scheme: 'http', host: '127.0.0.1', port: '8080', username: '', password: '' }
 
 function draftFrom(proxy: ProxyConfig | undefined): Draft {
   if (!proxy) return { ...EMPTY_DRAFT }
@@ -34,6 +35,7 @@ function draftFrom(proxy: ProxyConfig | undefined): Draft {
 
 export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
   const setTabProxy = useTabsStore((s) => s.setTabProxy)
+  const requestNav = useNavigationRequestStore((s) => s.request)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [error, setError] = useState<string | null>(null)
@@ -81,16 +83,39 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
       username: draft.username.trim() || undefined,
       password: draft.password || undefined
     }
-    setTabProxy(tab.id, config)
+
+    // Already an isolated proxy tab → edit its proxy in place.
+    if (tab.partition) {
+      setTabProxy(tab.id, config)
+      try {
+        await window.rev.proxy.set(tab.id, config)
+      } catch (e) {
+        console.error('[proxy] set failed', e)
+        setError('Failed to apply proxy')
+        return
+      }
+      setOpen(false)
+      onApplied()
+      return
+    }
+
+    // Normal tab → open a NEW tab in its own in-memory partition (separate
+    // cookie jar, incognito-style) routed through the proxy. The tab starts
+    // on about:blank so no request leaves before the proxy is registered,
+    // then navigates to the current page.
+    const partition = `rever-proxy-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+    const target = /^https?:\/\//i.test(tab.url) ? tab.url : 'https://www.google.com'
+    const newId = useTabsStore.getState().addTab('about:blank', { proxy: config, partition })
     try {
-      await window.rev.proxy.set(tab.id, config)
+      await window.rev.proxy.set(newId, config, partition)
     } catch (e) {
       console.error('[proxy] set failed', e)
+      useTabsStore.getState().closeTab(newId)
       setError('Failed to apply proxy')
       return
     }
+    requestNav(target)
     setOpen(false)
-    onApplied()
   }
 
   const disable = async (): Promise<void> => {
@@ -139,12 +164,13 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
             style={{ position: 'fixed', inset: 0, zIndex: 40 }}
           />
           <div
+            className="proxy-popover"
             style={{
               position: 'absolute',
               top: 'calc(100% + 6px)',
               right: 0,
               zIndex: 41,
-              width: 260,
+              width: 286,
               padding: 12,
               display: 'flex',
               flexDirection: 'column',
@@ -173,7 +199,7 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
             </label>
 
             <div style={{ display: 'flex', gap: 6 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1, minWidth: 0 }}>
                 Host
                 <input
                   value={draft.host}
@@ -182,7 +208,7 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
                   style={{ height: 26, padding: '0 6px', fontFamily: 'ui-monospace, monospace' }}
                 />
               </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', width: 74 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1, minWidth: 0 }}>
                 Port
                 <input
                   value={draft.port}
@@ -194,16 +220,18 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
               </label>
             </div>
 
-            <div style={{ display: 'flex', gap: 6 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1 }}>
-                User <span style={{ opacity: 0.6 }}>(optional)</span>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1, minWidth: 0 }}>
+                <span style={{ whiteSpace: 'nowrap' }}>
+                  User <span style={{ opacity: 0.6 }}>(optional)</span>
+                </span>
                 <input
                   value={draft.username}
                   onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value }))}
                   style={{ height: 26, padding: '0 6px' }}
                 />
               </label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 3, color: 'var(--text-dim)', flex: 1, minWidth: 0 }}>
                 Password
                 <input
                   type="password"
@@ -230,13 +258,14 @@ export function ProxyButton({ tab, onApplied }: Props): React.ReactElement {
                 onClick={apply}
                 style={{ background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' }}
               >
-                Apply
+                {tab?.partition ? 'Apply' : 'Open proxy tab'}
               </button>
             </div>
 
             <div style={{ color: 'var(--text-dim)', opacity: 0.8, lineHeight: 1.4 }}>
-              Applies to all tabs (tabs share one browsing session); reloads
-              the page. Per-tab isolation is planned as a separate feature.
+              {tab?.partition
+                ? 'This tab runs in its own session (separate cookies, incognito-style). Changes apply to this tab only and reload the page.'
+                : 'Opens the current page in a new tab with its own cookies and storage (like incognito), routed through this proxy. Other tabs are unaffected.'}
             </div>
           </div>
         </>

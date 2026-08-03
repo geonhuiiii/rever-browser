@@ -255,9 +255,11 @@ const api = {
     ): Promise<boolean> => ipcRenderer.invoke('theme:set-webview-scheme', webContentsId, scheme)
   },
   proxy: {
-    // Apply (or clear, with null) the given tab's upstream proxy.
-    set: (tabId: string, config: ProxyConfig | null): Promise<boolean> =>
-      ipcRenderer.invoke('proxy:set', tabId, config),
+    // Apply (or clear, with null) the given tab's upstream proxy. Pass
+    // `partition` once when creating an isolated proxy tab — main registers
+    // the tab→partition mapping before applying the proxy.
+    set: (tabId: string, config: ProxyConfig | null, partition?: string): Promise<boolean> =>
+      ipcRenderer.invoke('proxy:set', tabId, config, partition),
     // Tell main which tab is active so cookie import / sticky-cookie snapshot
     // target the right partition.
     setActiveTab: (tabId: string): Promise<boolean> =>

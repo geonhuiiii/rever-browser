@@ -62,7 +62,7 @@ import {
   type RepeaterModifications,
   type RepeaterRequestSpec
 } from './repeater'
-import { partitionForTab, setActivePartition } from './tab-partition'
+import { partitionForTab, registerTabPartition, setActivePartition } from './tab-partition'
 import { applyTabProxy, proxyCredentialsForSession, type TabProxyConfig } from './tab-proxy'
 import { listMcpTools } from './mcp/bridge'
 import {
@@ -493,10 +493,17 @@ app.whenReady().then(() => {
   })
 
   // ── Per-tab proxy + active-partition tracking ─────────────────────────────
-  ipcMain.handle('proxy:set', async (_event, tabId: string, config: TabProxyConfig | null) => {
-    await applyTabProxy(tabId, config)
-    return true
-  })
+  // `partition` is passed once when the renderer creates an isolated proxy
+  // tab; it must be registered before applyTabProxy so the proxy lands on the
+  // isolated session instead of the shared one.
+  ipcMain.handle(
+    'proxy:set',
+    async (_event, tabId: string, config: TabProxyConfig | null, partition?: string) => {
+      if (partition) registerTabPartition(tabId, partition)
+      await applyTabProxy(tabId, config)
+      return true
+    }
+  )
 
   // The renderer reports the active tab so cookie-persistence / Chrome import
   // (which use the Electron session.cookies API, not per-webContents CDP) act
