@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rever popup fixture</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  .secret{color:#7ee787;font:13px ui-monospace,Menlo,monospace;margin-top:10px}
+</style>
+</head>
+<body>
+  <h1 style="font-size:16px;margin:0 0 6px">Popup window</h1>
+  <p style="color:#9aa7b4;font-size:12px;margin:0">Opened with window.open from the interaction
+  fixture. Reading this page means tab switching works.</p>
+  <div class="secret">O-POPUP-SECRET-3120</div>
+  <button id="ack" style="margin-top:12px;padding:6px 12px">Acknowledge</button>
+  <script>
+    // Same origin as the opener, so localStorage is how the result gets back.
+    document.getElementById('ack').onclick = () => {
+      localStorage.setItem('o-read', 'O-POPUP-SECRET-3120')
+      document.body.style.background = '#0f2417'
+    }
+  </script>
+</body>
+</html>

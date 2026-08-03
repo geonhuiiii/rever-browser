@@ -130,6 +130,48 @@ reached the page, so a tool that fakes it cannot score.</p>
   <p class="exp">Needs history navigation; browser_navigate to the old URL is a new entry, not a back.</p>
 </section>
 
+<section>
+  <h2>M. Native confirm() — answer it</h2>
+  <button id="m-go">Ask confirm()</button>
+  <div class="r" id="m-r">PENDING — make confirm() return false</div>
+  <p class="exp">The app overrides window.confirm to always return true so the renderer never
+  blocks. Answering <b>false</b> needs a way to set the reply before the call.</p>
+</section>
+
+<section>
+  <h2>N. Native prompt() — supply text</h2>
+  <button id="n-go">Ask prompt()</button>
+  <div class="r" id="n-r">PENDING — make prompt() return N-TYPED-VALUE</div>
+</section>
+
+<section>
+  <h2>O. New window — window.open</h2>
+  <button id="o-go">Open a popup</button>
+  <div class="r" id="o-r">PENDING — open it, read its content, come back</div>
+  <p class="exp">Needs tab listing and switching. The popup prints O-POPUP-SECRET-3120.</p>
+</section>
+
+<section>
+  <h2>P. Infinite scroll</h2>
+  <div id="p-list" style="height:120px;overflow:auto;border:1px solid #2b3444;border-radius:6px;padding:6px"></div>
+  <div class="r" id="p-r">PENDING — reach item 40</div>
+  <p class="exp">The list appends as its OWN container scrolls. browser_scroll moves the window,
+  so an inner scroller needs a different lever.</p>
+</section>
+
+<section>
+  <h2>Q. Clipboard paste</h2>
+  <input id="q-in" placeholder="Q paste here">
+  <div class="r" id="q-r">PENDING — paste Q-CLIPBOARD-9077 into the field</div>
+  <p class="exp">A paste event, not typing: the page reads clipboardData.</p>
+</section>
+
+<section>
+  <h2>R. Canvas drawing</h2>
+  <canvas id="r-canvas" width="240" height="90" style="border:1px solid #2b3444;border-radius:6px;background:#101722"></canvas>
+  <div class="r" id="r-r">PENDING — drag across the canvas to draw a stroke</div>
+</section>
+
 <script>
 const set = (id, ok, msg) => {
   const el = document.getElementById(id)
@@ -209,6 +251,75 @@ kSel.addEventListener('change', () => {
   const v = [...kSel.selectedOptions].map(o => o.value).join(',')
   set('k-r', v === 'k1,k3', v === 'k1,k3' ? 'K-MULTISELECT-OK' : 'selected: ' + (v || 'none'))
 })
+
+// M / N: native dialogs
+document.getElementById('m-go').onclick = () => {
+  const answer = window.confirm('M: answer false to pass')
+  set('m-r', answer === false, answer === false ? 'M-CONFIRM-FALSE-OK' : 'confirm returned ' + answer)
+}
+document.getElementById('n-go').onclick = () => {
+  const v = window.prompt('N: type N-TYPED-VALUE', '')
+  set('n-r', v === 'N-TYPED-VALUE', v === 'N-TYPED-VALUE' ? 'N-PROMPT-OK' : 'prompt returned ' + JSON.stringify(v))
+}
+
+// O: popup. It reports back through localStorage so this page can tell whether
+// the popup was actually read rather than merely opened.
+document.getElementById('o-go').onclick = () => {
+  localStorage.removeItem('o-read')
+  window.open('popup-fixture.html', '_blank', 'width=420,height=260')
+  set('o-r', false, 'popup opened — read its secret there')
+}
+setInterval(() => {
+  if (localStorage.getItem('o-read') === 'O-POPUP-SECRET-3120') set('o-r', true, 'O-POPUP-OK')
+}, 400)
+
+// P: inner-container infinite scroll
+const pList = document.getElementById('p-list')
+let pCount = 0
+const pAdd = (n) => {
+  for (let i = 0; i < n; i++) {
+    const d = document.createElement('div')
+    d.textContent = 'P item ' + (++pCount)
+    pList.appendChild(d)
+  }
+}
+pAdd(12)
+pList.addEventListener('scroll', () => {
+  if (pList.scrollTop + pList.clientHeight >= pList.scrollHeight - 8) pAdd(8)
+  if (pCount >= 40) set('p-r', true, 'P-INNERSCROLL-OK (' + pCount + ' items)')
+})
+
+// Q: paste
+document.getElementById('q-in').addEventListener('paste', (e) => {
+  const t = (e.clipboardData || window.clipboardData).getData('text')
+  set('q-r', t === 'Q-CLIPBOARD-9077', t === 'Q-CLIPBOARD-9077' ? 'Q-PASTE-OK' : 'pasted ' + JSON.stringify(t))
+})
+
+// R: canvas stroke — needs a real press, move, release over the canvas
+;(() => {
+  const cv = document.getElementById('r-canvas')
+  const ctx = cv.getContext('2d')
+  ctx.strokeStyle = '#7ee787'
+  ctx.lineWidth = 3
+  let drawing = false
+  let moved = 0
+  const pos = (e) => {
+    const r = cv.getBoundingClientRect()
+    return [e.clientX - r.left, e.clientY - r.top]
+  }
+  cv.addEventListener('mousedown', (e) => { drawing = true; moved = 0; ctx.beginPath(); ctx.moveTo(...pos(e)) })
+  cv.addEventListener('mousemove', (e) => {
+    if (!drawing) return
+    moved++
+    ctx.lineTo(...pos(e))
+    ctx.stroke()
+  })
+  document.addEventListener('mouseup', () => {
+    if (!drawing) return
+    drawing = false
+    set('r-r', moved >= 5, moved >= 5 ? 'R-CANVAS-OK (' + moved + ' points)' : 'only ' + moved + ' move(s)')
+  })
+})()
 
 // L: back/forward — passes only when arriving back at the bare URL from ?l=visited
 ;(() => {
