@@ -110,6 +110,26 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 ### JS debugger (advanced)
 - `bp_add` (by URL regex + line) / `bp_remove` / `bp_status` / `bp_resume` / `bp_step_*` / `bp_eval_in_frame` — pause execution, walk frames, evaluate in scope.
 
+### Request replay & tampering (API-reversing mode)
+- `repeater_send` — replay a captured request from the **browser context** (keeps the page's cookies/session); `replay_request` is the Node-fetch equivalent.
+- `override_add` / `override_list` / `override_remove` — local overrides: swap a response body/status in for matching requests.
+- `header_preset_save` / `header_preset_list` / `header_preset_apply` / `header_preset_disable` — save and re-apply sets of request headers.
+
+### Active probing (offensive — **gated by the side-effect rule**)
+- `intruder_run` — Burp-Intruder-style payload fuzzer over a request position. `burst_send` — many concurrent copies of a request (race / TOCTOU).
+- `payload_probe` — reflected-XSS probe. `crlf_test` — CRLF / header injection. `path_probe` — backup/disclosure paths. `lfi_probe` — LFI / traversal.
+- These hit the user's live target hard — name the target and volume and get a go-ahead first (see Workflow defaults).
+
+### Security inspection, findings & export
+- `security_inspect` — CSP / HSTS / X-Frame-Options / CORS posture of a response.
+- `finding_add` / `finding_list` / `finding_export` / `finding_remove` — durable Markdown findings store; the session deliverable.
+- `har_export` — export captured traffic as HAR 1.2 (import into Burp / Caido).
+
+### Storage, workers & DOM mutation
+- `cookie_set` / `cookie_delete` / `cookie_list` — cookie jar for the active origin.
+- `sw_list` / `sw_unregister` / `sw_caches` — inspect / unregister service workers and list their caches.
+- `dom_set_attr` / `dom_set_style` / `dom_set_text` / `dom_remove` — mutate the live DOM (state-altering — tear these down when the task is done).
+
 ## Workflow defaults
 
 - **DOM before API.** First ask "can I just read this off the page?" Use `dom_extract` (structured) or `browser_snapshot` (overview) to get the result, and only reach for custom `browser_evaluate` when those fall short. Don't open the network tools unless you're in API mode (see Strategy).
