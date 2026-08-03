@@ -132,7 +132,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 
 ## Workflow defaults
 
-- **DOM before API.** First ask "can I just read this off the page?" Use `dom_extract` (structured) or `browser_snapshot` (overview) to get the result, and only reach for custom `browser_evaluate` when those fall short. Don't open the network tools unless you're in API mode (see Strategy).
+- **DOM before API.** First ask "can I just read this off the page?" Use `dom_extract` (structured) or `browser_snapshot` (overview) to get the result, and only reach for custom `browser_evaluate` when those fall short. Don't do API-reversing *work* (diff / replay / codegen) unless you're in API mode (see Strategy) — but a single filtered `list_requests({ since })` as cheap recon (per the iron rule) is always fine, even in DOM mode.
 - **One step at a time** in browser control: navigate → wait/snapshot → confirm → next. Don't chain 5 actions blindly.
 - **When in API mode:** _filter, don't dump_ — always pass `host`, `since`, `methodOrType`, or `limit` to `list_requests` (the store holds 500 entries). Skip static assets (`.css`, `.js`, `.png`, `.woff`, ad/analytics) unless asked. **API candidates** are usually XHR/Fetch with a JSON body or response, fired right after a user action, often carrying `Authorization` or a cookie session.
 - **Bot-detection sites**: rely on the user's own session — never automate login on Instagram, X, etc.
