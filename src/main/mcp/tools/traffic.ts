@@ -58,4 +58,46 @@ export function registerTrafficTools(mcp: McpServer) {
       return ok(JSON.stringify(entry, null, 2))
     }
   )
+
+  mcp.registerTool(
+    'get_request_initiator',
+    {
+      description:
+        'Show what caused a captured request to fire: the initiator type (script/parser/preload/other) and, for script-initiated XHR/Fetch, the JavaScript call stack (top frame = the code that directly issued it). Use this to jump from a request straight to the script:line that built it, before setting a breakpoint. Line/column are 1-based for readability.',
+      inputSchema: {
+        requestId: z.string().describe('requestId returned by list_requests')
+      }
+    },
+    async ({ requestId }) => {
+      const entry = getRequest(requestId)
+      if (!entry) return err(`unknown requestId: ${requestId}`)
+      const stack = (entry.initiatorStack ?? []).map((f) => ({
+        functionName: f.functionName || '(anonymous)',
+        url: f.url,
+        line: f.lineNumber + 1,
+        column: f.columnNumber + 1,
+        location: `${f.url}:${f.lineNumber + 1}:${f.columnNumber + 1}`
+      }))
+      const top = stack[0]
+      return ok(
+        JSON.stringify(
+          {
+            requestId: entry.requestId,
+            method: entry.method,
+            url: entry.url,
+            initiatorType: entry.initiatorType ?? 'unknown',
+            initiatorUrl: entry.initiatorUrl,
+            firedFrom: top?.location,
+            stack,
+            note:
+              stack.length === 0
+                ? 'No JS call stack — this request was not script-initiated (e.g. parser/document, preload, or a redirect). initiatorType tells you which.'
+                : undefined
+          },
+          null,
+          2
+        )
+      )
+    }
+  )
 }
