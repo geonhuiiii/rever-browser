@@ -1122,6 +1122,30 @@ export async function uploadToRef(ref: string, paths: string[]): Promise<string[
 }
 
 /**
+ * Move back or forward in the tab's own history.
+ *
+ * Navigating to the previous URL is not the same thing: it pushes a new entry,
+ * so the page sees a fresh load rather than a restore, and anything that keys
+ * off history length or popstate behaves differently.
+ */
+export async function navigateHistory(direction: 'back' | 'forward'): Promise<string> {
+  const target = getActiveTarget()
+  if (!target) throw new Error('no active browser target')
+
+  const { currentIndex, entries } = (await target.dbg.sendCommand(
+    'Page.getNavigationHistory'
+  )) as { currentIndex: number; entries: Array<{ id: number; url: string }> }
+
+  const next = direction === 'back' ? currentIndex - 1 : currentIndex + 1
+  if (next < 0 || next >= entries.length) {
+    throw new Error(`nothing to go ${direction} to — at entry ${currentIndex + 1} of ${entries.length}`)
+  }
+  await target.dbg.sendCommand('Page.navigateToHistoryEntry', { entryId: entries[next].id })
+  emitAiAction({ kind: 'navigate', label: `AI ${direction}`, detail: entries[next].url })
+  return entries[next].url
+}
+
+/**
  * Give a ref keyboard focus without clicking it.
  *
  * Clicking to focus is not always equivalent: a click on a dialog's backdrop

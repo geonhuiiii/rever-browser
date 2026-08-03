@@ -16,6 +16,7 @@ import {
   clickRefWith,
   dragRef,
   focusRef,
+  navigateHistory,
   uploadToRef,
   selectRef,
   takeSnapshot,
@@ -238,6 +239,26 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         const files = await uploadToRef(ref, paths)
         return await snapshotAfter(`attached ${files.length} file(s) to ${ref}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_history',
+    {
+      description:
+        "Move back or forward in the tab's own history. browser_navigate to the previous URL is NOT the same thing: it pushes a new entry, so the page sees a fresh load rather than a restore and anything keyed off popstate or history length behaves differently. Errors when there is nothing to go to. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.",
+      inputSchema: {
+        direction: z.enum(['back', 'forward']).describe('Which way to move')
+      }
+    },
+    async ({ direction }) => {
+      try {
+        const url = await navigateHistory(direction)
+        await waitForSettle({ idleMs: 300, timeoutMs: 3000 })
+        return await snapshotAfter(`went ${direction} to ${url}`)
       } catch (e) {
         return err(errorMessage(e))
       }
