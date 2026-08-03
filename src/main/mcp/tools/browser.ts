@@ -16,6 +16,7 @@ import {
   clickRefWith,
   dragRef,
   focusRef,
+  uploadToRef,
   selectRef,
   takeSnapshot,
   typeRef,
@@ -215,6 +216,28 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await typeRef(ref, text, submit ?? false)
         return await snapshotAfter(`typed into ${ref}${submit ? ' + submit' : ''}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_file_upload',
+    {
+      description:
+        'Attach files to a file input identified by ref. A file input cannot be typed into — the browser owns its value — and clicking it opens a native picker no tool can answer, so this is the only way to fill one. The ref may point at the input or at its rendered button. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Ref of the file input, or of its button, e.g. "r7"'),
+        paths: z
+          .array(z.string())
+          .describe('Absolute paths of the files to attach. Pass several only for a multiple input.')
+      }
+    },
+    async ({ ref, paths }) => {
+      try {
+        const files = await uploadToRef(ref, paths)
+        return await snapshotAfter(`attached ${files.length} file(s) to ${ref}`)
       } catch (e) {
         return err(errorMessage(e))
       }

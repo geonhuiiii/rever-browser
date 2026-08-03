@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+
 import { emitAiAction } from '../ai-events'
 import { getActiveTarget, waitForSettle } from '../chrome-cdp'
 import { visualize } from './cdp-eval'
@@ -1072,6 +1074,51 @@ export async function selectRef(ref: string, values: string[]): Promise<string[]
     throw new Error(`${out.error}${list}`)
   }
   return out.picked ?? []
+}
+
+/**
+ * Attach files to a file input.
+ *
+ * A file input cannot be typed into — the browser owns its value, and clicking
+ * it opens a native picker no tool can answer. `DOM.setFileInputFiles` is the
+ * only way in. The ref usually points at the input's rendered button rather
+ * than the input itself, so the element is walked up to the real
+ * `input[type=file]` before the files are set.
+ */
+export async function uploadToRef(ref: string, paths: string[]): Promise<string[]> {
+  const entry = refMap.get(ref)
+  if (!entry) throw new Error(`unknown ref "${ref}" — call browser_snapshot first`)
+  const missing = paths.filter((p) => !existsSync(p))
+  if (missing.length) {
+    throw new Error(`file(s) not found: ${missing.join(', ')} — pass absolute paths`)
+  }
+
+  const target = getActiveTarget()!
+  const objectId = await resolveObjectId(ref)
+  const input = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `function() {
+        if (this.tagName === 'INPUT' && this.type === 'file') return this
+        return this.closest?.('input[type=file]')
+          ?? this.querySelector?.('input[type=file]')
+          ?? null
+      }`
+    },
+    entry.sessionId
+  )) as { result: { objectId?: string; subtype?: string } }
+
+  if (!input.result.objectId || input.result.subtype === 'null') {
+    throw new Error(`ref "${ref}" is not a file input and does not contain one`)
+  }
+
+  await target.dbg.sendCommand(
+    'DOM.setFileInputFiles',
+    { files: paths, objectId: input.result.objectId },
+    entry.sessionId
+  )
+  return paths
 }
 
 /**
