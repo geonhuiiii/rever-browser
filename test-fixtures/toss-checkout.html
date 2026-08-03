@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever toss sandbox checkout</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px;max-width:560px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  .exp{font-size:11px;color:#7d8896;margin:10px 0 0}
+  .exp b{color:#7ee787}
+  #pay{margin-top:12px;padding:10px 18px;font-size:14px;width:100%}
+  #status{margin-top:10px;font:12px ui-monospace,Menlo,monospace;color:#ffa657;white-space:pre-wrap}
+  #payment-method,#agreement{background:#fff;border-radius:8px}
+</style>
+</head>
+<body>
+
+<h1>Toss Payments sandbox checkout</h1>
+<p class="sub">Runs the real widget with the test client key Toss publishes in its docs
+(<code>test_gck_docs_…</code>), so the flow is genuine and nothing is charged. The developer
+centre's own sandbox page needs a signed-in account; this one does not.</p>
+
+<div id="payment-method"></div>
+<div id="agreement"></div>
+<button id="pay">Pay 50,000 KRW</button>
+<div id="status">loading widget…</div>
+
+<p class="exp">Expected: the payment-method list and agreement render inside Toss iframes, and
+pressing Pay leaves this page for <b>the Toss payment window</b>. A card payment there ends on
+<code>/success?paymentKey=…&orderId=…</code> (this fixture server 404s that path — the query
+string is the result). Check <b>list_requests</b> for the confirm-side calls.</p>
+
+<script src="https://js.tosspayments.com/v2/standard"></script>
+<script>
+  const CLIENT_KEY = 'test_gck_docs_Ovk5rk1EwkEbP0W43n07xlzm'
+  const status = document.getElementById('status')
+  const say = (m) => { status.textContent = m; console.log('[checkout]', m) }
+
+  ;(async () => {
+    try {
+      const tossPayments = TossPayments(CLIENT_KEY)
+      const widgets = tossPayments.widgets({ customerKey: 'rever-test-customer-0001' })
+      await widgets.setAmount({ currency: 'KRW', value: 50000 })
+      await Promise.all([
+        widgets.renderPaymentMethods({ selector: '#payment-method', variantKey: 'DEFAULT' }),
+        widgets.renderAgreement({ selector: '#agreement', variantKey: 'AGREEMENT' })
+      ])
+      say('widget ready — press Pay')
+
+      document.getElementById('pay').addEventListener('click', async () => {
+        say('requesting payment…')
+        try {
+          await widgets.requestPayment({
+            orderId: 'rever-' + Date.now(),
+            orderName: 'rever-browser test order',
+            customerName: 'Rever Tester',
+            customerEmail: 'tester@example.com',
+            successUrl: window.location.origin + '/success',
+            failUrl: window.location.origin + '/fail'
+          })
+        } catch (e) {
+          say('requestPayment failed: ' + (e && e.message ? e.message : String(e)))
+        }
+      })
+    } catch (e) {
+      say('init failed: ' + (e && e.message ? e.message : String(e)))
+    }
+  })()
+</script>
+
+</body>
+</html>
