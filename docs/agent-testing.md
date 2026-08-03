@@ -120,8 +120,10 @@ when the real event reached the page, so a tool that fakes it cannot score. It
 is how the keyboard, right-click, double-click and multi-select gaps were
 found — each was invisible until a page demanded it.
 
-All twelve groups pass. Run L on its own: following its link reloads the page,
-which resets every other group's result.
+All eighteen groups pass. Three want their own run, because they change the
+page out from under the others: **L** follows a link and reloads, **P** grows
+the DOM past the click-scan cap, and **R** needs the canvas scrolled into view
+before it is scanned.
 
 Two of them need the call order to be right rather than a special tool:
 
@@ -130,6 +132,13 @@ Two of them need the call order to be right rather than a special tool:
   read and clicked normally.
 - **B and H.** `browser_press_key` returns a fresh snapshot, so a ref read
   before the press is stale by the time of the next one. Re-read it each time.
+
+- **M and N.** `browser_handle_dialog` arms a ONE-SHOT answer, so call it
+  immediately before the click that opens the dialog rather than earlier.
+- **P.** Growing a list past the click-scan cap disables the scan for the whole
+  page, and every role-less click target disappears with it. The snapshot now
+  says so; before that it was silent, and a canvas that had a ref a moment
+  earlier simply stopped appearing.
 
 `browser_drag` reports which mechanism ran — `native` uses the browser's own
 drag machinery, `pointer` a held-button gesture for dnd-kit / SortableJS, and

@@ -1,9 +1,16 @@
+import { clipboard } from 'electron'
 import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { emitAiAction } from '../../ai-events'
-import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
+import {
+  armDialogAnswer,
+  getActiveTarget,
+  listTargets,
+  setActiveTarget,
+  waitForSettle
+} from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
 import { evalInPage, visualize } from '../cdp-eval'
 import { namedKeys, pressKey } from '../human-input'
@@ -15,7 +22,9 @@ import {
   hoverSelector,
   clickRefWith,
   dragRef,
+  drawOnRef,
   focusRef,
+  scrollRefBy,
   navigateHistory,
   uploadToRef,
   selectRef,
@@ -57,6 +66,7 @@ function filterNote(stats: {
   offscreen: number
   clickOnlyRefs: number
   clickScanned: number
+  clickScanSkipped: boolean
   clickMatched: number
   fellBackToFull: boolean
   frames: number
@@ -73,6 +83,11 @@ function filterNote(stats: {
   // Reported even at zero: a silent scan is indistinguishable from a page that
   // genuinely has no role-less click targets, and the scanned/matched split is
   // what separates "scan found nothing" from "geometry failed to correlate".
+  if (stats.clickScanSkipped) {
+    parts.push(
+      'click scan SKIPPED: the page has too many elements, so role-less click targets (a <div> with an onClick and no ARIA role) are missing from this outline entirely'
+    )
+  }
   if (stats.clickScanned > 0 || stats.clickOnlyRefs > 0) {
     parts.push(
       `click scan: ${stats.clickScanned} candidate(s), ${stats.clickMatched} correlated, ${stats.clickOnlyRefs} new ref(s) tagged (click-scan)`
@@ -217,6 +232,132 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await typeRef(ref, text, submit ?? false)
         return await snapshotAfter(`typed into ${ref}${submit ? ' + submit' : ''}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_scroll_element',
+    {
+      description:
+        'Scroll a container identified by ref, rather than the window. browser_scroll moves the page, which does nothing for a list, drawer or chat log that scrolls inside its own box — those show as [scrollable +Npx] in the snapshot. Stepped, so lazy-loading handlers fire. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Ref of the scroll container, e.g. "r15"'),
+        deltaY: z.number().describe('Pixels to scroll; negative scrolls up')
+      }
+    },
+    async ({ ref, deltaY }) => {
+      try {
+        const top = await scrollRefBy(ref, deltaY)
+        return await snapshotAfter(`scrolled ${ref} to ${Math.round(top)}px`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_draw',
+    {
+      description:
+        'Press, move and release inside ONE element — a canvas stroke, a signature pad, a colour picker, a range track. browser_drag goes between two elements and cannot express a gesture that starts and ends on the same surface. Points are fractions of the element box (0..1), so 0.1,0.5 to 0.9,0.5 draws a horizontal line across the middle. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Ref of the surface to draw on, e.g. "r24"'),
+        from: z
+          .object({ x: z.number(), y: z.number() })
+          .describe('Start point as fractions of the element box, e.g. {"x":0.1,"y":0.5}'),
+        to: z
+          .object({ x: z.number(), y: z.number() })
+          .describe('End point as fractions of the element box')
+      }
+    },
+    async ({ ref, from, to }) => {
+      try {
+        await drawOnRef(ref, from, to)
+        return await snapshotAfter(`drew on ${ref}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_paste',
+    {
+      description:
+        'Put text on the clipboard and paste it into the element identified by ref. A page that reads clipboardData on a paste event sees nothing when the text is typed instead — the two are different events. Overwrites the real clipboard. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+      inputSchema: {
+        ref: z.string().describe('Ref of the field to paste into, e.g. "r22"'),
+        text: z.string().describe('Text to place on the clipboard and paste')
+      }
+    },
+    async ({ ref, text }) => {
+      try {
+        clipboard.writeText(text)
+        await focusRef(ref)
+        emitAiAction({ kind: 'type', label: 'AI paste', detail: text.slice(0, 80) })
+        await pressKey('v', { modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
+        return await snapshotAfter(`pasted ${text.length} char(s) into ${ref}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_tabs',
+    {
+      description:
+        'List the open browser tabs, or switch to one. A window.open popup becomes a tab, and its content is unreachable until the tools are pointed at it — every other browser tool acts on the selected tab only. Select by index from the list.',
+      inputSchema: {
+        action: z.enum(['list', 'select']).describe('What to do'),
+        index: z.number().optional().describe('Tab index to select, from the list output')
+      }
+    },
+    async ({ action, index }) => {
+      try {
+        const tabs = listTargets()
+        if (action === 'list') {
+          if (!tabs.length) return ok('no attached tabs')
+          return ok(
+            tabs
+              .map((t, i) => `${i}${t.active ? ' *' : '  '} ${t.title || '(untitled)'} — ${t.url}`)
+              .join('\n') + '\n\n* = selected'
+          )
+        }
+        if (index == null || index < 0 || index >= tabs.length) {
+          return err(`index must be 0..${tabs.length - 1}`)
+        }
+        if (!setActiveTarget(tabs[index].id)) return err('could not select that tab')
+        return await snapshotAfter(`selected tab ${index}: ${tabs[index].url}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_handle_dialog',
+    {
+      description:
+        'Arm the answer the page\'s NEXT confirm() or prompt() will get, then trigger it. Without this every confirm() returns true and every prompt() returns its default, because the app answers dialogs itself so the renderer never blocks — so a "cancel" branch or a typed-in value could not be reached. One-shot: consumed by the first dialog, so a stale answer cannot apply to a later one. Call this BEFORE the click that opens the dialog.',
+      inputSchema: {
+        accept: z
+          .boolean()
+          .describe('true for OK, false for Cancel (a cancelled prompt returns null)'),
+        promptText: z
+          .string()
+          .optional()
+          .describe('Value a prompt() should return. Ignored when accept is false.')
+      }
+    },
+    async ({ accept, promptText }) => {
+      try {
+        await armDialogAnswer(accept, promptText)
+        const what = accept ? (promptText != null ? `OK with "${promptText}"` : 'OK') : 'Cancel'
+        return ok(`next dialog will answer ${what} — now trigger it`)
       } catch (e) {
         return err(errorMessage(e))
       }
