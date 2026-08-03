@@ -120,23 +120,22 @@ when the real event reached the page, so a tool that fakes it cannot score. It
 is how the keyboard, right-click, double-click and multi-select gaps were
 found — each was invisible until a page demanded it.
 
-Passing: Escape on a dialog, arrow keys on a listbox, right-click menu,
-double-click, clearing a field, setting a slider to an exact value, waiting for
-delayed content, multi-select.
+All twelve groups pass. Run L on its own: following its link reloads the page,
+which resets every other group's result.
 
-Still open, with what each needs:
+Two of them need the call order to be right rather than a special tool:
 
-- **E, drag and drop.** `browser_drag` tries `Input.setInterceptDrags` +
-  `dispatchDragEvent` and falls back to a held-button pointer gesture. Neither
-  moves the fixture's HTML5 drop target; `Input.dragIntercepted` never
-  arrives. The tool reports which path it took, so check the page changed
-  rather than trusting the call.
-- **F, file upload.** No tool sets a file input. Needs `DOM.setFileInputFiles`.
-- **J, hover-revealed menu.** The item is revealed by `:hover` on the wrapper,
-  and the hover is not held while the follow-up snapshot and click run, so the
-  menu closes before it can be clicked. Needs the hover to persist across calls.
-- **L, back / forward.** No history tool. `browser_navigate` to the previous URL
-  is a new entry, not a back.
+- **J, hover-revealed menu.** Hover the visible trigger, not the wrapper's box.
+  The hover survives the snapshot that follows, so the revealed item can be
+  read and clicked normally.
+- **B and H.** `browser_press_key` returns a fresh snapshot, so a ref read
+  before the press is stale by the time of the next one. Re-read it each time.
+
+`browser_drag` reports which mechanism ran — `native` uses the browser's own
+drag machinery, `pointer` a held-button gesture for dnd-kit / SortableJS, and
+`synthetic` dispatches DragEvents with `isTrusted=false` as a last resort. Only
+the last is detectable by a page that checks, so prefer to confirm the drop
+changed something rather than trusting the call.
 
 ## Known limitations (deferred)
 

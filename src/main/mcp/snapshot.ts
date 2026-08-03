@@ -881,11 +881,76 @@ export async function clickRefWith(
 }
 
 /**
+ * A cheap fingerprint of the drop target, used to tell whether a drag that
+ * dispatched cleanly actually changed anything. A gesture no library listened
+ * to leaves this identical.
+ */
+async function dropSignature(ref: string): Promise<string> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  const res = (await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration:
+        'function() { return this.className + "|" + this.childElementCount + "|" + (this.textContent || "").slice(0, 200) }',
+      returnByValue: true
+    },
+    entry?.sessionId
+  )) as { result: { value: string } }
+  return res.result.value
+}
+
+/**
+ * Dispatch a full HTML5 drag sequence with a shared DataTransfer.
+ *
+ * Last resort, and deliberately explicit about it: the handlers run and the
+ * DataTransfer carries whatever dragstart put in it, but the events are not
+ * trusted input, so a page that checks isTrusted will not be fooled.
+ */
+async function synthesiseDrag(fromRef: string, toRef: string): Promise<void> {
+  const fromEntry = refMap.get(fromRef)
+  const fromObj = await resolveObjectId(fromRef)
+  const toObj = await resolveObjectId(toRef)
+  const target = getActiveTarget()!
+
+  await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId: fromObj,
+      functionDeclaration: `function(drop) {
+        const dt = new DataTransfer()
+        const at = (el) => {
+          const r = el.getBoundingClientRect()
+          return { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }
+        }
+        const fire = (el, type, pos) => {
+          const ev = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, ...pos })
+          el.dispatchEvent(ev)
+          return ev
+        }
+        fire(this, 'dragstart', at(this))
+        fire(drop, 'dragenter', at(drop))
+        fire(drop, 'dragover', at(drop))
+        fire(drop, 'drop', at(drop))
+        fire(this, 'dragend', at(drop))
+      }`,
+      arguments: [{ objectId: toObj }]
+    },
+    fromEntry?.sessionId
+  )
+}
+
+/**
  * Drag one ref onto another. Returns which mechanism actually ran, because
  * the two reach different libraries and a drag that changed nothing is
  * otherwise indistinguishable from one that worked.
  */
-export async function dragRef(fromRef: string, toRef: string): Promise<'native' | 'pointer'> {
+export async function dragRef(
+  fromRef: string,
+  toRef: string
+): Promise<'native' | 'pointer' | 'synthetic'> {
   // Two passes. The first may scroll either element into view, which moves the
   // other one — measuring source then target once gives a source coordinate
   // that the target's scroll has already invalidated. By the second pass both
@@ -902,8 +967,19 @@ export async function dragRef(fromRef: string, toRef: string): Promise<'native' 
   // (dnd-kit, SortableJS in pointer mode) listen for.
   const native = await nativeDrag(from, to)
   if (native) return 'native'
+
+  const before = await dropSignature(toRef)
   await humanDrag(from, to)
-  return 'pointer'
+  if ((await dropSignature(toRef)) !== before) return 'pointer'
+
+  // Neither real-input path reached the page. That happens with HTML5
+  // draggable elements, where the browser takes the gesture over on mousedown
+  // and the mouse events that follow are invisible to the document. Synthesise
+  // the drag events as a last resort — the DataTransfer is real and the
+  // handlers run, but the events carry isTrusted=false, so the caller is told
+  // which path ran rather than being left to assume the drag was genuine.
+  await synthesiseDrag(fromRef, toRef)
+  return 'synthetic'
 }
 
 /**

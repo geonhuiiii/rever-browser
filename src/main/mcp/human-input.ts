@@ -246,17 +246,42 @@ export async function nativeDrag(
     return false
   }
 
+  // dragEnter establishes the current drop target. Without it Chromium has
+  // nothing to hand the following dragOver/drop to, and the sequence dispatches
+  // cleanly while the page sees nothing.
   const steps = 10
   for (let i = 1; i <= steps; i++) {
     const t = easeInOutCubic(i / steps)
+    const x = from.x + (to.x - from.x) * t
+    const y = from.y + (to.y - from.y) * t
+    if (i === 1) {
+      await target.dbg.sendCommand('Input.dispatchDragEvent', {
+        type: 'dragEnter',
+        x,
+        y,
+        data: dragData
+      })
+    }
     await target.dbg.sendCommand('Input.dispatchDragEvent', {
       type: 'dragOver',
-      x: from.x + (to.x - from.x) * t,
-      y: from.y + (to.y - from.y) * t,
+      x,
+      y,
       data: dragData
     })
     await sleep(rand(14, 28))
   }
+  await target.dbg.sendCommand('Input.dispatchDragEvent', {
+    type: 'dragEnter',
+    x: to.x,
+    y: to.y,
+    data: dragData
+  })
+  await target.dbg.sendCommand('Input.dispatchDragEvent', {
+    type: 'dragOver',
+    x: to.x,
+    y: to.y,
+    data: dragData
+  })
   await target.dbg.sendCommand('Input.dispatchDragEvent', {
     type: 'drop',
     x: to.x,
