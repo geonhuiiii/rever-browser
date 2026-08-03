@@ -168,6 +168,38 @@ button:disabled { opacity: 0.5; cursor: default; }
   outline-offset: -2px;
 }
 
+/* Bookmark bar — Chrome-style chips: flat until hovered, favicon + label,
+   the remove × only appears on hover. */
+.bookmark-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.bookmark-chip:hover:not(:disabled) { background: var(--glass-hover); }
+.bookmark-chip-x {
+  display: none;
+  width: 14px;
+  height: 14px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.bookmark-chip:hover .bookmark-chip-x { display: inline-flex; }
+.bookmark-chip-x:hover { background: var(--border-2); color: var(--text); }
+
 /* Markdown */
 .md { line-height: 1.55; word-break: break-word; }
 .md--dim { opacity: 0.6; font-style: italic; }

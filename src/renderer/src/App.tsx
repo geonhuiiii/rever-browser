@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 
 import { AiActionOverlay } from '@/components/AiActionOverlay'
+import { BookmarkBar } from '@/components/BookmarkBar'
 import { BotCheckButton } from '@/components/BotCheckButton'
 import { DetailDrawer } from '@/components/DetailDrawer'
 import { FloatingChips } from '@/components/FloatingChips'
@@ -15,6 +16,7 @@ import { useCdpEvents } from '@/hooks/use-cdp-events'
 import { useResizable } from '@/hooks/use-resizable'
 import { useBrowserModeStore } from '@/stores/browser-mode'
 import { useNavigationRequestStore } from '@/stores/navigation-request'
+import { useBookmarksStore } from '@/stores/bookmarks'
 import { useTabsStore } from '@/stores/tabs'
 import { useAppThemeStore, resolveTheme } from '@/stores/app-theme'
 import { useViewportStore } from '@/stores/viewport'
@@ -37,6 +39,11 @@ function App() {
 
   const browserMode = useBrowserModeStore((s) => s.mode)
   const setBrowserMode = useBrowserModeStore((s) => s.setMode)
+
+  const bookmarks = useBookmarksStore((s) => s.bookmarks)
+  const addBookmark = useBookmarksStore((s) => s.add)
+  const removeBookmarkByUrl = useBookmarksStore((s) => s.removeByUrl)
+  const isBookmarked = !!activeTab && bookmarks.some((b) => b.url === activeTab.url)
 
   const themeMode = useAppThemeStore((s) => s.mode)
   const cycleAppTheme = useAppThemeStore((s) => s.cycle)
@@ -437,6 +444,33 @@ function App() {
                 boxSizing: 'border-box'
               }}
             />
+            {browserMode === 'embedded' && (
+              <button
+                className="toolbar-btn"
+                type="button"
+                onClick={() => {
+                  if (!activeTab) return
+                  if (isBookmarked) removeBookmarkByUrl(activeTab.url)
+                  else addBookmark({ url: activeTab.url, title: activeTab.title })
+                }}
+                disabled={!activeTab || !/^https?:\/\//i.test(activeTab.url)}
+                title={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill={isBookmarked ? 'var(--accent)' : 'none'}
+                  stroke={isBookmarked ? 'var(--accent)' : 'currentColor'}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </button>
+            )}
             <button className="toolbar-btn" type="submit">Go</button>
             <button
               className="toolbar-btn"
@@ -499,6 +533,7 @@ function App() {
               {browserMode === 'embedded' ? 'Embedded' : 'External (real Chrome)'}
             </button>
           </form>
+          {browserMode === 'embedded' && <BookmarkBar />}
           {/* paddingBottom reserves the chip bar's strip so the webview ends
               above it instead of being covered by it. The bar and the slide-up
               panel are absolutely positioned against this box's bottom edge,
