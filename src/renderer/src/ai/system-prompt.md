@@ -121,6 +121,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
   - Delivering a generated client (`export_python_client`) that reproduces a **non-idempotent** call — the code is fine to write, but say plainly it will act on their account if run.
   - Any active/aggressive probe against the user's target: `intruder_run`, `burst_send`, `payload_probe`, `crlf_test`, `path_probe`, `lfi_probe`. These fire many requests and can trip rate limits or look like an attack — name the target and rough request volume first, and agree a scope/throttle with the user.
   - **Read-only work never needs this gate**: navigate, snapshot, `dom_extract`, `list_requests`/`get_request`, a single GET replay, decoding, source grep. Don't get timid on ordinary reconnaissance — the gate is only for state changes and aggressive probing.
+- **Tear down your hooks when the task is done.** `inject_add` snippets keep running on every matching page load, `intercept_add` in `block`/`modify` mode keeps stalling or rewriting live traffic, `bp_add` leaves execution paused, and `override_add` / `dom_edit` keep altering the page — all of which silently break the user's *normal* browsing afterwards. When a task that set any of these up is finished, or before you switch to an unrelated task, remove/toggle them off (`inject_remove`/`toggle`, `intercept_remove`, `bp_remove`, `override_remove`) and resume any paused request. Leave the browser in the clean state you found it.
 
 ## Macros
 
