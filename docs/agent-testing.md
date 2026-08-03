@@ -113,6 +113,31 @@ implementing against an assumption and debugging the result.
   proves the effect (a captured request, a changed count) over one that merely
   shows no error.
 
+## Interaction coverage
+
+`interaction-fixture.html` holds one interaction per group and prints PASS only
+when the real event reached the page, so a tool that fakes it cannot score. It
+is how the keyboard, right-click, double-click and multi-select gaps were
+found — each was invisible until a page demanded it.
+
+Passing: Escape on a dialog, arrow keys on a listbox, right-click menu,
+double-click, clearing a field, setting a slider to an exact value, waiting for
+delayed content, multi-select.
+
+Still open, with what each needs:
+
+- **E, drag and drop.** `browser_drag` tries `Input.setInterceptDrags` +
+  `dispatchDragEvent` and falls back to a held-button pointer gesture. Neither
+  moves the fixture's HTML5 drop target; `Input.dragIntercepted` never
+  arrives. The tool reports which path it took, so check the page changed
+  rather than trusting the call.
+- **F, file upload.** No tool sets a file input. Needs `DOM.setFileInputFiles`.
+- **J, hover-revealed menu.** The item is revealed by `:hover` on the wrapper,
+  and the hover is not held while the follow-up snapshot and click run, so the
+  menu closes before it can be clicked. Needs the hover to persist across calls.
+- **L, back / forward.** No history tool. `browser_navigate` to the previous URL
+  is a new entry, not a back.
+
 ## Known limitations (deferred)
 
 - **Click-scan does not reach inside frames.** A `<div onClick>` with no ARIA
