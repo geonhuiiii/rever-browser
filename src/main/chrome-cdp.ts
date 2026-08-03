@@ -762,8 +762,22 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
         registerOopif(targetId, {
           sessionId: p.sessionId,
           frameId: p.targetInfo.targetId,
-          url: p.targetInfo.url
+          url: p.targetInfo.url,
+          // The event arrives on the session that owns the <iframe>. Electron
+          // reports the root session as an empty string, which sendCommand
+          // will not accept as "the page" — normalise it to undefined.
+          parentSessionId: sessionId || undefined
         })
+        // setAutoAttach only reaches direct children, so a frame nested inside
+        // this one needs the same call made on its session. A card
+        // authentication step inside a payment window is exactly that shape.
+        void dbg
+          .sendCommand(
+            'Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: false, flatten: true },
+            p.sessionId
+          )
+          .catch(() => {})
         // Enable the domains the snapshot and click paths need, on the frame's
         // own session — enabling them on the page session does not reach it.
         void dbg.sendCommand('Accessibility.enable', {}, p.sessionId).catch(() => {})

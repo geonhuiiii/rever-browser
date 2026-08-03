@@ -339,7 +339,13 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
     collectFrames().catch(() => ({ frames: [], unreachable: 0, empty: 0 }))
   ])
   const { nodes } = axRes
-  const framesByOwner = new Map(frameRes.frames.map((f) => [f.ownerBackendNodeId, f]))
+  // Keyed by session + backend id. Backend ids are per-process, so a frame
+  // nested inside an out-of-process one can carry the same number as an
+  // unrelated element in the page — keying on the number alone would splice a
+  // frame into whatever happened to share it.
+  const framesByOwner = new Map(
+    frameRes.frames.map((f) => [`${f.ownerSessionId ?? ''}:${f.ownerBackendNodeId}`, f])
+  )
 
   // After a navigation every node is new, so the marker would say nothing. Only
   // compare within the same document.
@@ -348,6 +354,30 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
 
   const byId = new Map<string, AXNode>()
   for (const n of nodes) byId.set(n.nodeId, n)
+
+  /**
+   * The full `<iframe>` chain from the page down to `frame`, outermost first.
+   *
+   * The walk builds this as it descends, but a frame with no anchor is emitted
+   * on its own, and its immediate owner may itself sit inside another frame.
+   * Following ownerSessionId back up recovers the missing outer hops — without
+   * them a click is short by the outer frame's position and lands elsewhere
+   * without erroring.
+   */
+  const ownerChain = (frame: (typeof frameRes.frames)[number]): FrameOwner[] => {
+    const chain: FrameOwner[] = []
+    let cur: (typeof frameRes.frames)[number] | undefined = frame
+    const guard = new Set<string>()
+    while (cur && !guard.has(cur.frameId)) {
+      guard.add(cur.frameId)
+      chain.unshift({ backendNodeId: cur.ownerBackendNodeId, sessionId: cur.ownerSessionId })
+      const parentSession: string | undefined = cur.ownerSessionId
+      cur = parentSession
+        ? frameRes.frames.find((f) => f.sessionId === parentSession)
+        : undefined
+    }
+    return chain
+  }
 
   const build = (
     filter: PageLayout | null,
@@ -504,15 +534,14 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       // document with its own node ids, so the scope map switches here rather
       // than being merged — ids collide across frames.
       //
-      // Only consulted from the page's own id space. Owners are resolved on the
-      // page session, so a backend id seen inside an out-of-process frame is a
-      // foreign number that can collide with a real owner here — descending on
-      // that match would splice an unrelated frame into itself.
+      // Looked up per session, so a frame nested inside an out-of-process one
+      // is reached from that frame's own document rather than being matched by
+      // a bare backend id that means something else in the page.
       const frame =
-        !frameSessionId && n.backendDOMNodeId != null
-          ? framesByOwner.get(n.backendDOMNodeId)
+        n.backendDOMNodeId != null
+          ? framesByOwner.get(`${frameSessionId ?? ''}:${n.backendDOMNodeId}`)
           : undefined
-      if (!frame && !frameSessionId && role === 'Iframe') framesMissed++
+      if (!frame && role === 'Iframe') framesMissed++
       if (frame) {
         framesEntered++
         splicedFrames.add(frame.frameId)
@@ -551,7 +580,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
         '',
         false,
         frame.byId,
-        [{ backendNodeId: frame.ownerBackendNodeId }],
+        ownerChain(frame),
         false,
         frame.sessionId
       )

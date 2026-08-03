@@ -22,6 +22,8 @@ export interface FrameTree {
   sessionId?: string
   /** Document URL, used to label a frame that has no anchor in the outline. */
   url?: string
+  /** Session holding the owning `<iframe>`. Undefined means the page session. */
+  ownerSessionId?: string
 }
 
 /** Frames deeper than this are ignored; matches the iframe nesting seen in practice. */
@@ -109,9 +111,11 @@ async function collectOopifFrames(): Promise<{ frames: FrameTree[]; unreachable:
         // targetInfo.url is empty at attach time, so the URL is read from the
         // frame itself. Concurrent with the other two, so it costs no latency.
         const [owner, first, loc] = await Promise.all([
-          target.dbg.sendCommand('DOM.getFrameOwner', { frameId: s.frameId }) as Promise<{
-            backendNodeId: number
-          }>,
+          target.dbg.sendCommand(
+            'DOM.getFrameOwner',
+            { frameId: s.frameId },
+            s.parentSessionId
+          ) as Promise<{ backendNodeId: number }>,
           axTree(),
           target.dbg
             .sendCommand(
@@ -141,7 +145,8 @@ async function collectOopifFrames(): Promise<{ frames: FrameTree[]; unreachable:
           byId,
           rootNodeId: pickRoot(tree.nodes).nodeId,
           sessionId: s.sessionId,
-          url: loc?.result?.value || s.url || undefined
+          url: loc?.result?.value || s.url || undefined,
+          ownerSessionId: s.parentSessionId
         })
       } catch {
         unreachable++

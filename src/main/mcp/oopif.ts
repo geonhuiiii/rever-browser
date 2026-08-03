@@ -17,6 +17,13 @@ export interface OopifSession {
   /** CDP targetId, which for an iframe target is also its frameId. */
   frameId: string
   url: string
+  /**
+   * Session holding this frame's `<iframe>` element — the session the attach
+   * event arrived on. Undefined means the page itself. A frame nested inside
+   * another out-of-process frame can only have its owner resolved here, and
+   * asking the page session instead answers about an unrelated node.
+   */
+  parentSessionId?: string
 }
 
 /** webContentsId → sessionId → session. */
