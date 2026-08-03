@@ -126,6 +126,142 @@ function keyParamsFor(ch: string): {
 }
 
 /**
+ * Named keys that carry no printable text, plus the few that do.
+ *
+ * Typing cannot stand in for these: a dialog closes on Escape, a listbox moves
+ * on ArrowDown, and a field is cleared with Control+A then Delete. Without them
+ * a keyboard-driven widget cannot be operated at all.
+ */
+const NAMED_KEYS: Record<string, { code: string; keyCode: number; text?: string }> = {
+  Enter: { code: 'Enter', keyCode: 13, text: '\r' },
+  Escape: { code: 'Escape', keyCode: 27 },
+  Tab: { code: 'Tab', keyCode: 9, text: '\t' },
+  Backspace: { code: 'Backspace', keyCode: 8 },
+  Delete: { code: 'Delete', keyCode: 46 },
+  ArrowUp: { code: 'ArrowUp', keyCode: 38 },
+  ArrowDown: { code: 'ArrowDown', keyCode: 40 },
+  ArrowLeft: { code: 'ArrowLeft', keyCode: 37 },
+  ArrowRight: { code: 'ArrowRight', keyCode: 39 },
+  Home: { code: 'Home', keyCode: 36 },
+  End: { code: 'End', keyCode: 35 },
+  PageUp: { code: 'PageUp', keyCode: 33 },
+  PageDown: { code: 'PageDown', keyCode: 34 },
+  Space: { code: 'Space', keyCode: 32, text: ' ' }
+}
+
+const MODIFIER_BITS: Record<string, number> = { Alt: 1, Control: 2, Meta: 4, Shift: 8 }
+
+/**
+ * Editing shortcuts Chromium routes through named commands rather than through
+ * the key event itself. Dispatching Meta+A without this moves nothing: the
+ * following Delete then eats a single character instead of the selection,
+ * which looked like "clearing a field almost works".
+ */
+const EDIT_COMMANDS: Record<string, string> = {
+  a: 'selectAll',
+  c: 'copy',
+  v: 'paste',
+  x: 'cut',
+  z: 'undo'
+}
+
+/** The accelerator modifier this platform uses for editing shortcuts. */
+const ACCEL = process.platform === 'darwin' ? 'Meta' : 'Control'
+
+export function isNamedKey(key: string): boolean {
+  return key in NAMED_KEYS
+}
+
+/** Every key this accepts, for an error message that can be acted on. */
+export function namedKeys(): string[] {
+  return Object.keys(NAMED_KEYS)
+}
+
+/**
+ * Send one key to whatever currently has focus, as real CDP key events.
+ *
+ * `sessionId` routes the events' companion focus call; the key events
+ * themselves always go to the page session, because they follow focus rather
+ * than coordinates.
+ */
+export async function pressKey(
+  key: string,
+  opts: { modifiers?: string[]; repeat?: number } = {}
+): Promise<void> {
+  const target = getActiveTarget()
+  if (!target) throw new Error('no active browser target')
+
+  // A webview that has not been interacted with DROPS key events and reports
+  // no error — pressing Escape straight after a navigation silently did
+  // nothing. Only a real mouse press or focusing an element grants the
+  // renderer keyboard focus; Page.bringToFront, window.focus() and
+  // body.focus() were all measured not to. document.hasFocus() separates the
+  // two states exactly, so refuse rather than pretend the key was delivered.
+  // An agent drives this app while it sits behind another window, so nothing
+  // inside it holds OS focus and the page is treated as unfocused. Focus
+  // emulation makes the renderer behave as if it were frontmost, which is what
+  // a real mouse press achieves as a side effect.
+  await target.dbg
+    .sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true })
+    .catch(() => {})
+
+  const focused = (await target.dbg.sendCommand('Runtime.evaluate', {
+    expression: 'document.hasFocus()',
+    returnByValue: true
+  })) as { result: { value: boolean } }
+  if (!focused.result.value) {
+    throw new Error(
+      'the page does not have keyboard focus, so the key would be dropped — pass ref to focus an element first, or click something'
+    )
+  }
+
+  const named = NAMED_KEYS[key]
+  const single = !named && Array.from(key).length === 1
+  if (!named && !single) {
+    throw new Error(`unknown key "${key}" — use a single character or one of: ${namedKeys().join(', ')}`)
+  }
+  const k = named ?? keyParamsFor(key)
+  const modifiers = (opts.modifiers ?? []).reduce((m, name) => {
+    const bit = MODIFIER_BITS[name]
+    if (!bit) throw new Error(`unknown modifier "${name}" — use Alt, Control, Meta or Shift`)
+    return m | bit
+  }, 0)
+
+  // A modified key is a shortcut, not text. Sending `text` alongside makes
+  // Chromium treat Control+A as typing the letter "a" into the field.
+  const text = modifiers === 0 ? ('text' in k ? k.text : undefined) : undefined
+
+  const command =
+    (opts.modifiers ?? []).includes(ACCEL) && !(opts.modifiers ?? []).includes('Shift')
+      ? EDIT_COMMANDS[key.toLowerCase()]
+      : undefined
+
+  for (let i = 0; i < Math.max(1, opts.repeat ?? 1); i++) {
+    // An editing command rides on a full keyDown; rawKeyDown carries the key
+    // but Chromium never runs the command, which reads as "the shortcut did
+    // nothing" rather than as an error.
+    await target.dbg.sendCommand('Input.dispatchKeyEvent', {
+      type: text || command ? 'keyDown' : 'rawKeyDown',
+      key,
+      code: k.code,
+      windowsVirtualKeyCode: k.keyCode,
+      modifiers,
+      ...(command ? { commands: [command] } : {}),
+      ...(text ? { text, unmodifiedText: text } : {})
+    })
+    await sleep(rand(20, 60))
+    await target.dbg.sendCommand('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key,
+      code: k.code,
+      windowsVirtualKeyCode: k.keyCode,
+      modifiers
+    })
+    if (i > 0) await sleep(rand(30, 80))
+  }
+}
+
+/**
  * Type the text into the focused element via real CDP keyboard events. Each
  * char produces keyDown + keyUp dispatches with isTrusted=true, so behaviour-
  * based bot detectors (Naver Koop / Ncaptcha, Cloudflare Turnstile) see

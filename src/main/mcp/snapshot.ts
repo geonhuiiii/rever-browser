@@ -981,6 +981,30 @@ export async function selectRef(ref: string, values: string[]): Promise<string[]
   return out.picked ?? []
 }
 
+/**
+ * Give a ref keyboard focus without clicking it.
+ *
+ * Clicking to focus is not always equivalent: a click on a dialog's backdrop
+ * dismisses it, and a click on a listbox item selects the wrong row before the
+ * arrow keys ever run.
+ */
+export async function focusRef(ref: string): Promise<void> {
+  const entry = refMap.get(ref)
+  const objectId = await resolveObjectId(ref)
+  const target = getActiveTarget()!
+  await target.dbg.sendCommand(
+    'Runtime.callFunctionOn',
+    {
+      objectId,
+      functionDeclaration: `function() {
+        if (this.focus) this.focus()
+        else if (this.tabIndex >= 0) this.focus()
+      }`
+    },
+    entry?.sessionId
+  )
+}
+
 export async function hoverRef(ref: string): Promise<void> {
   const entry = refMap.get(ref)
   const objectId = await resolveObjectId(ref)

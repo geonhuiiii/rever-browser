@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rever interaction fixture</title>
+<style>
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:#0d1117;color:#e6edf3;padding:16px}
+  h1{font-size:18px;margin:0 0 4px}
+  .sub{color:#9aa7b4;font-size:12px;margin:0 0 12px}
+  section{border:1px solid #2b3444;border-radius:8px;padding:10px 12px;margin:0 0 10px;background:#161b22}
+  h2{font-size:13px;margin:0 0 8px;color:#6ea8fe}
+  .exp{font-size:11px;color:#7d8896;margin:6px 0 0}
+  .r{font:12px ui-monospace,Menlo,monospace;color:#ff7b72;margin-top:6px}
+  .r.ok{color:#7ee787}
+  input,textarea,select,button{font:13px inherit;padding:5px 8px;margin:2px 0}
+  #drop{border:1px dashed #4a5568;border-radius:6px;padding:14px;text-align:center;color:#9aa7b4}
+  #drag{background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:6px 12px;
+    display:inline-block;cursor:grab}
+  dialog{background:#161b22;color:#e6edf3;border:1px solid #2b3444;border-radius:8px}
+  #menu{position:fixed;background:#1c2333;border:1px solid #2b3444;border-radius:6px;
+    padding:4px 0;display:none;z-index:10}
+  #menu div{padding:4px 14px;cursor:pointer}
+  #hovermenu{display:none;background:#1c2333;border:1px solid #2b3444;border-radius:6px;padding:6px}
+  #hoverwrap:hover #hovermenu{display:block}
+</style>
+</head>
+<body>
+
+<h1>rever-browser interaction fixture</h1>
+<p class="sub">One interaction per group. Each prints PASS only when the real event actually
+reached the page, so a tool that fakes it cannot score.</p>
+
+<section>
+  <h2>A. Press a key — Escape closes an open dialog</h2>
+  <button id="a-open">Open dialog A</button>
+  <dialog id="a-dlg"><p>Press Escape to close me.</p></dialog>
+  <div class="r" id="a-r">PENDING — open the dialog, then send Escape</div>
+  <p class="exp">Needs a key-press tool. Typing text into a focused element is not the same thing.</p>
+</section>
+
+<section>
+  <h2>B. Press a key — ArrowDown + Enter on a listbox</h2>
+  <div id="b-list" tabindex="0" role="listbox" aria-label="B list" style="outline:1px solid #2b3444;padding:4px;width:180px">
+    <div role="option" aria-selected="true">B item 1</div>
+    <div role="option">B item 2</div>
+    <div role="option">B item 3</div>
+  </div>
+  <div class="r" id="b-r">PENDING — focus the list, ArrowDown twice, Enter</div>
+  <p class="exp">Custom widgets are keyboard-driven; without arrow keys they cannot be operated.</p>
+</section>
+
+<section>
+  <h2>C. Right-click — context menu</h2>
+  <div id="c-target" style="background:#1c2333;padding:14px;border-radius:6px">C right-click here</div>
+  <div id="menu"><div id="c-item">C menu item</div></div>
+  <div class="r" id="c-r">PENDING — right-click the box, then click the menu item</div>
+  <p class="exp">Needs a right-button click. browser_click always sends the left button.</p>
+</section>
+
+<section>
+  <h2>D. Double-click</h2>
+  <div id="d-target" style="background:#1c2333;padding:14px;border-radius:6px">D double-click here</div>
+  <div class="r" id="d-r">PENDING — double-click (two clicks inside 400ms)</div>
+  <p class="exp">Two separate browser_click calls are far apart in time and do not pair up.</p>
+</section>
+
+<section>
+  <h2>E. Drag and drop</h2>
+  <div id="drag" draggable="true">E drag me</div>
+  <div id="drop">E drop target</div>
+  <div class="r" id="e-r">PENDING — drag E onto the drop target</div>
+  <p class="exp">Needs press → move → release as one gesture.</p>
+</section>
+
+<section>
+  <h2>F. File upload</h2>
+  <input type="file" id="f-file">
+  <div class="r" id="f-r">PENDING — attach any file</div>
+  <p class="exp">A file input cannot be filled by typing; the value is set by the browser.</p>
+</section>
+
+<section>
+  <h2>G. Clear a field</h2>
+  <input id="g-in" value="PRESET-VALUE-KEEPME">
+  <div class="r" id="g-r">PENDING — leave this field empty</div>
+  <p class="exp">browser_type appends. Clearing needs select-all + delete, or a clear tool.</p>
+</section>
+
+<section>
+  <h2>H. Range slider</h2>
+  <input type="range" id="h-range" min="0" max="100" value="0">
+  <span id="h-val">0</span>
+  <div class="r" id="h-r">PENDING — set the slider to exactly 75</div>
+  <p class="exp">Dragging a thumb to a value needs either arrow keys or a precise drag.</p>
+</section>
+
+<section>
+  <h2>I. Wait for delayed content</h2>
+  <button id="i-go">Start 3s task</button>
+  <div id="i-out"></div>
+  <div class="r" id="i-r">PENDING — press start, then observe I-DONE</div>
+  <p class="exp">Needs a wait tool, or a snapshot taken after the result lands.</p>
+</section>
+
+<section>
+  <h2>J. Hover-only menu</h2>
+  <div id="hoverwrap" style="display:inline-block">
+    <span style="background:#1c2333;padding:6px 12px;border-radius:6px">J hover me</span>
+    <div id="hovermenu"><button id="j-item">J menu item</button></div>
+  </div>
+  <div class="r" id="j-r">PENDING — hover, then click the revealed item</div>
+</section>
+
+<section>
+  <h2>K. Native select (multiple)</h2>
+  <select id="k-sel" multiple size="3">
+    <option value="k1">K one</option>
+    <option value="k2">K two</option>
+    <option value="k3">K three</option>
+  </select>
+  <div class="r" id="k-r">PENDING — select K one and K three together</div>
+</section>
+
+<section>
+  <h2>L. Back / forward navigation</h2>
+  <a id="l-link" href="?l=visited">L go to ?l=visited</a>
+  <div class="r" id="l-r">PENDING — follow the link, then go back</div>
+  <p class="exp">Needs history navigation; browser_navigate to the old URL is a new entry, not a back.</p>
+</section>
+
+<script>
+const set = (id, ok, msg) => {
+  const el = document.getElementById(id)
+  el.textContent = (ok ? 'PASS — ' : 'FAIL — ') + msg
+  el.className = 'r' + (ok ? ' ok' : '')
+}
+
+// A: Escape on a dialog
+const dlg = document.getElementById('a-dlg')
+document.getElementById('a-open').onclick = () => { dlg.showModal(); set('a-r', false, 'dialog open, send Escape') }
+dlg.addEventListener('close', () => set('a-r', true, 'A-ESCAPE-OK'))
+
+// B: ArrowDown x2 + Enter
+let bIdx = 0
+const bOpts = [...document.querySelectorAll('#b-list [role=option]')]
+document.getElementById('b-list').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { bIdx = Math.min(bIdx + 1, bOpts.length - 1); bOpts.forEach((o, i) => o.setAttribute('aria-selected', i === bIdx)); e.preventDefault() }
+  if (e.key === 'ArrowUp') { bIdx = Math.max(bIdx - 1, 0); bOpts.forEach((o, i) => o.setAttribute('aria-selected', i === bIdx)); e.preventDefault() }
+  if (e.key === 'Enter') set( 'b-r', bIdx === 2, bIdx === 2 ? 'B-ARROW-ENTER-OK' : 'Enter arrived but index is ' + bIdx)
+})
+
+// C: right-click menu
+const menu = document.getElementById('menu')
+document.getElementById('c-target').addEventListener('contextmenu', (e) => {
+  e.preventDefault(); menu.style.display = 'block'
+  menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px'
+  set('c-r', false, 'menu opened, now click the item')
+})
+document.getElementById('c-item').onclick = () => { menu.style.display = 'none'; set('c-r', true, 'C-CONTEXTMENU-OK') }
+
+// D: double click
+document.getElementById('d-target').addEventListener('dblclick', () => set('d-r', true, 'D-DBLCLICK-OK'))
+
+// E: drag and drop (HTML5 + pointer fallback)
+const dragEl = document.getElementById('drag'), dropEl = document.getElementById('drop')
+dragEl.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', 'E'))
+dropEl.addEventListener('dragover', (e) => e.preventDefault())
+dropEl.addEventListener('drop', (e) => { e.preventDefault(); set('e-r', true, 'E-DROP-OK') })
+let pressing = false
+dragEl.addEventListener('mousedown', () => { pressing = true })
+document.addEventListener('mouseup', (e) => {
+  if (pressing && dropEl.contains(document.elementFromPoint(e.clientX, e.clientY))) set('e-r', true, 'E-DROP-OK')
+  pressing = false
+})
+
+// F: file input
+document.getElementById('f-file').addEventListener('change', (e) => {
+  const f = e.target.files[0]
+  set('f-r', !!f, f ? 'F-UPLOAD-OK ' + f.name + ' (' + f.size + 'B)' : 'no file')
+})
+
+// G: clear
+const gIn = document.getElementById('g-in')
+const gCheck = () => set('g-r', gIn.value === '', gIn.value === '' ? 'G-CLEAR-OK' : 'value is "' + gIn.value + '"')
+gIn.addEventListener('input', gCheck)
+
+// H: range
+const hR = document.getElementById('h-range')
+hR.addEventListener('input', () => {
+  document.getElementById('h-val').textContent = hR.value
+  set('h-r', hR.value === '75', hR.value === '75' ? 'H-RANGE-OK' : 'value is ' + hR.value)
+})
+
+// I: delayed content
+document.getElementById('i-go').onclick = () => {
+  document.getElementById('i-out').textContent = 'working…'
+  set('i-r', false, 'working, result in 3s')
+  setTimeout(() => { document.getElementById('i-out').textContent = 'I-DONE'; set('i-r', true, 'I-WAIT-OK') }, 3000)
+}
+
+// J: hover menu
+document.getElementById('j-item').onclick = () => set('j-r', true, 'J-HOVERMENU-OK')
+
+// K: multi-select
+const kSel = document.getElementById('k-sel')
+kSel.addEventListener('change', () => {
+  const v = [...kSel.selectedOptions].map(o => o.value).join(',')
+  set('k-r', v === 'k1,k3', v === 'k1,k3' ? 'K-MULTISELECT-OK' : 'selected: ' + (v || 'none'))
+})
+
+// L: back/forward — passes only when arriving back at the bare URL from ?l=visited
+;(() => {
+  const here = location.search
+  const seen = sessionStorage.getItem('l-visited')
+  if (here.includes('l=visited')) { sessionStorage.setItem('l-visited', '1'); set('l-r', false, 'now go BACK') }
+  else if (seen) { set('l-r', true, 'L-BACK-OK'); sessionStorage.removeItem('l-visited') }
+})()
+</script>
+
+</body>
+</html>

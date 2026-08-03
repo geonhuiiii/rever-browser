@@ -6,12 +6,14 @@ import { emitAiAction } from '../../ai-events'
 import { getActiveTarget, waitForSettle } from '../../chrome-cdp'
 import { setViewport } from '../../viewport'
 import { evalInPage, visualize } from '../cdp-eval'
+import { namedKeys, pressKey } from '../human-input'
 import { humanScroll } from '../human-input'
 import {
   clickRef,
   clickSelector,
   hoverRef,
   hoverSelector,
+  focusRef,
   selectRef,
   takeSnapshot,
   typeRef,
@@ -211,6 +213,40 @@ export function registerBrowserTools(mcp: McpServer) {
       try {
         await typeRef(ref, text, submit ?? false)
         return await snapshotAfter(`typed into ${ref}${submit ? ' + submit' : ''}`)
+      } catch (e) {
+        return err(errorMessage(e))
+      }
+    }
+  )
+
+  mcp.registerTool(
+    'browser_press_key',
+    {
+      description: `Send a single key to the focused element — the only way to reach a keyboard-driven widget. Escape closes a dialog, ArrowDown moves a listbox or a slider, Tab moves focus, and Control+A then Delete clears a field (browser_type appends rather than replacing). Pass ref to focus that element first WITHOUT clicking it, which matters when a click would dismiss or mis-select. Accepts one character, or: ${namedKeys().join(', ')}. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.`,
+      inputSchema: {
+        key: z.string().describe('Key name (e.g. "Escape", "ArrowDown") or a single character'),
+        ref: z
+          .string()
+          .optional()
+          .describe('Focus this element first, without clicking it. Omit to send to whatever has focus.'),
+        modifiers: z
+          .array(z.enum(['Alt', 'Control', 'Meta', 'Shift']))
+          .optional()
+          .describe('Held while the key is pressed, e.g. ["Control"] for Control+A'),
+        repeat: z.number().optional().describe('Press this many times (default 1)')
+      }
+    },
+    async ({ key, ref, modifiers, repeat }) => {
+      try {
+        if (ref) await focusRef(ref)
+        emitAiAction({
+          kind: 'type',
+          label: `AI key ${[...(modifiers ?? []), key].join('+')}`,
+          detail: ref
+        })
+        await pressKey(key, { modifiers, repeat })
+        const times = repeat && repeat > 1 ? ` x${repeat}` : ''
+        return await snapshotAfter(`pressed ${[...(modifiers ?? []), key].join('+')}${times}`)
       } catch (e) {
         return err(errorMessage(e))
       }
