@@ -179,6 +179,96 @@ export async function humanDrag(
   cursorY = to.y
 }
 
+/**
+ * HTML5 drag-and-drop, which mouse events alone cannot drive.
+ *
+ * A `draggable` element hands off to the browser's own drag machinery on
+ * mousedown, and from there Input.dispatchMouseEvent produces nothing the page
+ * can see — the fixture's drop target stayed silent through a full press,
+ * move and release. Interception turns the gesture into dragIntercepted, whose
+ * payload is the DragData the drop needs.
+ */
+export async function nativeDrag(
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): Promise<boolean> {
+  const target = getActiveTarget()
+  if (!target) throw new Error('no active browser target')
+
+  const dragData = await new Promise<unknown>((resolve) => {
+    const timer = setTimeout(() => {
+      target.dbg.off('message', onMessage)
+      resolve(null)
+    }, 1500)
+    function onMessage(_e: unknown, method: string, params: unknown): void {
+      if (method !== 'Input.dragIntercepted') return
+      clearTimeout(timer)
+      target!.dbg.off('message', onMessage)
+      resolve((params as { data: unknown }).data)
+    }
+    target.dbg.on('message', onMessage)
+    void (async () => {
+      await target.dbg
+        .sendCommand('Input.setInterceptDrags', { enabled: true })
+        .catch((e) => console.warn('[drag] setInterceptDrags:', e?.message ?? e))
+      await humanMouseMove(from.x, from.y)
+      await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mousePressed',
+        x: from.x,
+        y: from.y,
+        button: 'left',
+        clickCount: 1
+      })
+      await sleep(60)
+      await target.dbg.sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseMoved',
+        x: from.x + 12,
+        y: from.y + 12,
+        button: 'left',
+        buttons: 1
+      })
+    })()
+  })
+
+  if (!dragData) {
+    // The press above is still held. Leaving it down breaks the fallback,
+    // which starts with a press of its own and would arrive as a second one.
+    await target.dbg
+      .sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseReleased',
+        x: from.x + 12,
+        y: from.y + 12,
+        button: 'left',
+        clickCount: 1
+      })
+      .catch(() => {})
+    await target.dbg.sendCommand('Input.setInterceptDrags', { enabled: false }).catch(() => {})
+    return false
+  }
+
+  const steps = 10
+  for (let i = 1; i <= steps; i++) {
+    const t = easeInOutCubic(i / steps)
+    await target.dbg.sendCommand('Input.dispatchDragEvent', {
+      type: 'dragOver',
+      x: from.x + (to.x - from.x) * t,
+      y: from.y + (to.y - from.y) * t,
+      data: dragData
+    })
+    await sleep(rand(14, 28))
+  }
+  await target.dbg.sendCommand('Input.dispatchDragEvent', {
+    type: 'drop',
+    x: to.x,
+    y: to.y,
+    data: dragData
+  })
+  await target.dbg.sendCommand('Input.setInterceptDrags', { enabled: false }).catch(() => {})
+  cursorX = to.x
+  cursorY = to.y
+  return true
+}
+
 /** Pre-action "thinking" pause — looking at the page before acting. */
 export async function thinkingPause(): Promise<void> {
   await sleep(rand(380, 950))

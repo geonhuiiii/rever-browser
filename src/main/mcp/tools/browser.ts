@@ -253,7 +253,7 @@ export function registerBrowserTools(mcp: McpServer) {
     'browser_drag',
     {
       description:
-        'Drag one ref onto another as a single held gesture: press at the source, move while the button is down, release at the target. Needed for HTML5 drag-and-drop and for pointer-based sortables — a click on the source followed by a click on the target is two unrelated clicks and neither sees a drag. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
+        'Drag one ref onto another. Tries the browser\'s own drag machinery first (HTML5 draggable), then falls back to a held-button pointer gesture, which is what dnd-kit / SortableJS listen for. A click on the source followed by a click on the target is two unrelated clicks and neither sees a drag. The result says which mechanism ran — CHECK THE PAGE ACTUALLY CHANGED, a drag that reached nothing looks identical to one that worked. Returns a fresh snapshot — DO NOT call browser_snapshot afterwards.',
       inputSchema: {
         from: z.string().describe('Ref of the element to drag, e.g. "r6"'),
         to: z.string().describe('Ref of the drop target, e.g. "r9"')
@@ -261,8 +261,8 @@ export function registerBrowserTools(mcp: McpServer) {
     },
     async ({ from, to }) => {
       try {
-        await dragRef(from, to)
-        return await snapshotAfter(`dragged ${from} onto ${to}`)
+        const how = await dragRef(from, to)
+        return await snapshotAfter(`dragged ${from} onto ${to} (${how} drag)`)
       } catch (e) {
         return err(errorMessage(e))
       }

@@ -4,6 +4,7 @@ import { visualize } from './cdp-eval'
 import {
   humanDrag,
   humanMouseMove,
+  nativeDrag,
   humanPressRelease,
   humanType,
   thinkingPause
@@ -877,13 +878,30 @@ export async function clickRefWith(
   await clickObjectId(objectId, label, entry?.role, entry?.frameOwners, entry?.sessionId, mouse)
 }
 
-/** Drag one ref onto another as a single held gesture. */
-export async function dragRef(fromRef: string, toRef: string): Promise<void> {
+/**
+ * Drag one ref onto another. Returns which mechanism actually ran, because
+ * the two reach different libraries and a drag that changed nothing is
+ * otherwise indistinguishable from one that worked.
+ */
+export async function dragRef(fromRef: string, toRef: string): Promise<'native' | 'pointer'> {
+  // Two passes. The first may scroll either element into view, which moves the
+  // other one — measuring source then target once gives a source coordinate
+  // that the target's scroll has already invalidated. By the second pass both
+  // are on screen, so neither scrolls and the pair is consistent.
+  await pointForRef(fromRef)
+  await pointForRef(toRef)
   const from = await pointForRef(fromRef)
   const to = await pointForRef(toRef)
   emitAiAction({ kind: 'click', label: `AI drag ${fromRef} → ${toRef}` })
   await thinkingPause()
+  // Try the browser's own drag machinery first: a draggable element takes over
+  // on mousedown and mouse events after that are invisible to the page. Fall
+  // back to the held-button gesture, which is what pointer-based sortables
+  // (dnd-kit, SortableJS in pointer mode) listen for.
+  const native = await nativeDrag(from, to)
+  if (native) return 'native'
   await humanDrag(from, to)
+  return 'pointer'
 }
 
 /**
