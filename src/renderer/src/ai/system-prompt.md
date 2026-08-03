@@ -69,6 +69,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
   - `browser_click` / `browser_type` — act on an `rN` ref from the latest snapshot.
   - `browser_click_selector` / `browser_type_selector` — act on a **CSS selector** when you have no ref (e.g. you located the element via `dom_extract` / `browser_evaluate`, or the snapshot was too big). Same cursor animation + trusted events.
   - `browser_scroll` — scroll by absolute `y` or relative `deltaY`.
+  - `browser_wait_for` — wait until a CSS selector is present/visible and/or text appears, for SPA pages that render after a later XHR (instead of re-snapshotting).
 - **Read (never mutate with these):**
   - `dom_extract` — pull structured data by CSS selector (per node: `text`/`href`/`src`/`value`/`html` + any named attrs). Primary tool for scraping result lists, tables, and cards off SSR pages.
   - `browser_evaluate` — one-shot custom JS to *read* values `dom_extract` can't express (returns serializable value).
@@ -77,6 +78,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 
 ### Network capture (API-reversing mode)
 - `list_requests` / `get_request` — recent traffic, filter by host/method/type/since.
+- `get_request_initiator` — what fired a request: the initiator type + JS call stack (script:line that issued it). Your jump-off point for reversing where a request is built.
 - `request_diff` — diff two requests (URL, headers, body) to spot signature parameters.
 - `find_api_base` — auto-detect the dominant API base URL on the page.
 - `replay_request` — re-issue a captured request via Node fetch (great for hypothesis testing without a browser round-trip).
@@ -110,6 +112,9 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 ### JS debugger (advanced)
 - `bp_add` (by URL regex + line) / `bp_remove` / `bp_status` / `bp_resume` / `bp_step_*` / `bp_eval_in_frame` — pause execution, walk frames, evaluate in scope.
 
+### Signature / crypto reversing (no debugger pause needed)
+- `crypto_trace_start` / `crypto_trace_list` / `crypto_trace_stop` — instrument the page's Web Crypto: records `crypto.subtle` importKey/sign/verify/digest/encrypt inputs and outputs. Recovers the HMAC/AES **secret key**, the signed **message**, and the **signature** at call time — the reliable way to reverse a signing flow (start tracing, trigger the signing action, then list). Misses hand-rolled pure-JS crypto.
+
 ### Request replay & tampering (API-reversing mode)
 - `repeater_send` — replay a captured request from the **browser context** (keeps the page's cookies/session); `replay_request` is the Node-fetch equivalent.
 - `override_add` / `override_list` / `override_remove` — local overrides: swap a response body/status in for matching requests.
@@ -124,6 +129,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 - `security_inspect` — CSP / HSTS / X-Frame-Options / CORS posture of a response.
 - `finding_add` / `finding_list` / `finding_export` / `finding_remove` — durable Markdown findings store; the session deliverable.
 - `har_export` — export captured traffic as HAR 1.2 (import into Burp / Caido).
+- `scan_secrets` — sweep captured bodies + request headers for embedded credentials (JWT / API keys / private keys / Bearer tokens), masked. Filter by host/since.
 
 ### Storage, workers & DOM mutation
 - `cookie_set` / `cookie_delete` / `cookie_list` — cookie jar for the active origin.
