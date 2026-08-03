@@ -115,13 +115,32 @@ implementing against an assumption and debugging the result.
 
 ## Known limitations (deferred)
 
-- **OOPIFs are not snapshotted.** An out-of-process iframe — one whose src is a
-  different *site* (different eTLD+1; port and subdomain do not count) — runs in
-  its own renderer process, so the single CDP session the snapshot uses cannot
-  read its accessibility tree. Same-site frames work; a cross-site frame shows
-  up as `unreachable` in the snapshot output and its contents (ads, payment
-  widgets, embedded players, captchas) are invisible to `browser_snapshot` and
-  unreachable by `browser_click`. The fix is `Target.setAutoAttach` plus a
-  per-OOPIF CDP session whose trees are merged into the snapshot — deferred, not
-  yet implemented. Click-scan inside frames is blocked on the same work, because
-  an isolated world loses `getEventListeners`.
+- **Click-scan does not reach inside frames.** A `<div onClick>` with no ARIA
+  role gets a ref in the top document only; inside any frame it is invisible,
+  because the scan needs `getEventListeners` and an isolated world does not
+  have it. Framed elements therefore need a real role to be clickable by ref.
+- **No viewport pruning inside an out-of-process frame.** The layout pass runs
+  in the page's renderer and that frame's backend ids belong to another
+  process, where the same number means a different element. Its nodes are
+  emitted unfiltered rather than filtered against the wrong boxes.
+
+## OOPIF support (implemented)
+
+An out-of-process iframe — one whose src is a different *site* (different
+eTLD+1; port and subdomain do not count) — runs in its own renderer, so the
+page's CDP session cannot read it. `Target.setAutoAttach({flatten: true})` in
+`chrome-cdp.ts` registers a session per such frame (`mcp/oopif.ts`), and
+`collectOopifFrames` splices their trees into the snapshot under the owning
+`<iframe>`.
+
+Every command about one of those nodes carries the frame's `sessionId`. That
+is not an optimisation: a probe against real Chrome showed the page session
+answering `DOM.resolveNode` for a foreign backendNodeId with a **different
+node** instead of an error, so an unrouted click lands somewhere else and
+nothing reports a failure. `Network.enable` runs per OOPIF session too —
+without it only the frame's document load is captured, not the API calls the
+widget makes, which are the reason to look inside it at all.
+
+Check it with `oopif-demo.html`: P1–P3 must carry refs, and clicking P3 must
+show `GET /oopif-pay-clicked?card=...` in `list_requests` — the request proves
+the click reached that button rather than a coordinate-adjacent one.
