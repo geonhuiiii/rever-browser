@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>rever-browser — an agent that reverse-engineers web APIs</title>
-<meta name="description" content="A desktop browser with a reverse-engineering agent built in. Capture every request over CDP, ask the agent what it means, and reproduce the API without leaving the app." />
+<title>rever-browser — a browser built for web reversing</title>
+<meta name="description" content="Traffic capture, bundle deobfuscation, proxy, repeater and intruder in one window — with an agent that walks the tedious parts for you. Apache-2.0 open source." />
 <meta property="og:title" content="rever-browser" />
-<meta property="og:description" content="See every request. Ask what it means. Reproduce it." />
+<meta property="og:description" content="Every request the browser makes, read, analyzed and reproduced." />
 <meta property="og:type" content="website" />
 <link rel="icon" type="image/png" href="icon.png" />
 <link rel="apple-touch-icon" href="icon.png" />
@@ -43,18 +43,19 @@
     <div class="grid">
       <div>
         <div class="eyebrow" data-reveal="fade">
-          <span>electron desktop app</span><span class="sep"></span><span>mit licensed</span>
+          <span>open source</span><span class="sep"></span><span>apache-2.0</span>
         </div>
-        <h1 id="headline">See every request. Ask what it means. Reproduce it.</h1>
+        <h1 id="headline">Every request the browser makes, read, analyzed, reproduced.</h1>
         <p class="lede" data-reveal="fade">
-          <b>rever-browser</b> puts a reverse-engineering agent next to a real Chromium tab.
-          You browse the target; the app records every request over <span class="u">CDP</span>, and the agent
-          reads that traffic, cracks open the JavaScript bundles, and drives the tab itself.
+          <b>rever-browser</b> is a desktop app that puts what web reversing needs inside the browser itself.
+          Traffic capture, bundle deobfuscation, crypto tracing, repeater and intruder, an upstream proxy,
+          a session that stays logged in, and an element picker that hands you a target to act on — all in one window.
+          An agent that knows the order of the work sits next to it and walks the tedious stretches for you.
+          Every tool is exposed over <span class="u">MCP</span>, so external agents and scripts can drive the same surface.
         </p>
         <div class="cta" data-reveal="fade">
           <a class="btn primary" href="#quickstart">Get started</a>
           <a class="btn" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">Read the source</a>
-          <a class="btn ghost" href="demos/" target="_blank" rel="noopener">All 30 demos</a>
         </div>
       </div>
 
@@ -62,10 +63,9 @@
         <div class="cap">at a glance</div>
         <dl>
           <div class="row"><dt>mcp tools</dt><dd><span data-count="134">0</span>+</dd></div>
-          <div class="row"><dt>processes</dt><dd><span data-count="3">0</span> <small>isolated</small></dd></div>
-          <div class="row"><dt>agents</dt><dd>claude code <small>· codex</small></dd></div>
-          <div class="row"><dt>runs on</dt><dd>macOS <small>· win · linux</small></dd></div>
-          <div class="row"><dt>license</dt><dd>MIT</dd></div>
+          <div class="row"><dt>agents</dt><dd>claude code · codex</dd></div>
+          <div class="row"><dt>runs on</dt><dd>macOS · windows · linux</dd></div>
+          <div class="row"><dt>license</dt><dd>Apache-2.0</dd></div>
         </dl>
       </div>
     </div>
@@ -80,7 +80,7 @@
     </div>
     <p class="stage-cap">
       <span class="n" id="capnum">01</span>
-      <span id="capture">A recorded walkthrough of the real UI: the agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint.</span>
+      <span id="capture">The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint and its exact payload.</span>
     </p>
   </div>
 </section>
@@ -91,18 +91,18 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>01</b> scenarios</div>
       <div>
-        <h2>Ten words in, a working request out.</h2>
-        <p class="sub">Each one is a real flow through the app, recorded from the shipping UI. Pick a prompt and the frame above replays it.</p>
+        <h2>Ask in the chat. The agent drives the browser and finds it.</h2>
+        <p class="sub">It takes over the part where you open devtools, click through requests one by one, and fire them again with a changed parameter. Each scenario below is rebuilt in the app's own UI — pick one and the frame above plays it.</p>
       </div>
     </div>
     <div class="tabs" id="tabs" data-reveal="stagger">
-      <button class="tab is-on" data-src="v2-find-search-api" data-cap="The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint.">Find the search API</button>
-      <button class="tab" data-src="v2-login-orders" data-cap="Logs in with your session, walks to the orders page, and pulls out the request that returns the list.">Log in and get my orders</button>
-      <button class="tab" data-src="v2-deob-auth" data-cap="Unminifies the captured bundle with webcrack, then reads the auth flow out of the restored source.">Deobfuscate and find auth</button>
-      <button class="tab" data-src="v2-websocket-decode" data-cap="Reads the WebSocket frames, decodes the payload envelope, and explains the message schema.">Decode the WebSocket</button>
-      <button class="tab" data-src="v2-repeater-tamper" data-cap="Sends the request again through the repeater with a tampered parameter, then diffs the response.">Resend with limit=500</button>
-      <button class="tab" data-src="v2-idor-fuzz" data-cap="Walks a range of object ids through the intruder and flags the ones that answer with someone else's data.">Check for IDOR</button>
-      <button class="tab" data-src="v2-build-macro" data-cap="Turns the sequence you just verified into a saved macro you can replay later.">Make it repeatable</button>
+      <button class="tab is-on" data-src="v2-find-search-api" data-cap="The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint and its exact payload.">Find the search API</button>
+      <button class="tab" data-src="v2-login-orders" data-cap="Signs in with the test account, walks to the orders page, and picks out the request that returns the list.">Log in and get my orders</button>
+      <button class="tab" data-src="v2-deob-auth" data-cap="Unminifies the captured bundle with webcrack, then reads the auth flow straight out of the restored source.">Deobfuscate and find auth</button>
+      <button class="tab" data-src="v2-websocket-decode" data-cap="Walks the WebSocket frames, filters out the ping/pong noise, and explains the frame that changes server state.">Decode the WebSocket</button>
+      <button class="tab" data-src="v2-repeater-tamper" data-cap="Sends the same request again through the repeater with one parameter changed, then compares what came back.">Resend with limit=500</button>
+      <button class="tab" data-src="v2-idor-fuzz" data-cap="Sweeps a range of object ids through the intruder and flags the ones that answer with somebody else's data.">Check for IDOR</button>
+      <button class="tab" data-src="v2-build-macro" data-cap="Saves the sequence you just verified as a macro. From then on it replays with no model calls at all.">Make it repeatable</button>
     </div>
   </div>
 </section>
@@ -113,8 +113,8 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>02</b> what's inside</div>
       <div>
-        <h2>A browser, a packet capture, and an agent reading both.</h2>
-        <p class="sub">Nothing to wire up. The capture buffer, the bundle analyzer and the tool server all live in the same window as the tab you are driving.</p>
+        <h2>Browser control, packet capture, a proxy, and an agent reading all of it.</h2>
+        <p class="sub">Nothing to wire up. The capture buffer, the proxy, the bundle analyzer and the tool server all live in the same window as the tab you are driving.</p>
       </div>
     </div>
 
@@ -129,22 +129,32 @@
       </div>
       <div class="row-item">
         <div class="num">02</div>
-        <h3>An agent that sees what you see</h3>
+        <h3>Proxy and a session that stays logged in</h3>
         <div class="body">
-          <p>Claude Code by default, Codex as an alternative, both over ACP on stdio. The agent reads the same traffic store the UI renders, so “explain the request I just made” needs no copy-paste.</p>
-          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">streaming</span></div>
+          <p>Point tabs at an upstream proxy over http, https or socks5, with auth. The change applies to the live session, so nothing needs remounting.</p>
+          <p style="margin-top:8px">Ordinary tabs share one persistent partition, so logging in once carries over to tabs you open from it. Proxy tabs are the exception: each gets its own cookie jar, which lets you hold two identities on the same site at the same time.</p>
+          <div class="tags"><span class="tagchip">http · https · socks5</span><span class="tagchip">proxy auth</span><span class="tagchip">persistent cookies</span><span class="tagchip">per-tab isolation</span></div>
         </div>
       </div>
       <div class="row-item">
         <div class="num">03</div>
-        <h3>Browser automation</h3>
+        <h3>Element picker — grab it on screen, act on it</h3>
         <div class="body">
-          <p>Navigate, click, type, scroll and screenshot, driven off accessibility snapshots with short <code class="i">rN</code> refs rather than brittle selectors.</p>
-          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">set_viewport</span></div>
+          <p>Inspect mode like devtools: pick an element on the page and its selector comes back to you. Ask for that element to be clicked, or for the request it fires to be captured, without leaving the chat.</p>
+          <div class="tags"><span class="tagchip">inspect mode</span><span class="tagchip">selector copy</span><span class="tagchip">send to chat</span></div>
         </div>
       </div>
       <div class="row-item">
         <div class="num">04</div>
+        <h3>Browser control that survives real pages</h3>
+        <div class="body">
+          <p>Navigate, click, type, scroll, drag, press keys and upload files — all as tools, and the target is a short <code class="i">rN</code> ref from the snapshot rather than a brittle selector.</p>
+          <p style="margin-top:8px">It reaches elements the accessibility tree never exposes, pierces shadow roots, and drives nested out-of-process iframes. The snapshot only emits what is actually painted, and scrolling uses real wheel input, so infinite scrollers behave.</p>
+          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">browser_drag</span><span class="tagchip">browser_wait_for</span><span class="tagchip">shadow dom</span><span class="tagchip">oopif</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">05</div>
         <h3>Bundle analysis without a re-download</h3>
         <div class="body">
           <p>Grep, extract, detect the bundler and deobfuscate the JavaScript already sitting in the capture. <code class="i">webcrack</code> unminifies when it is on your PATH, and source maps are restored when the site ships them.</p>
@@ -152,27 +162,45 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">05</div>
-        <h3>Deep API tooling</h3>
-        <div class="body">
-          <p>Repeater, intruder, header overrides, request interception, crypto and decode helpers, WebSocket and service-worker inspection, GraphQL and protobuf readers.</p>
-          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
-        </div>
-      </div>
-      <div class="row-item">
         <div class="num">06</div>
-        <h3>Local by construction</h3>
+        <h3>The rest of the reversing kit</h3>
         <div class="body">
-          <p>The MCP server is in-process, binds to a random port on <code class="i">127.0.0.1</code>, and starts lazily on the first agent spawn. Captured traffic stays in memory inside your own app.</p>
-          <div class="tags"><span class="tagchip">127.0.0.1</span><span class="tagchip">in-process</span><span class="tagchip">no analytics backend</span></div>
+          <p>Repeat a request with edits, sweep values with the intruder, override headers, intercept and rewrite in flight. Crypto and encoding helpers, secret scanning, WebSocket and service-worker inspection, GraphQL and protobuf readers — same window.</p>
+          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">crypto</span><span class="tagchip">secrets</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
         </div>
       </div>
       <div class="row-item">
         <div class="num">07</div>
-        <h3>From finding to repeatable</h3>
+        <h3>Macros — replay a verified sequence exactly</h3>
         <div class="body">
-          <p>Once an endpoint is understood, record it as a macro or a workflow, replay it, export the session as HAR, or ask for client code that reproduces the request outside the app.</p>
-          <div class="tags"><span class="tagchip">macros</span><span class="tagchip">workflows</span><span class="tagchip">findings</span></div>
+          <p>Save the run you just checked — login through to the list call — and it replays step for step without going near a model. Credentials and other changing values stay as variables, filled in at run time.</p>
+          <p style="margin-top:8px">The result is the same every time, which is what regression checks and repeated collection need.</p>
+          <div class="tags"><span class="tagchip">macro_record</span><span class="tagchip">macro_run</span><span class="tagchip">variables</span><span class="tagchip">zero model calls</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">08</div>
+        <h3>Workflows — several steps as one</h3>
+        <div class="body">
+          <p>Chain macros and tool calls into a single workflow. The status bar shows where the run is, and what it finds along the way lands in the findings list.</p>
+          <div class="tags"><span class="tagchip">workflows</span><span class="tagchip">findings</span><span class="tagchip">har export</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">09</div>
+        <h3>An agent for the tedious stretches</h3>
+        <div class="body">
+          <p>Claude Code by default, Codex as an alternative, both over ACP on stdio. The agent reads the same traffic store the UI renders, so “explain the request I just made” needs no copy-paste.</p>
+          <p style="margin-top:8px">Want a different model or a different agent? Fork it, add yours and send a pull request — the agent list lives in one file.</p>
+          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">contributions welcome</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">10</div>
+        <h3>Local by default</h3>
+        <div class="body">
+          <p>The MCP server is in-process, binds to a random port on <code class="i">127.0.0.1</code>, and starts lazily on the first agent spawn. Captured traffic stays in memory inside your own app.</p>
+          <div class="tags"><span class="tagchip">127.0.0.1</span><span class="tagchip">in-process</span><span class="tagchip">no analytics backend</span></div>
         </div>
       </div>
     </div>
@@ -185,7 +213,7 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>03</b> architecture</div>
       <div>
-        <h2>Three processes, one strict boundary.</h2>
+        <h2>Three processes, and only one boundary between them.</h2>
         <p class="sub">Node APIs and the CDP debugger never leak into the page. Everything crosses through preload IPC, the single source of truth for the renderer-visible surface.</p>
       </div>
     </div>
@@ -243,7 +271,7 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>04</b> tool surface</div>
       <div>
-        <h2>134 tools, grouped by what you are trying to learn.</h2>
+        <h2>134+ MCP tools, split by domain.</h2>
         <p class="sub">Each domain is one file under <code class="i">src/main/mcp/tools/</code>. Adding a domain is a new file plus one line in the server factory.</p>
       </div>
     </div>
@@ -280,17 +308,17 @@
 
       <div class="steps" data-reveal="stagger">
         <div class="step"><div class="n">01</div><div><h4>Browse your target</h4><p>Type a URL into the embedded tab. Requests appear in the traffic list as they happen.</p></div></div>
-        <div class="step"><div class="n">02</div><div><h4>Open the chat panel</h4><p>Pick Claude Code or Codex. The session starts with the API-reversing system prompt already loaded.</p></div></div>
+        <div class="step"><div class="n">02</div><div><h4>Open the chat panel</h4><p>Pick Claude Code or Codex. The session starts with the reversing system prompt already loaded.</p></div></div>
         <div class="step"><div class="n">03</div><div><h4>Ask</h4><p>“What does the search endpoint take?” The agent reads the capture, greps the bundle, and replays the request to check itself.</p></div></div>
         <div class="step"><div class="n">04</div><div><h4>Keep it</h4><p>Save a macro, export HAR, or take the generated client code and run it outside the app.</p></div></div>
       </div>
     </div>
 
     <div class="note" data-reveal="fade">
-      <div class="cap">before you point it somewhere</div>
+      <div class="cap">one thing first</div>
       <div>
-        <p>rever-browser drives a real browser against real servers. Use it on your own services, on systems you have written permission to test, or on targets that invite it, and follow the site's terms and your local law.</p>
-        <p>It is a debugging tool for people who already have the right to look.</p>
+        <p>rever-browser is an open-source security testing tool. It was built to check what your own service's API gives away and whether its auth actually holds.</p>
+        <p>It drives a real browser against real servers, so use it on services you run or on systems you have written permission to test, and follow the site's terms and your local law.</p>
       </div>
     </div>
   </div>
@@ -301,23 +329,22 @@
   <div class="wrap">
     <div class="inner" data-reveal="fade">
       <div>
-        <h2>Read the capture. Then read the code.</h2>
-        <p>MIT licensed, with no copyleft anywhere in the dependency tree. Issues and pull requests welcome.</p>
+        <h2>100% open source.</h2>
+        <p>Apache-2.0 licensed, with no copyleft anywhere in the dependency tree. Issues and pull requests welcome.</p>
       </div>
       <div class="cta" style="margin:0">
         <a class="btn primary" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">Open on GitHub</a>
-        <a class="btn" href="demos/" target="_blank" rel="noopener">Motion kit</a>
+        <a class="btn" href="ko/">한국어</a>
       </div>
     </div>
   </div>
   <footer>
     <div class="wrap inner">
-      <span>rever-browser · MIT</span>
+      <span>rever-browser · Apache-2.0</span>
       <span class="sp">
         <a href="https://github.com/greekr4/rever-browser">source</a>
         <a href="https://github.com/greekr4/rever-browser/blob/main/README.md">readme</a>
         <a href="https://github.com/greekr4/rever-browser/issues">issues</a>
-        <a href="demos/">demos</a>
       </span>
     </div>
   </footer>
@@ -356,9 +383,7 @@
   var scaler = document.getElementById('scaler');
   var demo = document.getElementById('demo');
   var ph = document.getElementById('ph');
-  /* Every demo now renders at one fixed window height, so the frame never
-     reflows while a scenario plays — measure once, then only track viewport width. */
-  var BASE_W = 1216, BASE_H = 862;  /* .rv-app 826 + the demo page's 18px padding */
+  var BASE_W = 1216, BASE_H = 862;
   function fit() {
     var raw = Math.min(1, scaler.clientWidth / BASE_W), s = Math.max(0.42, raw);
     /* only let the frame scroll sideways when that floor actually kicked in (phones) */
@@ -432,7 +457,8 @@
   gsap.timeline({ delay: 0.1 })
     .to(words, { yPercent: 0, opacity: 1, duration: 0.9, ease: 'power3.out', stagger: 0.04 })
     .fromTo('.eyebrow', { y: -8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
-    .fromTo('.lede, .hero .cta', { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', stagger: 0.08 }, 0.4)
+    .fromTo('.lede, .hero .cta', { y: 12, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', stagger: 0.08 }, 0.4)
     .fromTo('.spec', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.5)
     .fromTo('.spec .row', { opacity: 0, x: 10 }, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, 0.6);
 

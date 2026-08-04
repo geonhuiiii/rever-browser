@@ -73,7 +73,7 @@ The MCP server starts lazily on the first agent spawn and binds to a random loca
 
 ## License
 
-[MIT](./LICENSE)
+[Apache-2.0](./LICENSE) — see [NOTICE](./NOTICE) for attribution.
 
 ## Third-party licenses
 
