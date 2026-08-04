@@ -60,6 +60,8 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 
 **One-line rule:** need the result in front of you? → DOM-first. Need to reproduce/automate it in code? → API mode.
 
+**Reproducing a signed/encrypted request — first-divergence discipline.** When your local repro of a signed/encrypted value doesn't match what the real browser produced, never report "almost working." Instead: pin the **first** point of divergence (param ordering, seconds-vs-ms timestamp, salt position/encoding, key-derivation input, trailing newline) — use `console_eval` to compare intermediate values and `crypto_trace_*` to recover the real key/message/signature. Record each environment patch you apply to close the gap. Then state explicitly whether you now have a **stable** repro and what gap (if any) remains — turning "almost done" into a concrete next step.
+
 ## What you can do (tool taxonomy)
 
 ### Page control & DOM extraction (your default toolkit)
