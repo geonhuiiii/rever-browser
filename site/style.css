@@ -313,3 +313,65 @@ body.ko h1 .ln { display: block; }
 .oc-note b { color: var(--text-2); font-weight: 600; }
 body.ko .oc-prompt, body.ko .oc-note { font-family: var(--sans-ko); }
 body.ko .oc-label, body.ko .oc-chip, body.ko .oc-lang, body.ko .oc-code { font-family: var(--mono); }
+
+/* ── hero: 134 MCP tools pouring into the app shell (scroll-scrubbed) ───── */
+.tio-frame { background: var(--bg); }
+.tio-fit { position: relative; width: 100%; overflow: hidden; }
+.tio { position: absolute; top: 0; left: 0; width: 1080px; height: 600px; transform-origin: top left; }
+
+/* real app shell on the right */
+.tio-app {
+  position: absolute; z-index: 2; left: 284px; top: 56px; width: 512px; height: 488px;
+  border: 1px solid var(--border-2); border-radius: 11px; overflow: hidden;
+  background: var(--bg); box-shadow: 0 26px 64px var(--shadow);
+  display: flex; flex-direction: column;
+}
+.tio-tb { display: flex; align-items: center; gap: 9px; padding: 8px 11px; background: var(--bg-bar); border-bottom: 1px solid var(--border); }
+.tio-lights { display: flex; gap: 6px; }
+.tio-lights i { width: 10px; height: 10px; border-radius: 50%; }
+.tio-lights i:nth-child(1){ background:#ff5f57 } .tio-lights i:nth-child(2){ background:#febc2e } .tio-lights i:nth-child(3){ background:#28c840 }
+.tio-tab { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 9px; font: 500 11px/1 var(--sans); color: var(--text-2); }
+.tio-tab .fav { width: 11px; height: 11px; border-radius: 3px; background: var(--surface-3); }
+.tio-plus { margin-left: 2px; color: var(--text-dim); font-size: 13px; }
+.tio-toolbar { display: flex; align-items: center; gap: 6px; padding: 7px 11px; background: var(--bg-bar); border-bottom: 1px solid var(--border); }
+.tio-nav { width: 21px; height: 21px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--text-dim); font-size: 11px; display: grid; place-items: center; }
+.tio-addr { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; font: 11.5px/1 var(--mono); color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tio-seg { border: 1px solid var(--border); background: var(--surface); color: var(--text-2); border-radius: 6px; padding: 4px 9px; font: 500 11px/1 var(--sans); }
+.tio-seg.on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-text); }
+.tio-bodyrow { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 168px; min-height: 0; }
+.tio-view { border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+.tio-vhead { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 12px;
+  font: 500 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+.tio-vcount { text-transform: none; letter-spacing: 0; }
+.tio-net { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.tio-net li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; padding: 4px 7px;
+  border-radius: 6px; font: 10.5px/1 var(--mono); opacity: 0; }
+.tio-net li .m { font: 600 8.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.tio-net li .m.get { color: var(--get); background: rgba(31,157,85,.12); }
+.tio-net li .m.post { color: var(--post); background: rgba(194,105,26,.12); }
+.tio-net li .u { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tio-net li .st { color: var(--chip-ok-text, #1f7a34); }
+.tio-side { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--bg); }
+.tio-agent { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; border: 1px solid var(--border);
+  border-radius: 7px; padding: 3px 8px; font: 500 10.5px/1 var(--sans); color: var(--text-2); background: var(--surface); }
+.tio-agent .av { width: 14px; height: 14px; border-radius: 4px; background: var(--accent-soft); color: var(--accent-text);
+  font: 700 9px/1 var(--mono); display: grid; place-items: center; }
+.tio-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text, #1f7a34); }
+.tio-chip-side { align-self: flex-start; font: 500 9.5px/1 var(--mono); color: var(--chip-ok-text, #1f7a34);
+  background: var(--chip-ok-bg); border: 1px solid var(--chip-ok-border); border-radius: 999px; padding: 3px 8px; }
+.tio-line { height: 9px; border-radius: 4px; background: var(--surface-2); }
+.tio-line.s { width: 62%; }
+.tio-status { padding: 6px 12px; border-top: 1px solid var(--border); background: var(--bg-bar);
+  font: 11px/1 var(--mono); color: var(--text-dim); }
+.tio-status b { color: var(--accent-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* the flying tool-name chips (small; absorbed on arrival) */
+.tio-chip {
+  position: absolute; z-index: 3; left: 0; top: 0; white-space: nowrap;
+  padding: 3px 7px; border-radius: 6px; font: 500 10px/1 var(--mono);
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-2);
+  box-shadow: 0 3px 10px var(--shadow); will-change: transform, opacity; pointer-events: none;
+}

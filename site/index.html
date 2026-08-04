@@ -71,16 +71,42 @@
     </div>
   </div>
 
-  <div class="wrap stage" data-reveal="stage">
-    <div class="frame">
-      <div class="scaler" id="scaler">
-        <iframe id="demo" title="rever-browser scenario walkthrough" src="demos/v2-find-search-api.html"></iframe>
-        <div class="ph" id="ph">loading demo…</div>
+  <div class="wrap stage" id="heroStage" data-reveal="stage">
+    <div class="frame tio-frame">
+      <div class="tio-fit" id="tioFit">
+        <div class="tio" id="tio">
+          <!-- the real rever-browser app shell the whole toolset pours into -->
+          <div class="tio-app" id="tioBrowser">
+            <div class="tio-tb">
+              <span class="tio-lights"><i></i><i></i><i></i></span>
+              <span class="tio-tab"><span class="fav"></span>NIMBUS — audio store</span>
+              <span class="tio-plus">+</span>
+            </div>
+            <div class="tio-toolbar">
+              <span class="tio-nav">‹</span><span class="tio-nav">›</span><span class="tio-nav">⟳</span><span class="tio-nav">&lt;/&gt;</span>
+              <span class="tio-addr">https://shop.nimbus.dev</span>
+              <span class="tio-seg on">Auto</span><span class="tio-seg">Proxy</span>
+            </div>
+            <div class="tio-bodyrow">
+              <div class="tio-view">
+                <div class="tio-vhead"><span>Network</span><span class="tio-vcount" id="tioNetCount">0 captured</span></div>
+                <ul class="tio-net" id="tioNet"></ul>
+              </div>
+              <div class="tio-side">
+                <div class="tio-agent"><span class="av">C</span> Claude Code <span class="on"></span></div>
+                <div class="tio-chip-side">Auto-approve</div>
+                <div class="tio-line"></div><div class="tio-line s"></div><div class="tio-line"></div>
+              </div>
+            </div>
+            <div class="tio-status"><b id="tioN">0</b> / 134 tools wired in</div>
+          </div>
+          <!-- 134 flying tool chips are injected here by JS -->
+        </div>
       </div>
     </div>
     <p class="stage-cap">
-      <span class="n" id="capnum">01</span>
-      <span id="capture">The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint and its exact payload.</span>
+      <span class="n">reversing kit</span>
+      <span id="tioCap">Every specialized tool a reversing session needs — capture, deobfuscation, repeater, intruder — lives inside one browser.</span>
     </p>
   </div>
 </section>
@@ -103,6 +129,19 @@
       <button class="tab" data-src="v2-repeater-tamper" data-cap="Sends the same request again through the repeater with one parameter changed, then compares what came back.">Resend with limit=500</button>
       <button class="tab" data-src="v2-idor-fuzz" data-cap="Sweeps a range of object ids through the intruder and flags the ones that answer with somebody else's data.">Check for IDOR</button>
       <button class="tab" data-src="v2-build-macro" data-cap="Saves the sequence you just verified as a macro. From then on it replays with no model calls at all.">Make it repeatable</button>
+    </div>
+
+    <div class="stage scenario-stage">
+      <div class="frame">
+        <div class="scaler" id="scaler">
+          <iframe id="demo" title="rever-browser scenario walkthrough" src="demos/v2-find-search-api.html"></iframe>
+          <div class="ph" id="ph">loading demo…</div>
+        </div>
+      </div>
+      <p class="stage-cap">
+        <span class="n" id="capnum">01</span>
+        <span id="capture">The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint and its exact payload.</span>
+      </p>
     </div>
 
     <div class="outcome" data-reveal="fade">
@@ -416,6 +455,167 @@
   addEventListener('resize', fit); fit();
   demo.addEventListener('load', function () { ph.classList.add('gone'); syncDemoTheme(); fit(); });
 
+  /* ── hero: all 134 MCP tools pouring into the app shell, scrubbed by scroll
+     The whole scene is parent-page DOM (no iframe), so the scroll pin drives
+     one GSAP timeline directly. Plays once as you scroll through the hero.
+     134 tool-name chips stream from a scattered field into the browser, get
+     absorbed on arrival, and the app shell lights up as the counter climbs. */
+  (function () {
+    var tio = document.getElementById('tio');
+    var tioFit = document.getElementById('tioFit');
+    var tioN = document.getElementById('tioN');
+    var tioApp = document.getElementById('tioBrowser');
+    var tioNet = document.getElementById('tioNet');
+    var tioNetCount = document.getElementById('tioNetCount');
+    var heroStage = document.getElementById('heroStage');
+    if (!tio || !tioFit) return;
+
+    var TW = 1080, TH = 600;
+    function tioResize() {
+      var s = tioFit.clientWidth / TW;
+      tio.style.transform = 'scale(' + s + ')';
+      tioFit.style.height = Math.round(TH * s) + 'px';
+    }
+    addEventListener('resize', tioResize); tioResize();
+
+    /* real MCP tool names across the 38 domains; cycled to fill all 134 */
+    var NAMES = [
+      'browser_snapshot','browser_click','browser_click_selector','browser_click_modified','browser_type',
+      'browser_type_selector','browser_hover','browser_hover_selector','browser_scroll','browser_scroll_element',
+      'browser_drag','browser_draw','browser_press_key','browser_select_option','browser_file_upload',
+      'browser_paste','browser_navigate','browser_screenshot','browser_tabs','browser_history',
+      'browser_handle_dialog','browser_evaluate','set_viewport','browser_wait_for',
+      'list_requests','get_request','get_request_initiator',
+      'list_scripts','grep_script','grep_scripts','extract_context','detect_bundler','deobfuscate_script',
+      'debugger_pause','debugger_resume','step_over','step_into','step_out','get_call_stack','get_scope',
+      'eval_on_frame','set_pause_on_exceptions',
+      'intercept_enable','intercept_disable','intercept_list','intercept_modify','intercept_continue',
+      'intercept_fail','intercept_fulfill','intercept_await',
+      'get_cookies','set_cookie','clear_cookies','get_local_storage','set_local_storage','get_session_storage','clear_storage',
+      'macro_record','macro_stop','macro_run','macro_list','macro_get','macro_delete','macro_set_var',
+      'console_logs','console_clear','console_eval','console_watch','console_errors',
+      'inject_script','inject_style','inject_before_load','remove_injection','list_injections',
+      'list_websockets','get_ws_frames','ws_send','ws_close','ws_watch',
+      'crypto_digest','crypto_decode','crypto_hmac','crypto_inspect',
+      'set_header','remove_header','list_header_rules','clear_headers',
+      'arm_dialog','accept_dialog','dismiss_dialog','list_dialogs',
+      'dom_set_attr','dom_remove','dom_set_html','dom_insert',
+      'finding_add','finding_list','finding_remove','export_findings',
+      'restore_sourcemap','list_sourcemaps','get_original_source',
+      'add_override','remove_override','list_overrides',
+      'list_service_workers','get_sw_script','sw_unregister',
+      'crypto_trace_start','crypto_trace_stop','crypto_trace_dump',
+      'get_auth_state','replay_auth','deobfuscate','detect_obfuscation','diff_requests','diff_bodies',
+      'path_probe','path_bruteforce','repeater_send','intruder_run','export_har','graphql_introspect',
+      'protobuf_decode','scan_secrets','detect_antibot_vm','decode_payload','fetch_body','burst_send',
+      'crlf_probe','payload_probe','inspect_security','vision_locate','wait_for'
+    ];
+    var TOTAL = 134;
+
+    /* absorption point = centre of the (centred) app shell */
+    var appCx = 284 + 512 / 2, appCy = 56 + 488 / 2;   /* = (540, 300) */
+
+    /* golden-angle ring: chips fill every direction AROUND the shell, out to
+       the frame edges, so the browser sits in the eye of the swarm. */
+    function frac(n) { var x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); }
+    var GOLD = 2.399963229;                 /* 137.5° */
+    var HW_S = 256 + 22, HH_S = 244 + 20;   /* shell half-size + clearance */
+    var HW_V = 528, HH_V = 288;             /* frame half-size − margin */
+    var chips = [];
+    for (var i = 0; i < TOTAL; i++) {
+      var a = i * GOLD;
+      var ca = Math.cos(a), sa = Math.sin(a);
+      var acx = Math.max(0.16, Math.abs(ca)), acy = Math.max(0.16, Math.abs(sa));
+      var clear = Math.min(HW_S / acx, HH_S / acy);   /* just outside the shell */
+      var edge = Math.min(HW_V / acx, HH_V / acy);    /* just inside the frame */
+      var t = Math.sqrt((i + 0.5) / TOTAL);
+      var r = clear + t * Math.max(0, edge - clear) + (frac(i + 1) - 0.5) * 26;
+      var sx = appCx + r * ca - 42;
+      var sy = appCy + r * sa - 10;
+      var chip = document.createElement('div');
+      chip.className = 'tio-chip';
+      chip.textContent = NAMES[i % NAMES.length];
+      chip.style.left = '0px'; chip.style.top = '0px';
+      tio.appendChild(chip);
+      chips.push({ el: chip, sx: sx, sy: sy, rot: (frac(i + 3) * 26 - 13),
+                   ang: a, r: r });
+    }
+
+    var NET = [
+      ['get', '/api/v2/config', '200'], ['get', '/api/v2/session', '200'],
+      ['post', '/api/v2/search', '200'], ['get', '/api/v2/facets', '200'], ['post', '/oauth/token', '200']
+    ];
+    NET.forEach(function (r) {
+      var li = document.createElement('li');
+      li.innerHTML = '<span class="m ' + r[0] + '">' + r[0].toUpperCase() + '</span><span class="u">' + r[1] + '</span><span class="st">' + r[2] + '</span>';
+      tioNet.appendChild(li);
+    });
+    var rows = [].slice.call(tioNet.children);
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function paintEnd() {
+      chips.forEach(function (c) { gsap.set(c.el, { opacity: 0 }); });
+      gsap.set(rows, { opacity: 1 });
+      gsap.set(tioApp, { opacity: 1 });
+      if (tioN) tioN.textContent = String(TOTAL);
+      if (tioNetCount) tioNetCount.textContent = '134 captured';
+    }
+    if (!window.gsap) { return; }
+    if (reduce) { paintEnd(); return; }
+
+    /* chips visible, scattered, at progress 0; shell a touch dim */
+    chips.forEach(function (c) { gsap.set(c.el, { x: c.sx, y: c.sy, rotation: c.rot, scale: 1, opacity: 1 }); });
+    gsap.set(tioApp, { opacity: 0.72 });
+    gsap.set(rows, { opacity: 0, x: -6 });
+
+    var tl = gsap.timeline({ paused: true });
+    var LEAD = 0.28, TAIL = 0.34;    /* brief holds: first scroll & the finish dwell */
+    var span = 0.82;                 /* over how much of the timeline chips launch */
+    var CHIP = 0.5;                  /* each chip's own spiral-in duration */
+    /* black-hole pull: straight, accelerating line into the dead centre — no
+       arc — each chip collapses to a point as it reaches the browser core. */
+    chips.forEach(function (c, i) {
+      var at = LEAD + (i / TOTAL) * span;
+      var hw = c.el.offsetWidth / 2, hh = c.el.offsetHeight / 2;
+      tl.to(c.el, {
+        x: appCx - hw, y: appCy - hh, rotation: c.rot + 60, scale: 0.05, opacity: 0,
+        duration: CHIP, ease: 'power4.in'
+      }, at);
+    });
+    /* counter, shell brighten and traffic rows track the chips ARRIVING
+       (a launch span + one chip flight), so 134 lands as the last chip drains */
+    var fill = span + CHIP;
+    var counter = { v: 0 };
+    tl.to(counter, {
+      v: TOTAL, duration: fill, ease: 'none',
+      onUpdate: function () {
+        var n = Math.round(counter.v);
+        if (tioN) tioN.textContent = String(n);
+        if (tioNetCount) tioNetCount.textContent = n + ' captured';
+      }
+    }, LEAD);
+    tl.to(tioApp, { opacity: 1, duration: fill * 0.75, ease: 'power1.out' }, LEAD);
+    rows.forEach(function (li, k) {
+      tl.to(li, { opacity: 1, x: 0, duration: 0.18, ease: 'power2.out' }, LEAD + fill * (0.32 + k * 0.12));
+    });
+    tl.to({}, { duration: TAIL });   /* end dwell so 100% rests on the finished shell */
+
+    tl.progress(0).paused(true);
+
+    if (window.ScrollTrigger) {
+      ScrollTrigger.create({
+        trigger: heroStage, start: 'center center', end: '+=170%',
+        pin: true, pinSpacing: true, scrub: 0.5,
+        onUpdate: function (self) { tl.progress(self.progress); },
+        onLeave: function () { tl.progress(1); },
+        onLeaveBack: function () { tl.progress(0); }
+      });
+      ScrollTrigger.refresh();
+    } else {
+      tl.progress(1);
+    }
+  })();
+
   /* ── scenario outcome data (prompt · tool chain · what comes back) ─ */
   function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   /* one request spec → curl / python / typescript, syntax-lit */
@@ -626,7 +826,7 @@
     .fromTo('.spec', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.5)
     .fromTo('.spec .row', { opacity: 0, x: 10 }, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, 0.6);
 
-  gsap.fromTo('.stage', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.55 });
+  gsap.fromTo('#heroStage', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.55 });
 
   /* scroll reveals — the hero intro owns its own elements */
   var OWNED = ['stage', 'eyebrow', 'lede', 'spec'];

@@ -1,8 +1,9 @@
 # site/ — the landing page
 
-Static, no build step. `index.html` is self-contained (inline CSS/JS; IBM Plex from
-Google Fonts and GSAP from jsDelivr are the only external requests). `demos/` is a
-copy of `landing-kit-v3` — the scenario frames on the page are iframes into it.
+Static, no build step. `style.css` is shared by both pages (`index.html` and
+`ko/index.html`); IBM Plex from Google Fonts and GSAP from jsDelivr are the only
+external requests. `demos/` holds only the seven self-contained scenario players the
+tabs iframe in (`v2-*.html`); the rest of the original motion kit is not shipped.
 
 ## Local preview
 
@@ -26,8 +27,7 @@ touches `site/`. One-time setup in the repo:
 
 You can also run it by hand from **Actions → Deploy landing page → Run workflow**.
 
-`.nojekyll` is required: Jekyll would otherwise drop `demos/_shell.html`, and every
-underscore-prefixed file with it.
+`.nojekyll` is required so Jekyll doesn't touch the static files.
 
 ### Custom domain
 
