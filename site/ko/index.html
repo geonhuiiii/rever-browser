@@ -59,7 +59,6 @@
         <div class="cap">한눈에 보기</div>
         <dl>
           <div class="row"><dt>MCP 도구</dt><dd><span data-count="134">0</span>개+</dd></div>
-          <div class="row"><dt>프로세스</dt><dd><span data-count="3">0</span>개 · 격리</dd></div>
           <div class="row"><dt>에이전트</dt><dd>claude code · codex</dd></div>
           <div class="row"><dt>지원 OS</dt><dd>macOS · 윈도우 · 리눅스</dd></div>
           <div class="row"><dt>라이선스</dt><dd>MIT</dd></div>
@@ -143,11 +142,22 @@
       </div>
       <div class="row-item">
         <div class="num">04</div>
-        <h3>브라우저 자동 조작</h3>
+        <h3>브라우저 조작 — 실제 페이지에서 안 깨지게</h3>
         <div class="body">
-          <p>이동·클릭·입력·스크롤·스크린샷을 접근성 스냅샷 기반으로 실행합니다. 깨지기 쉬운 셀렉터 대신 짧은 <code class="i">rN</code> 참조를 씁니다.</p>
-          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">set_viewport</span></div>
+          <p>이동·클릭·입력·스크롤·호버·드래그·붙여넣기·키 입력·파일 업로드·탭 전환까지 도구로 나와 있고, 대상은 셀렉터 대신 접근성 스냅샷이 매긴 짧은 <code class="i">rN</code> 참조로 지정합니다. 마크업이 바뀌어도 참조는 살아 있습니다.</p>
+          <p style="margin-top:8px">여기까지는 다른 도구도 합니다. 실제로 갈리는 건 “안 잡히는 것”을 얼마나 잡느냐입니다.</p>
+          <ul style="margin:12px 0 0;padding:0 0 0 15px;display:grid;gap:7px;border-left:1px solid var(--border-2);list-style:none;font-size:14px;color:var(--text-dim)">
+            <li><b style="color:var(--text-2);font-weight:600">접근성 트리 밖의 요소</b> — 트리에 안 올라오는 클릭 대상은 별도 스캔으로 찾아 참조를 붙입니다. div로만 만든 버튼도 대상이 됩니다.</li>
+            <li><b style="color:var(--text-2);font-weight:600">Shadow DOM과 iframe</b> — 섀도 루트를 뚫고 들어가고, 중첩된 out-of-process iframe에도 붙어 그 안의 요소를 그대로 조작합니다. 좌표는 클릭하는 순간 프레임 오프셋을 다시 재서 어긋나지 않습니다.</li>
+            <li><b style="color:var(--text-2);font-weight:600">보이는 것만</b> — 스냅샷은 실제로 화면에 그려진 것만 내보냅니다. 숨겨졌거나 크기가 0이거나 다른 레이어에 덮인 요소는 빠지고, 모달이 떠 있으면 뒤쪽은 대상이 되지 않습니다.</li>
+            <li><b style="color:var(--text-2);font-weight:600">스크롤 컨테이너</b> — 내부 스크롤 영역을 따로 표시하고, 필요한 만큼만 스크롤합니다. 합성 이벤트가 아니라 실제 휠 입력이라 무한 스크롤이나 스크롤 핸들러가 정상 동작합니다.</li>
+            <li><b style="color:var(--text-2);font-weight:600">새로 생긴 것 표시</b> — 직전 스냅샷 이후 나타난 참조를 따로 표시해서, 방금 클릭이 무엇을 띄웠는지 바로 보입니다.</li>
+            <li><b style="color:var(--text-2);font-weight:600">타이밍</b> — 레이아웃 도중에 찍힌 스냅샷은 다시 읽고, 다이얼로그는 뜨기 전에 답을 미리 걸어 둘 수 있으며, 조건이 갖춰질 때까지 기다리는 도구가 따로 있습니다.</li>
+          </ul>
+          <p style="margin-top:12px">이 동작들은 섀도 DOM, 중첩 iframe, 결제 위젯(토스페이먼츠 샌드박스) 같은 실제 픽스처로 회귀 검증합니다.</p>
+          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">browser_drag</span><span class="tagchip">browser_press_key</span><span class="tagchip">browser_select_option</span><span class="tagchip">browser_file_upload</span><span class="tagchip">browser_wait_for</span><span class="tagchip">oopif</span><span class="tagchip">shadow dom</span></div>
         </div>
+      </div>
       </div>
       <div class="row-item">
         <div class="num">05</div>
