@@ -104,6 +104,28 @@
       <button class="tab" data-src="v2-idor-fuzz" data-cap="Sweeps a range of object ids through the intruder and flags the ones that answer with somebody else's data.">Check for IDOR</button>
       <button class="tab" data-src="v2-build-macro" data-cap="Saves the sequence you just verified as a macro. From then on it replays with no model calls at all.">Make it repeatable</button>
     </div>
+
+    <div class="outcome" data-reveal="fade">
+      <div class="outcome-grid">
+        <div class="oc-col">
+          <div class="oc-label">what you type</div>
+          <p class="oc-prompt" id="oc-prompt"></p>
+          <div class="oc-label" style="margin-top:20px">tools it calls</div>
+          <div class="oc-chain" id="oc-chain"></div>
+        </div>
+        <div class="oc-col">
+          <div class="oc-head">
+            <div class="oc-label">what comes back</div>
+            <div class="oc-langs" id="oc-langs"></div>
+          </div>
+          <div class="oc-codewrap">
+            <button class="oc-copy" id="oc-copy">copy</button>
+            <pre class="oc-code" id="oc-code"></pre>
+          </div>
+          <p class="oc-note" id="oc-note"></p>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -394,6 +416,146 @@
   addEventListener('resize', fit); fit();
   demo.addEventListener('load', function () { ph.classList.add('gone'); syncDemoTheme(); fit(); });
 
+  /* ── scenario outcome data (prompt · tool chain · what comes back) ─ */
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  /* one request spec → curl / python / typescript, syntax-lit */
+  function gen(req) {
+    var body = req.body ? JSON.stringify(req.body) : null;
+    var hlines = Object.keys(req.headers || {});
+    var curl = '<span class="k">curl</span> -X ' + req.method + " '" + req.url + "'";
+    hlines.forEach(function (h) { curl += " \\\n  -H '" + h + ': ' + req.headers[h] + "'"; });
+    if (body) curl += " \\\n  -d '" + body + "'";
+    var py = '<span class="k">import</span> requests\n\nr = requests.' + req.method.toLowerCase() + '(\n' +
+      '    <span class="s">"' + req.url + '"</span>,\n';
+    var authH = hlines.filter(function (h) { return h.toLowerCase() !== 'content-type'; });
+    if (authH.length) py += '    headers={' + authH.map(function (h) { return '<span class="s">"' + h + '"</span>: <span class="s">"' + req.headers[h] + '"</span>'; }).join(', ') + '},\n';
+    if (body) py += '    json=' + pyObj(req.body) + ',\n';
+    py += ')\n<span class="k">print</span>(r.json())';
+    var ts = '<span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">"' + req.url + '"</span>, {\n' +
+      '  method: <span class="s">"' + req.method + '"</span>,\n' +
+      '  headers: {\n' + hlines.map(function (h) { return '    <span class="s">"' + h + '"</span>: <span class="s">"' + req.headers[h] + '"</span>,'; }).join('\n') + '\n  },\n';
+    if (body) ts += '  body: JSON.stringify(' + jsObj(req.body) + '),\n';
+    ts += '});\n<span class="k">console</span>.log(<span class="k">await</span> r.json());';
+    return { curl: curl, python: py, typescript: ts };
+  }
+  function pyObj(o) { return '{' + Object.keys(o).map(function (k) { return '<span class="s">"' + k + '"</span>: ' + val(o[k], true); }).join(', ') + '}'; }
+  function jsObj(o) { return '{ ' + Object.keys(o).map(function (k) { return k + ': ' + val(o[k], false); }).join(', ') + ' }'; }
+  function val(v, py) { return typeof v === 'string' ? '<span class="s">"' + v + '"</span>' : (py && typeof v === 'boolean' ? (v ? 'True' : 'False') : String(v)); }
+
+  var TOK = 'Bearer eyJhbGciOiJIUzI1NiIs…';
+  var SCEN = {
+    'v2-find-search-api': {
+      prompt: 'Find the search API on this site and show me the exact request payload.',
+      chain: ['browser_snapshot', 'browser_type r5', 'browser_click r6', 'list_requests', 'get_request'],
+      req: { method: 'POST', url: 'https://shop.nimbus.dev/api/v2/search',
+             headers: { 'Authorization': TOK, 'Content-Type': 'application/json' },
+             body: { q: 'wireless earbuds', page: 1, limit: 20 } },
+      note: 'One POST does the whole search — the query is in the body, auth rides on the header.'
+    },
+    'v2-login-orders': {
+      prompt: 'Log into this site with the test account and pull my recent orders from the API.',
+      chain: ['browser_type #email', 'browser_type #password', 'browser_click submit', 'list_requests', 'get_request'],
+      req: { method: 'GET', url: 'https://shop.acme.dev/api/v2/orders?limit=3',
+             headers: { 'Authorization': TOK } },
+      note: 'Login issues the bearer token; the orders call just carries it. No cookies needed to replay.'
+    },
+    'v2-deob-auth': {
+      prompt: 'Deobfuscate the main JS bundle and tell me how authentication works.',
+      chain: ['grep_scripts', 'deobfuscate_script', 'finding_add'],
+      code: '<span class="k">async function</span> refreshToken() {\n' +
+            '  <span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">"/oauth/token"</span>, {\n' +
+            '    method: <span class="s">"POST"</span>,\n' +
+            '    body: JSON.stringify({\n' +
+            '      grant_type: <span class="s">"refresh_token"</span>,\n' +
+            '      client_id: <span class="s">"web-3"</span>,\n' +
+            '    }),\n' +
+            '  });\n' +
+            '  <span class="c">// access_token (1h) + rotated refresh_token</span>\n' +
+            '  <span class="k">return</span> (<span class="k">await</span> res.json()).access_token;\n' +
+            '}',
+      note: 'Restored from a minified <b>chunk-4f2a.js</b> — a plain OAuth refresh flow with <b>client_id=web-3</b>.'
+    },
+    'v2-websocket-decode': {
+      prompt: 'Watch the websocket and tell me what message subscribes to live order updates.',
+      chain: ['list_websockets', 'get_ws_frames', 'finding_add'],
+      code: '<span class="c">// outbound text frame → subscribes the socket</span>\n' +
+            '{ <span class="s">"op"</span>: <span class="s">"subscribe"</span>, <span class="s">"channel"</span>: <span class="s">"orders"</span> }\n\n' +
+            '<span class="c">// server acks, then pushes one frame per fill</span>\n' +
+            '{ <span class="s">"op"</span>: <span class="s">"ack"</span>, <span class="s">"channel"</span>: <span class="s">"orders"</span> }',
+      note: 'Everything else on the socket is ping/pong noise — <b>44 heartbeats</b> skipped to isolate this frame.'
+    },
+    'v2-repeater-tamper': {
+      prompt: 'Resend that search request but bump limit to 500 and tell me if pagination is enforced.',
+      chain: ['repeater_send limit 20→500'],
+      req: { method: 'POST', url: 'https://shop.example.com/api/v2/catalog/search',
+             headers: { 'Authorization': TOK, 'Content-Type': 'application/json' },
+             body: { query: 'wireless', offset: 0, limit: 500 } },
+      note: 'Server clamps it: response comes back <b>count 20, total 500</b>. Pagination is enforced server-side.'
+    },
+    'v2-idor-fuzz': {
+      prompt: 'Take this profile request and check if I can read other users by changing the id.',
+      chain: ['intruder_run 1000..1060', 'finding_add severity:high'],
+      code: 'GET /api/v2/user/<span class="k">1003</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/<span class="k">1007</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/<span class="k">1012</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/1060/profile   <span class="c">403   12 B</span>',
+      note: 'IDOR confirmed — ids you don’t own answer <b>200</b> with a full profile. No ownership check.'
+    },
+    'v2-build-macro': {
+      prompt: 'Great — now save those steps as a macro I can replay without you.',
+      chain: ['save_macro'],
+      code: 'macro <span class="s">"login-and-fetch-orders"</span>  ·  6 steps\n' +
+            '  vars   {{user}} = test@acme.dev\n' +
+            '         {{pass}} = ••••••••\n' +
+            '  1 browser_navigate   4 browser_click\n' +
+            '  2 browser_type       5 list_requests\n' +
+            '  3 browser_type       6 get_request',
+      note: 'Replays deterministically with <b>0 model calls</b>. Credentials stay as variables, filled at run time.'
+    }
+  };
+  Object.keys(SCEN).forEach(function (k) { var d = SCEN[k]; if (d.req) d.langs = gen(d.req); });
+
+  var ocPrompt = document.getElementById('oc-prompt'), ocChain = document.getElementById('oc-chain');
+  var ocLangs = document.getElementById('oc-langs'), ocCode = document.getElementById('oc-code'), ocNote = document.getElementById('oc-note');
+  var LANG_LABEL = { curl: 'curl', python: 'python', typescript: 'ts' };
+  var ocState = null;
+  function paintCode() {
+    if (ocState.langs) ocCode.innerHTML = ocState.langs[ocState.lang];
+    else ocCode.innerHTML = ocState.code;
+  }
+  function renderOutcome(src) {
+    var d = SCEN[src]; if (!d) return;
+    ocPrompt.textContent = '“' + d.prompt + '”';
+    ocChain.innerHTML = d.chain.map(function (c, i) {
+      var m = c.match(/^(\S+)(.*)$/);
+      var chip = '<span class="oc-chip"><span class="a">' + esc(m[1]) + '</span>' + esc(m[2]) + '</span>';
+      return (i ? '<span class="oc-arrow">→</span>' : '') + chip;
+    }).join('');
+    ocNote.innerHTML = d.note || '';
+    ocState = { langs: d.langs || null, code: d.code || '', lang: 'curl' };
+    if (d.langs) {
+      ocLangs.style.display = '';
+      ocLangs.innerHTML = ['curl', 'python', 'typescript'].map(function (l) {
+        return '<button class="oc-lang' + (l === 'curl' ? ' is-on' : '') + '" data-lang="' + l + '">' + LANG_LABEL[l] + '</button>';
+      }).join('');
+    } else {
+      ocLangs.style.display = 'none';
+      ocLangs.innerHTML = '';
+    }
+    paintCode();
+  }
+  ocLangs.addEventListener('click', function (e) {
+    var b = e.target.closest('.oc-lang'); if (!b || !ocState) return;
+    [].forEach.call(this.children, function (c) { c.classList.toggle('is-on', c === b); });
+    ocState.lang = b.dataset.lang; paintCode();
+  });
+  document.getElementById('oc-copy').addEventListener('click', function () {
+    var btn = this;
+    navigator.clipboard.writeText(ocCode.textContent).then(function () {
+      btn.textContent = 'copied'; setTimeout(function () { btn.textContent = 'copy'; }, 1400);
+    });
+  });
+
   /* ── scenario tabs ───────────────────────────────────────────────── */
   var tabs = document.getElementById('tabs');
   var capNum = document.getElementById('capnum'), capText = document.getElementById('capture');
@@ -405,8 +567,10 @@
     demo.src = 'demos/' + btn.dataset.src + '.html';
     capNum.textContent = ('0' + (all.indexOf(btn) + 1)).slice(-2);
     capText.textContent = btn.dataset.cap;
+    renderOutcome(btn.dataset.src);
     scrollTo({ top: scaler.getBoundingClientRect().top + scrollY - 92, behavior: reduced ? 'auto' : 'smooth' });
   });
+  renderOutcome('v2-find-search-api');
 
   /* ── tool catalog, counts read off src/main/mcp/tools/ ───────────── */
   var TOOLS = [

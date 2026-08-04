@@ -100,6 +100,28 @@
       <button class="tab" data-src="v2-idor-fuzz" data-cap="인트루더로 객체 id 구간을 훑어, 남의 데이터가 그대로 내려오는 id를 찾아 표시합니다.">IDOR 있는지 확인해줘</button>
       <button class="tab" data-src="v2-build-macro" data-cap="방금 확인한 순서를 매크로로 저장합니다. 다음부터는 모델 호출 없이 같은 절차가 그대로 재생됩니다.">이 과정 반복 가능하게 만들어줘</button>
     </div>
+
+    <div class="outcome" data-reveal="fade">
+      <div class="outcome-grid">
+        <div class="oc-col">
+          <div class="oc-label">이렇게 입력하면</div>
+          <p class="oc-prompt" id="oc-prompt"></p>
+          <div class="oc-label" style="margin-top:20px">이 도구들을 부르고</div>
+          <div class="oc-chain" id="oc-chain"></div>
+        </div>
+        <div class="oc-col">
+          <div class="oc-head">
+            <div class="oc-label">이게 나옵니다</div>
+            <div class="oc-langs" id="oc-langs"></div>
+          </div>
+          <div class="oc-codewrap">
+            <button class="oc-copy" id="oc-copy">복사</button>
+            <pre class="oc-code" id="oc-code"></pre>
+          </div>
+          <p class="oc-note" id="oc-note"></p>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -389,6 +411,139 @@
   addEventListener('resize', fit); fit();
   demo.addEventListener('load', function () { ph.classList.add('gone'); syncDemoTheme(); fit(); });
 
+  /* ── 시나리오 결과 패널 (프롬프트 · 툴 콜 · 나오는 것) ───────────── */
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function gen(req) {
+    var body = req.body ? JSON.stringify(req.body) : null;
+    var hlines = Object.keys(req.headers || {});
+    var curl = '<span class="k">curl</span> -X ' + req.method + " '" + req.url + "'";
+    hlines.forEach(function (h) { curl += " \\\n  -H '" + h + ': ' + req.headers[h] + "'"; });
+    if (body) curl += " \\\n  -d '" + body + "'";
+    var authH = hlines.filter(function (h) { return h.toLowerCase() !== 'content-type'; });
+    var py = '<span class="k">import</span> requests\n\nr = requests.' + req.method.toLowerCase() + '(\n' +
+      '    <span class="s">"' + req.url + '"</span>,\n';
+    if (authH.length) py += '    headers={' + authH.map(function (h) { return '<span class="s">"' + h + '"</span>: <span class="s">"' + req.headers[h] + '"</span>'; }).join(', ') + '},\n';
+    if (body) py += '    json=' + pyObj(req.body) + ',\n';
+    py += ')\n<span class="k">print</span>(r.json())';
+    var ts = '<span class="k">const</span> r = <span class="k">await</span> fetch(<span class="s">"' + req.url + '"</span>, {\n' +
+      '  method: <span class="s">"' + req.method + '"</span>,\n' +
+      '  headers: {\n' + hlines.map(function (h) { return '    <span class="s">"' + h + '"</span>: <span class="s">"' + req.headers[h] + '"</span>,'; }).join('\n') + '\n  },\n';
+    if (body) ts += '  body: JSON.stringify(' + jsObj(req.body) + '),\n';
+    ts += '});\n<span class="k">console</span>.log(<span class="k">await</span> r.json());';
+    return { curl: curl, python: py, typescript: ts };
+  }
+  function pyObj(o) { return '{' + Object.keys(o).map(function (k) { return '<span class="s">"' + k + '"</span>: ' + val(o[k], true); }).join(', ') + '}'; }
+  function jsObj(o) { return '{ ' + Object.keys(o).map(function (k) { return k + ': ' + val(o[k], false); }).join(', ') + ' }'; }
+  function val(v, py) { return typeof v === 'string' ? '<span class="s">"' + v + '"</span>' : (py && typeof v === 'boolean' ? (v ? 'True' : 'False') : String(v)); }
+
+  var TOK = 'Bearer eyJhbGciOiJIUzI1NiIs…';
+  var SCEN = {
+    'v2-find-search-api': {
+      prompt: '이 사이트 검색 API 찾아서 요청 본문 그대로 보여줘.',
+      chain: ['browser_snapshot', 'browser_type r5', 'browser_click r6', 'list_requests', 'get_request'],
+      req: { method: 'POST', url: 'https://shop.nimbus.dev/api/v2/search',
+             headers: { 'Authorization': TOK, 'Content-Type': 'application/json' },
+             body: { q: 'wireless earbuds', page: 1, limit: 20 } },
+      note: '검색 한 번이 POST 하나로 끝납니다. 쿼리는 본문에, 인증은 헤더에 실립니다.'
+    },
+    'v2-login-orders': {
+      prompt: '테스트 계정으로 로그인해서 내 최근 주문을 API로 가져와.',
+      chain: ['browser_type #email', 'browser_type #password', 'browser_click submit', 'list_requests', 'get_request'],
+      req: { method: 'GET', url: 'https://shop.acme.dev/api/v2/orders?limit=3',
+             headers: { 'Authorization': TOK } },
+      note: '로그인이 베어러 토큰을 발급하고, 주문 호출은 그 토큰만 실어 보냅니다. 쿠키 없이 재현됩니다.'
+    },
+    'v2-deob-auth': {
+      prompt: '메인 JS 번들 난독화 풀고 인증이 어떻게 도는지 알려줘.',
+      chain: ['grep_scripts', 'deobfuscate_script', 'finding_add'],
+      code: '<span class="k">async function</span> refreshToken() {\n' +
+            '  <span class="k">const</span> res = <span class="k">await</span> fetch(<span class="s">"/oauth/token"</span>, {\n' +
+            '    method: <span class="s">"POST"</span>,\n' +
+            '    body: JSON.stringify({\n' +
+            '      grant_type: <span class="s">"refresh_token"</span>,\n' +
+            '      client_id: <span class="s">"web-3"</span>,\n' +
+            '    }),\n' +
+            '  });\n' +
+            '  <span class="c">// access_token(1시간) + 회전된 refresh_token</span>\n' +
+            '  <span class="k">return</span> (<span class="k">await</span> res.json()).access_token;\n' +
+            '}',
+      note: '압축된 <b>chunk-4f2a.js</b>에서 복원 — <b>client_id=web-3</b>을 쓰는 평범한 OAuth 리프레시 흐름입니다.'
+    },
+    'v2-websocket-decode': {
+      prompt: '웹소켓 지켜보다가 실시간 주문 업데이트 구독하는 메시지 알려줘.',
+      chain: ['list_websockets', 'get_ws_frames', 'finding_add'],
+      code: '<span class="c">// 이 outbound 텍스트 프레임이 구독을 건다</span>\n' +
+            '{ <span class="s">"op"</span>: <span class="s">"subscribe"</span>, <span class="s">"channel"</span>: <span class="s">"orders"</span> }\n\n' +
+            '<span class="c">// 서버가 ack, 이후 체결마다 한 프레임씩 push</span>\n' +
+            '{ <span class="s">"op"</span>: <span class="s">"ack"</span>, <span class="s">"channel"</span>: <span class="s">"orders"</span> }',
+      note: '나머지는 전부 핑퐁 노이즈입니다. <b>하트비트 44개</b>를 걸러 이 프레임만 남겼습니다.'
+    },
+    'v2-repeater-tamper': {
+      prompt: '그 검색 요청 limit만 500으로 올려서 다시 보내고 페이지네이션 강제되는지 봐줘.',
+      chain: ['repeater_send limit 20→500'],
+      req: { method: 'POST', url: 'https://shop.example.com/api/v2/catalog/search',
+             headers: { 'Authorization': TOK, 'Content-Type': 'application/json' },
+             body: { query: 'wireless', offset: 0, limit: 500 } },
+      note: '서버가 잘라냅니다. 응답이 <b>count 20, total 500</b>으로 와서 페이지네이션은 서버에서 강제됩니다.'
+    },
+    'v2-idor-fuzz': {
+      prompt: '이 프로필 요청에서 id만 바꿔서 다른 사용자도 읽히는지 확인해.',
+      chain: ['intruder_run 1000..1060', 'finding_add severity:high'],
+      code: 'GET /api/v2/user/<span class="k">1003</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/<span class="k">1007</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/<span class="k">1012</span>/profile   <span class="s">200</span>  4.1 KB\n' +
+            'GET /api/v2/user/1060/profile   <span class="c">403   12 B</span>',
+      note: 'IDOR 확인 — 내 것이 아닌 id도 <b>200</b>에 프로필 전체를 내려줍니다. 소유권 검사가 없습니다.'
+    },
+    'v2-build-macro': {
+      prompt: '좋아, 방금 그 단계들 매크로로 저장해서 나 없이도 재생하게 해줘.',
+      chain: ['save_macro'],
+      code: 'macro <span class="s">"login-and-fetch-orders"</span>  ·  6단계\n' +
+            '  vars   {{user}} = test@acme.dev\n' +
+            '         {{pass}} = ••••••••\n' +
+            '  1 browser_navigate   4 browser_click\n' +
+            '  2 browser_type       5 list_requests\n' +
+            '  3 browser_type       6 get_request',
+      note: '<b>모델 호출 0</b>으로 그대로 재생됩니다. 아이디·비밀번호는 변수로 남아 실행할 때 채워집니다.'
+    }
+  };
+  Object.keys(SCEN).forEach(function (k) { var d = SCEN[k]; if (d.req) d.langs = gen(d.req); });
+
+  var ocPrompt = document.getElementById('oc-prompt'), ocChain = document.getElementById('oc-chain');
+  var ocLangs = document.getElementById('oc-langs'), ocCode = document.getElementById('oc-code'), ocNote = document.getElementById('oc-note');
+  var LANG_LABEL = { curl: 'curl', python: 'python', typescript: 'ts' };
+  var ocState = null;
+  function paintCode() { ocCode.innerHTML = ocState.langs ? ocState.langs[ocState.lang] : ocState.code; }
+  function renderOutcome(src) {
+    var d = SCEN[src]; if (!d) return;
+    ocPrompt.textContent = '“' + d.prompt + '”';
+    ocChain.innerHTML = d.chain.map(function (c, i) {
+      var m = c.match(/^(\S+)(.*)$/);
+      var chip = '<span class="oc-chip"><span class="a">' + esc(m[1]) + '</span>' + esc(m[2]) + '</span>';
+      return (i ? '<span class="oc-arrow">→</span>' : '') + chip;
+    }).join('');
+    ocNote.innerHTML = d.note || '';
+    ocState = { langs: d.langs || null, code: d.code || '', lang: 'curl' };
+    if (d.langs) {
+      ocLangs.style.display = '';
+      ocLangs.innerHTML = ['curl', 'python', 'typescript'].map(function (l) {
+        return '<button class="oc-lang' + (l === 'curl' ? ' is-on' : '') + '" data-lang="' + l + '">' + LANG_LABEL[l] + '</button>';
+      }).join('');
+    } else { ocLangs.style.display = 'none'; ocLangs.innerHTML = ''; }
+    paintCode();
+  }
+  ocLangs.addEventListener('click', function (e) {
+    var b = e.target.closest('.oc-lang'); if (!b || !ocState) return;
+    [].forEach.call(this.children, function (c) { c.classList.toggle('is-on', c === b); });
+    ocState.lang = b.dataset.lang; paintCode();
+  });
+  document.getElementById('oc-copy').addEventListener('click', function () {
+    var btn = this;
+    navigator.clipboard.writeText(ocCode.textContent).then(function () {
+      btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1400);
+    });
+  });
+
   /* ── 시나리오 탭 ─────────────────────────────────────────────────── */
   var tabs = document.getElementById('tabs');
   var capNum = document.getElementById('capnum'), capText = document.getElementById('capture');
@@ -400,8 +555,10 @@
     demo.src = '../demos/' + btn.dataset.src + '.html';
     capNum.textContent = ('0' + (all.indexOf(btn) + 1)).slice(-2);
     capText.textContent = btn.dataset.cap;
+    renderOutcome(btn.dataset.src);
     scrollTo({ top: scaler.getBoundingClientRect().top + scrollY - 92, behavior: reduced ? 'auto' : 'smooth' });
   });
+  renderOutcome('v2-find-search-api');
 
   /* ── 도구 목록: src/main/mcp/tools/ 기준 ─────────────────────────── */
   var TOOLS = [

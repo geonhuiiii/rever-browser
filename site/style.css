@@ -281,3 +281,35 @@ body.ko .nav .links a.lnk { font-family: var(--sans-ko); letter-spacing: 0; }
 body.ko .stage-cap { line-height: 1.75; }
 body.ko .lang { color: var(--accent-text); }
 body.ko h1 .ln { display: block; }
+
+/* ── scenario outcome panel (prompt · tool chain · result code) ────────── */
+.outcome { margin-top: 22px; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.outcome-grid { display: grid; grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr); }
+@media (max-width: 820px) { .outcome-grid { grid-template-columns: 1fr; } }
+.oc-col { padding: 18px 20px; min-width: 0; }
+.oc-col + .oc-col { border-left: 1px solid var(--border); }
+@media (max-width: 820px) { .oc-col + .oc-col { border-left: 0; border-top: 1px solid var(--border); } }
+.oc-label { font: 500 10.5px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--text-dim); }
+.oc-prompt { margin: 11px 0 0; font-size: 15px; line-height: 1.55; color: var(--text); position: relative; padding-left: 14px; }
+.oc-prompt::before { content: ''; position: absolute; left: 0; top: 3px; bottom: 3px; width: 2px; border-radius: 2px; background: var(--accent-border); }
+.oc-chain { margin: 20px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; }
+.oc-chip { font: 400 11.5px/1 var(--mono); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
+.oc-chip .a { color: var(--accent-text); }
+.oc-arrow { color: var(--text-dim); font-size: 11px; }
+.oc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.oc-langs { margin-left: auto; display: flex; gap: 3px; }
+.oc-lang { font: 400 11.5px/1 var(--mono); color: var(--text-dim); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.oc-lang:hover { color: var(--text-2); }
+.oc-lang.is-on { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-border); }
+.oc-codewrap { position: relative; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--code-bg); }
+.oc-copy { position: absolute; top: 7px; right: 7px; z-index: 2; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim); border-radius: 5px; padding: 4px 8px; font: 400 11px/1 var(--mono); cursor: pointer; }
+.oc-copy:hover { color: var(--accent-text); border-color: var(--accent-border); }
+.oc-code { margin: 0; padding: 13px 15px; overflow-x: auto; font: 12px/1.7 var(--mono); color: var(--text-2); white-space: pre; }
+.oc-code .k { color: var(--accent-text); }
+.oc-code .s { color: var(--chip-ok-text, #1f7a34); }
+.oc-code .c { color: var(--text-dim); }
+:root[data-theme='dark'] .oc-code .s { color: #7fd499; }
+.oc-note { margin: 11px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+.oc-note b { color: var(--text-2); font-weight: 600; }
+body.ko .oc-prompt, body.ko .oc-note { font-family: var(--sans-ko); }
+body.ko .oc-label, body.ko .oc-chip, body.ko .oc-lang, body.ko .oc-code { font-family: var(--mono); }
