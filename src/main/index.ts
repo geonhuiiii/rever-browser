@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, session, shell, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeTheme, net, session, shell, type MenuItemConstructorOptions } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,7 @@ import type {
 } from '@agentclientprotocol/sdk'
 
 import { startMcpServer } from './mcp/server'
+import { refForBackendNodeId } from './mcp/snapshot'
 import {
   attachCdpCapture,
   clearDialogHistory,
@@ -18,7 +19,8 @@ import {
   getDialogHistory,
   setActiveTarget,
   setDialogAutoDismiss,
-  setEmulatedColorScheme
+  setEmulatedColorScheme,
+  setInspectNodeHandler
 } from './chrome-cdp'
 import {
   getSnapshotCount,
@@ -62,7 +64,7 @@ import {
   type RepeaterModifications,
   type RepeaterRequestSpec
 } from './repeater'
-import { partitionForTab, registerTabPartition, setActivePartition } from './tab-partition'
+import { getActivePartition, partitionForTab, registerTabPartition, setActivePartition } from './tab-partition'
 import { applyTabProxy, proxyCredentialsForSession, type TabProxyConfig } from './tab-proxy'
 import { listMcpTools } from './mcp/bridge'
 import {
@@ -284,12 +286,251 @@ function buildPageContextMenu(
       { type: 'separator' }
     )
   }
-  items.push({
-    label: 'Inspect Element',
-    click: () => contents.inspectElement(params.x, params.y)
-  })
+  items.push(
+    {
+      label: 'Copy Element',
+      click: () => void copyElementInfo(contents, params.x, params.y)
+    },
+    {
+      label: 'Inspect Element',
+      click: () => contents.inspectElement(params.x, params.y)
+    }
+  )
   return Menu.buildFromTemplate(items)
 }
+
+// Selector builder shared by "Copy Element" and the element picker: walk up
+// from the element (`this`) preferring a unique #id, then a stable attribute,
+// then tag:nth-of-type — stopping at an id-anchored ancestor or body.
+// Self-contained; runs in the page. The context menu calls it via
+// executeJavaScript on elementFromPoint's result; the picker via
+// Runtime.callFunctionOn with the picked node as `this` — both paths produce
+// identical selectors because this is the only copy of the walk.
+const SELECTOR_FROM_ELEMENT_FN = `function () {
+  const el = this;
+  if (!el || el.nodeType !== 1) return null;
+  const doc = el.ownerDocument;
+  const parts = [];
+  let node = el;
+  while (node && node.nodeType === 1 && node !== doc.documentElement) {
+    if (node.id && doc.querySelectorAll('#' + CSS.escape(node.id)).length === 1) {
+      parts.unshift('#' + CSS.escape(node.id));
+      return parts.join(' > ');
+    }
+    if (node.tagName === 'BODY') {
+      parts.unshift('body');
+      return parts.join(' > ');
+    }
+    let seg = null;
+    for (const attr of ['data-testid', 'data-test', 'name', 'aria-label']) {
+      const v = node.getAttribute(attr);
+      if (v) {
+        seg = node.tagName.toLowerCase() + '[' + attr + '=' + JSON.stringify(v) + ']';
+        break;
+      }
+    }
+    if (seg && doc.querySelectorAll(seg).length === 1) {
+      parts.unshift(seg);
+      return parts.join(' > ');
+    }
+    if (!seg) {
+      let k = 1;
+      let s = node;
+      while ((s = s.previousElementSibling)) if (s.tagName === node.tagName) k++;
+      seg = node.tagName.toLowerCase() + ':nth-of-type(' + k + ')';
+    }
+    parts.unshift(seg);
+    node = node.parentElement;
+  }
+  return parts.length ? parts.join(' > ') : null;
+}`
+
+interface ElementRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+// Bounding rect (webview-viewport CSS px) of a CDP box-model content quad
+// [x1,y1,x2,y2,x3,y3,x4,y4].
+function contentQuadRect(q: number[] | undefined): ElementRect | null {
+  if (!q || q.length < 8) return null
+  const xs = [q[0], q[2], q[4], q[6]]
+  const ys = [q[1], q[3], q[5], q[7]]
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width: Math.round(Math.max(...xs) - x),
+    height: Math.round(Math.max(...ys) - y)
+  }
+}
+
+// Shared tail of both copy paths: write the clipboard text and ask the UI to
+// outline the element with a "Copied!" badge (rect = webview-viewport CSS px).
+function publishElementCopy(
+  rect: ElementRect | null,
+  selector: string | null,
+  ref: string | null
+): void {
+  clipboard.writeText(
+    `selector: ${selector ?? '(none — no element at this point)'}\n` +
+      `ref: ${ref ? `${ref}   (current snapshot only)` : '(none — run a browser_snapshot first)'}`
+  )
+  mainWindow?.webContents.send('element-copied', { rect, selector, ref })
+  // Any element copy (picker click OR the right-click menu) exits picker mode.
+  if (pickerActive) void stopPicker()
+}
+
+// "Copy Element": put a robust CSS selector for the element under the cursor on
+// the clipboard, plus its current snapshot ref (rN) when one exists. Both
+// lookups are best-effort — a failed one degrades to a "(none — ...)" line.
+async function copyElementInfo(
+  contents: Electron.WebContents,
+  x: number,
+  y: number
+): Promise<void> {
+  let selector: string | null = null
+  try {
+    selector = (await contents.executeJavaScript(
+      `(${SELECTOR_FROM_ELEMENT_FN}).call(document.elementFromPoint(${x}, ${y}))`
+    )) as string | null
+  } catch {
+    // Page navigated away or script execution blocked — selector stays null.
+  }
+
+  // Ref + rect: resolve the point to a backendNodeId via CDP, reverse-look it up
+  // in the current snapshot's ref map (page session — sessionId undefined), and
+  // grab its box model so the UI can outline the element.
+  let ref: string | null = null
+  let rect: ElementRect | null = null
+  try {
+    await contents.debugger.sendCommand('DOM.enable')
+    const { backendNodeId } = (await contents.debugger.sendCommand('DOM.getNodeForLocation', {
+      x,
+      y,
+      includeUserAgentShadowDOM: false
+    })) as { backendNodeId?: number }
+    if (backendNodeId != null) {
+      ref = refForBackendNodeId(backendNodeId)
+      try {
+        const { model } = (await contents.debugger.sendCommand('DOM.getBoxModel', {
+          backendNodeId
+        })) as { model: { content: number[] } }
+        rect = contentQuadRect(model.content)
+      } catch {
+        // Node has no box model (hidden) — rect stays null.
+      }
+    }
+  } catch {
+    // Debugger not attached / CDP not ready — ref/rect stay null.
+  }
+
+  publishElementCopy(rect, selector, ref)
+}
+
+// ---- Element picker (DevTools-style inspect mode) ---------------------------
+// startPicker turns on CDP Overlay inspect mode on the active webview: hovering
+// highlights elements with the native DevTools overlay (box model + tag +
+// size); clicking fires Overlay.inspectNodeRequested (routed here from
+// chrome-cdp.ts's message listener), which copies the element's selector + ref
+// exactly like "Copy Element" and exits the mode.
+
+let pickerActive = false
+
+function sendPickerState(): void {
+  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('picker:state', { active: pickerActive })
+  }
+}
+
+async function startPicker(): Promise<void> {
+  const target = getActiveTarget()
+  if (!target) return
+  try {
+    await target.dbg.sendCommand('DOM.enable')
+    await target.dbg.sendCommand('Overlay.enable')
+    await target.dbg.sendCommand('Overlay.setInspectMode', {
+      mode: 'searchForNode',
+      highlightConfig: {
+        showInfo: true,
+        showStyles: false,
+        contentColor: { r: 111, g: 168, b: 220, a: 0.4 },
+        paddingColor: { r: 147, g: 196, b: 125, a: 0.4 },
+        borderColor: { r: 255, g: 229, b: 153, a: 0.4 },
+        marginColor: { r: 246, g: 178, b: 107, a: 0.4 }
+      }
+    })
+    pickerActive = true
+  } catch (e) {
+    // Debugger detached mid-call — stay off rather than crash.
+    console.error('[picker] start failed:', e)
+    pickerActive = false
+  }
+  sendPickerState()
+}
+
+async function stopPicker(): Promise<void> {
+  const target = getActiveTarget()
+  if (target) {
+    try {
+      await target.dbg.sendCommand('Overlay.setInspectMode', { mode: 'none' })
+      await target.dbg.sendCommand('Overlay.disable')
+    } catch {
+      // Debugger detached or page gone — the overlay died with it.
+    }
+  }
+  pickerActive = false
+  sendPickerState()
+}
+
+// The user clicked an element while the picker was active: resolve it to a
+// selector (same builder as "Copy Element") and snapshot ref, flash the copy
+// animation at the element's center, then exit picker mode.
+async function onPickerNodeRequested(backendNodeId: number): Promise<void> {
+  const target = getActiveTarget()
+  if (!target) {
+    await stopPicker()
+    return
+  }
+
+  let selector: string | null = null
+  try {
+    const { object } = (await target.dbg.sendCommand('DOM.resolveNode', { backendNodeId })) as {
+      object: { objectId?: string }
+    }
+    if (object.objectId) {
+      const res = (await target.dbg.sendCommand('Runtime.callFunctionOn', {
+        objectId: object.objectId,
+        functionDeclaration: SELECTOR_FROM_ELEMENT_FN,
+        returnByValue: true
+      })) as { result: { value?: unknown } }
+      if (typeof res.result?.value === 'string') selector = res.result.value
+    }
+  } catch {
+    // Node vanished or debugger detached — selector stays null.
+  }
+
+  const ref = refForBackendNodeId(backendNodeId)
+
+  // Element rect (webview-viewport CSS px) so the UI can outline what was picked.
+  let rect: ElementRect | null = null
+  try {
+    const { model } = (await target.dbg.sendCommand('DOM.getBoxModel', { backendNodeId })) as {
+      model: { content: number[] }
+    }
+    rect = contentQuadRect(model.content)
+  } catch {
+    // No box model (node hidden mid-flight) — rect stays null.
+  }
+
+  publishElementCopy(rect, selector, ref)
+  await stopPicker()
+}
+
+setInspectNodeHandler((backendNodeId) => void onPickerNodeRequested(backendNodeId))
 
 // Keyboard-level shortcuts shared by the app window and every webview (see the
 // before-input-event listeners). Returns true when the input was consumed —
@@ -297,6 +538,12 @@ function buildPageContextMenu(
 // so nothing fires twice.
 function handleBrowserShortcut(input: Electron.Input): boolean {
   if (input.type !== 'keyDown') return false
+  // Esc cancels the element picker regardless of which contents has focus —
+  // the webview (the common case while hovering) or the app window.
+  if (input.key === 'Escape' && pickerActive) {
+    void stopPicker()
+    return true
+  }
   if (!(input.meta || input.control) || input.alt) return false
   const key = input.key.toLowerCase()
   if (key === 'r') {
@@ -524,6 +771,59 @@ app.whenReady().then(() => {
     return true
   })
 
+  // ── Outbound public IP (proxy-aware) ──────────────────────────────────────
+  // Fetches an IP-echo service through the given tab's session (falling back
+  // to the active partition), so a tab-level proxy is reflected in the result.
+  // net.request is bound to that session; its per-request 'login' event
+  // answers proxy 407 challenges with the same credentials the browsing
+  // session uses. Resolves to { ip } or { error } — never throws across IPC.
+  ipcMain.handle('net:current-ip', async (_event, tabId?: string) => {
+    const partition = tabId ? partitionForTab(tabId) : getActivePartition()
+    const ses = session.fromPartition(partition)
+    try {
+      const ip = await new Promise<string>((resolve, reject) => {
+        const req = net.request({ url: 'https://api.ipify.org?format=json', session: ses })
+        const timer = setTimeout(() => {
+          req.abort()
+          reject(new Error('Timed out after 5s'))
+        }, 5000)
+        const fail = (e: Error): void => {
+          clearTimeout(timer)
+          reject(e)
+        }
+        req.on('login', (authInfo, callback) => {
+          const creds = authInfo.isProxy ? proxyCredentialsForSession(ses) : null
+          if (creds) callback(creds.username, creds.password)
+          else callback()
+        })
+        req.on('error', fail)
+        req.on('response', (res) => {
+          let body = ''
+          res.on('data', (chunk) => {
+            body += chunk.toString()
+          })
+          res.on('error', () => fail(new Error('response stream error')))
+          res.on('end', () => {
+            clearTimeout(timer)
+            if (res.statusCode !== 200) {
+              reject(new Error(`HTTP ${res.statusCode}`))
+              return
+            }
+            try {
+              resolve(String(JSON.parse(body).ip))
+            } catch {
+              reject(new Error('unexpected response body'))
+            }
+          })
+        })
+        req.end()
+      })
+      return { ip }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
   // ── Workflow executor (macro replay) ──────────────────────────────────────
   ipcMain.handle('workflow:list-tools', () => listMcpTools())
   ipcMain.handle('workflow:run', async (event, steps: RunStep[], channel: string) => {
@@ -647,6 +947,9 @@ app.whenReady().then(() => {
   ipcMain.handle('acp:set-model', async (_event, sessionId: string, modelId: string) => {
     return setSessionModelRouted(sessionId, modelId)
   })
+
+  ipcMain.handle('picker:start', () => startPicker())
+  ipcMain.handle('picker:stop', () => stopPicker())
 
   ipcMain.handle('viewport:get', () => getViewport())
   ipcMain.handle('viewport:set', async (_event, mode: ViewportMode) => {

@@ -5,11 +5,13 @@ import { BookmarkBar } from '@/components/BookmarkBar'
 import { BotCheckButton } from '@/components/BotCheckButton'
 import { DetailDrawer } from '@/components/DetailDrawer'
 import { FloatingChips } from '@/components/FloatingChips'
+import { IpBadge } from '@/components/IpBadge'
 import { ProxyButton } from '@/components/ProxyButton'
 import { ScreencastView } from '@/components/ScreencastView'
 import { TabBar } from '@/components/TabBar'
 import { WebviewTab, type WebviewTabHandle } from '@/components/WebviewTab'
 import { PermissionPrompt } from '@/components/PermissionPrompt'
+import { CopyToast } from '@/components/CopyToast'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { requestPermissionFromUser } from '@/ai/acp-permission'
 import { useCdpEvents } from '@/hooks/use-cdp-events'
@@ -19,6 +21,7 @@ import { useNavigationRequestStore } from '@/stores/navigation-request'
 import { useBookmarksStore } from '@/stores/bookmarks'
 import { useTabsStore } from '@/stores/tabs'
 import { useAppThemeStore, resolveTheme } from '@/stores/app-theme'
+import { useChatCollapsedStore } from '@/stores/chat-collapsed'
 import { useViewportStore } from '@/stores/viewport'
 import { originFromUrl, useWebviewThemeStore, type WebviewTheme } from '@/stores/webview-theme'
 import { handleAgentRequest } from '@/workflows/core/agent-bridge'
@@ -110,7 +113,18 @@ function App() {
 
   const [openPanel, setOpenPanel] = useState<PanelId | null>(null)
 
+  // Bumped after a proxy change is applied so IpBadge re-checks the egress IP.
+  const [ipRefresh, setIpRefresh] = useState(0)
+
+  // Element picker (DevTools-style inspect mode). Main owns the mode via CDP
+  // Overlay; this mirrors its state for the toolbar toggle, which also turns
+  // itself off after a pick or on Esc.
+  const [pickerActive, setPickerActive] = useState(false)
+
   const chat = useResizable({ initial: 420, min: 300, max: 720, storageKey: 'rev:chat-w' })
+  const chatCollapsed = useChatCollapsedStore((s) => s.collapsed)
+  const setChatCollapsed = useChatCollapsedStore((s) => s.setCollapsed)
+
 
   const tabRefs = useRef<Map<string, WebviewTabHandle>>(new Map())
   // Stable ref callback per tab id so React doesn't churn detach/attach
@@ -154,6 +168,19 @@ function App() {
     const off = window.rev.viewport.onChange(setViewportMode)
     return off
   }, [setViewportMode])
+
+  useEffect(() => window.rev.picker.onState(({ active }) => setPickerActive(active)), [])
+
+  // Esc cancels the picker while the app window has focus. (Main's
+  // before-input-event handler covers Esc while the webview has focus.)
+  useEffect(() => {
+    if (!pickerActive) return
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') void window.rev.picker.stop()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [pickerActive])
 
   useEffect(() => {
     const off = window.rev.onReloadRequest(({ ignoreCache }) => {
@@ -331,6 +358,7 @@ function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <PermissionPrompt />
+      <CopyToast />
       <div
         style={
           {
@@ -353,6 +381,7 @@ function App() {
             rever-browser — External Chrome
           </span>
         )}
+        <IpBadge refreshSignal={ipRefresh} />
         <button
           className="toolbar-btn"
           type="button"
@@ -371,7 +400,7 @@ function App() {
         </button>
       </div>
 
-      <main style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      <main style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
         <section
           style={{
             flex: 1,
@@ -433,6 +462,28 @@ function App() {
                   style={{ fontFamily: 'ui-monospace, monospace' }}
                 >
                   &lt;/&gt;
+                </button>
+                <button
+                  className="toolbar-btn"
+                  type="button"
+                  aria-pressed={pickerActive}
+                  onClick={() => {
+                    void (pickerActive ? window.rev.picker.stop() : window.rev.picker.start())
+                  }}
+                  disabled={!activeTab}
+                  title="Pick an element (copies selector + ref)"
+                  style={{
+                    background: pickerActive ? 'var(--accent-soft)' : undefined,
+                    borderColor: pickerActive ? 'var(--accent-border)' : undefined
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="7" />
+                    <line x1="12" y1="2" x2="12" y2="6" />
+                    <line x1="12" y1="18" x2="12" y2="22" />
+                    <line x1="2" y1="12" x2="6" y2="12" />
+                    <line x1="18" y1="12" x2="22" y2="12" />
+                  </svg>
                 </button>
               </>
             )}
@@ -509,7 +560,10 @@ function App() {
             {browserMode === 'embedded' && (
               <ProxyButton
                 tab={activeTab}
-                onApplied={() => activeRef()?.reload()}
+                onApplied={() => {
+                  activeRef()?.reload()
+                  setIpRefresh((n) => n + 1)
+                }}
               />
             )}
             <button
@@ -672,22 +726,38 @@ function App() {
           </div>
         </section>
 
-        <div className="splitter" onMouseDown={chat.startDrag} />
+        {!chatCollapsed && (
+          <div className="splitter" onMouseDown={chat.startDrag} title="Drag to resize" />
+        )}
+        <button
+          type="button"
+          className="chat-toggle-handle"
+          style={{ right: chatCollapsed ? 2 : chat.width + 4 }}
+          onClick={() => setChatCollapsed(!chatCollapsed)}
+          title={chatCollapsed ? 'Open chat' : 'Collapse chat'}
+          aria-label={chatCollapsed ? 'Open chat' : 'Collapse chat'}
+        >
+          {chatCollapsed ? '‹' : '›'}
+        </button>
 
+        {/* Kept mounted while collapsed (width 0 + hidden overflow) so the chat
+            session and any in-flight stream survive the toggle. */}
         <aside
           className="agent-panel"
           style={{
-            width: chat.width,
+            width: chatCollapsed ? 0 : chat.width,
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
-            borderLeft: '1px solid var(--border)',
+            overflow: 'hidden',
+            borderLeft: chatCollapsed ? 'none' : '1px solid var(--border)',
             ['--chat-w' as never]: `${chat.width}px`
           }}
         >
           <ChatPanel />
         </aside>
+
       </main>
     </div>
   )

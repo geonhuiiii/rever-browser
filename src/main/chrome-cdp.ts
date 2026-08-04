@@ -269,6 +269,16 @@ export function setLoadInjectionsHook(fn: LoadInjectionsHook): void {
   loadInjectionsHook = fn
 }
 
+// Element-picker hook — fired when the user clicks an element while CDP
+// Overlay inspect mode is active. Wired from index.ts (which owns the picker
+// state, clipboard write and renderer IPC) to avoid a circular import.
+type InspectNodeHandler = (backendNodeId: number) => void
+let inspectNodeHandler: InspectNodeHandler | null = null
+
+export function setInspectNodeHandler(fn: InspectNodeHandler): void {
+  inspectNodeHandler = fn
+}
+
 interface ResponseReceivedParams {
   requestId: string
   type?: string
@@ -841,6 +851,8 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
       }
     } else if (method === 'Target.detachedFromTarget') {
       unregisterOopif(targetId, (params as { sessionId: string }).sessionId)
+    } else if (method === 'Overlay.inspectNodeRequested') {
+      inspectNodeHandler?.((params as { backendNodeId: number }).backendNodeId)
     } else if (method === 'Debugger.paused') {
       const p = params as DebuggerPausedParams
       debuggerPaused = { callFrames: p.callFrames, reason: p.reason }

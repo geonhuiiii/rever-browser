@@ -516,23 +516,21 @@ export function ChatPanel() {
             setAgentId(id)
           }}
         />
-        <select
-          value={currentModel ?? ''}
-          onChange={(e) => void onChangeModel(e.target.value)}
-          disabled={busy || models.length === 0}
-          title={models.length === 0 ? 'Send a message to load models' : 'Switch model for this session'}
-          style={{ maxWidth: 160 }}
-        >
-          {models.length === 0 ? (
-            <option value="">no models yet</option>
-          ) : (
-            models.map((m) => (
+        {models.length > 0 && (
+          <select
+            value={currentModel ?? ''}
+            onChange={(e) => void onChangeModel(e.target.value)}
+            disabled={busy}
+            title="Switch model for this session"
+            style={{ maxWidth: 160 }}
+          >
+            {models.map((m) => (
               <option key={m.modelId} value={m.modelId}>
                 {m.name}
               </option>
-            ))
-          )}
-        </select>
+            ))}
+          </select>
+        )}
         <span style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 12 }}>{status}</span>
         <button
           type="button"

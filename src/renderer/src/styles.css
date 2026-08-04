@@ -349,12 +349,101 @@ button:disabled { opacity: 0.5; cursor: default; }
 .splitter::before {
   content: '';
   position: absolute;
-  top: 0; bottom: 0; left: -2px; right: -2px;
+  top: 0; bottom: 0; left: -3px; right: -3px;
 }
+/* Chat collapse/expand toggle — a distinct button beside the resize splitter
+   (not overlapping the drag line), vertically centered on the boundary. */
+.chat-toggle-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 25;
+  width: 22px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
+  transition: color 0.15s, border-color 0.15s, right 0.22s ease;
+}
+.chat-toggle-handle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+/* Smooth collapse/expand — animate the panel width and the handle position,
+   but NOT while dragging the splitter (that must track the pointer live). */
+.agent-panel { transition: width 0.22s ease; }
+body.resizing .agent-panel { transition: none; }
+body.resizing .chat-toggle-handle { transition: color 0.15s, border-color 0.15s; }
 
 /* While dragging a splitter, prevent the <webview> from capturing
    pointer events (it would otherwise swallow the mousemove). */
 body.resizing webview { pointer-events: none; }
+
+/* "Copy Element" confirmation: outline the picked element with a "Copied!"
+   badge at its real position, plus a brief bottom toast for the clipboard. */
+@keyframes copy-box {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.copy-box {
+  position: fixed;
+  z-index: 9998;
+  pointer-events: none;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15), 0 4px 18px rgba(0, 0, 0, 0.25);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: copy-box 1.3s ease forwards;
+}
+.copy-box-label {
+  position: absolute;
+  left: -2px;
+  top: -22px;
+  padding: 2px 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+@keyframes copy-clip-toast {
+  0% { opacity: 0; transform: translate(-50%, 10px); }
+  10% { opacity: 1; transform: translate(-50%, 0); }
+  82% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, -4px); }
+}
+.copy-clip-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--bg-bar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  pointer-events: none;
+  animation: copy-clip-toast 1.6s ease forwards;
+}
 
 /* ── Bottom menu bar (formerly floating chips) ───────────────── */
 .chip-stack {

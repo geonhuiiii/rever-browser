@@ -71,6 +71,18 @@ interface RefEntry {
 const refMap = new Map<string, RefEntry>()
 
 /**
+ * Reverse lookup: which ref from the CURRENT snapshot points at this backend
+ * node, if any. Backend ids are per-process, so the sessionId must match too —
+ * undefined means the page session (see RefEntry.sessionId).
+ */
+export function refForBackendNodeId(backendNodeId: number, sessionId?: string): string | null {
+  for (const [ref, entry] of refMap) {
+    if (entry.backendNodeId === backendNodeId && entry.sessionId === sessionId) return ref
+  }
+  return null
+}
+
+/**
  * Nodes that carried a ref in the previous snapshot, so the next one can point
  * at what just appeared. Keyed by session + backendNodeId, because the ids of
  * an out-of-process frame collide with the page's own.

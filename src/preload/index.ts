@@ -191,6 +191,33 @@ const api = {
     ipcRenderer.on('network-event', listener)
     return () => ipcRenderer.removeListener('network-event', listener)
   },
+  onElementCopied: (
+    handler: (payload: {
+      rect: { x: number; y: number; width: number; height: number } | null
+      selector: string | null
+      ref: string | null
+    }) => void
+  ): (() => void) => {
+    const listener = (
+      _e: unknown,
+      payload: {
+        rect: { x: number; y: number; width: number; height: number } | null
+        selector: string | null
+        ref: string | null
+      }
+    ) => handler(payload)
+    ipcRenderer.on('element-copied', listener)
+    return () => ipcRenderer.removeListener('element-copied', listener)
+  },
+  picker: {
+    start: (): Promise<void> => ipcRenderer.invoke('picker:start'),
+    stop: (): Promise<void> => ipcRenderer.invoke('picker:stop'),
+    onState: (handler: (payload: { active: boolean }) => void): (() => void) => {
+      const listener = (_e: unknown, payload: { active: boolean }) => handler(payload)
+      ipcRenderer.on('picker:state', listener)
+      return () => ipcRenderer.removeListener('picker:state', listener)
+    }
+  },
   acp: {
     listAvailable: (probes: AcpAgentProbe[]): Promise<AcpAgentProbeResult[]> =>
       ipcRenderer.invoke('acp:list-available', probes),
@@ -265,6 +292,11 @@ const api = {
     setActiveTab: (tabId: string): Promise<boolean> =>
       ipcRenderer.invoke('tab:set-active-partition', tabId)
   },
+  // Current outbound public IP as seen through the given tab's session (so a
+  // tab-level proxy is reflected). Falls back to the active tab's partition
+  // when tabId is omitted. Never rejects — errors come back as { error }.
+  getCurrentIp: (tabId?: string): Promise<{ ip?: string; error?: string }> =>
+    ipcRenderer.invoke('net:current-ip', tabId),
   workflows: {
     // Available MCP tools, for the macro step editor.
     listTools: (): Promise<McpToolInfo[]> => ipcRenderer.invoke('workflow:list-tools'),
