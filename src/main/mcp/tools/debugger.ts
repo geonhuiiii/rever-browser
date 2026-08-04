@@ -24,6 +24,7 @@ export function registerDebuggerTools(mcp: McpServer) {
     'bp_add',
     {
       description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger — breakpoints/stepping are a no-op (even a literal `debugger;` will not halt). Prefer crypto_trace / console_eval instrumentation instead. " +
         'Set a breakpoint at a URL glob + line number. The page will pause when execution reaches the location.',
       inputSchema: {
         urlGlob: z.string().describe('URL glob pattern, e.g. "*/main.*.js"'),
@@ -105,7 +106,9 @@ export function registerDebuggerTools(mcp: McpServer) {
   mcp.registerTool(
     'bp_resume',
     {
-      description: 'Resume execution after a breakpoint pause.'
+      description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger, so there is never a pause to resume from. Prefer crypto_trace / console_eval instrumentation instead. " +
+        'Resume execution after a breakpoint pause.'
     },
     async () => {
       const target = getActiveTarget()
@@ -122,7 +125,9 @@ export function registerDebuggerTools(mcp: McpServer) {
   mcp.registerTool(
     'bp_step_over',
     {
-      description: 'Step over the current line (must be paused at a breakpoint).'
+      description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger — stepping is a no-op (even a literal `debugger;` will not halt). Prefer crypto_trace / console_eval instrumentation instead. " +
+        'Step over the current line (must be paused at a breakpoint).'
     },
     async () => {
       const target = getActiveTarget()
@@ -139,7 +144,9 @@ export function registerDebuggerTools(mcp: McpServer) {
   mcp.registerTool(
     'bp_step_into',
     {
-      description: 'Step into the next function call (must be paused at a breakpoint).'
+      description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger — stepping is a no-op (even a literal `debugger;` will not halt). Prefer crypto_trace / console_eval instrumentation instead. " +
+        'Step into the next function call (must be paused at a breakpoint).'
     },
     async () => {
       const target = getActiveTarget()
@@ -156,7 +163,9 @@ export function registerDebuggerTools(mcp: McpServer) {
   mcp.registerTool(
     'bp_step_out',
     {
-      description: 'Step out of the current function (must be paused at a breakpoint).'
+      description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger — stepping is a no-op (even a literal `debugger;` will not halt). Prefer crypto_trace / console_eval instrumentation instead. " +
+        'Step out of the current function (must be paused at a breakpoint).'
     },
     async () => {
       const target = getActiveTarget()
@@ -174,6 +183,7 @@ export function registerDebuggerTools(mcp: McpServer) {
     'bp_eval_in_frame',
     {
       description:
+        "[NOT FUNCTIONAL IN THIS BUILD] Execution never pauses under Electron's webContents.debugger, so there is never a paused frame to evaluate in (even a literal `debugger;` will not halt). Prefer crypto_trace / console_eval instrumentation instead. " +
         'Evaluate a JavaScript expression in a specific call frame while paused at a breakpoint.',
       inputSchema: {
         frameIndex: z.number().int().nonnegative().describe('Index into the paused call frames (0 = top frame)'),
