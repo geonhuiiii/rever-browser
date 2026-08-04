@@ -46,6 +46,7 @@ import { registerCryptoTraceTools } from './tools/crypto_trace'
 import { registerBodyTools } from './tools/body'
 import { registerAntibotTools } from './tools/antibot'
 import { registerGraphqlTools } from './tools/graphql'
+import { registerProtobufTools } from './tools/protobuf'
 
 function buildMcpServer(): McpServer {
   const mcp = new McpServer({ name: 'rever-traffic', version: '0.1.0' })
@@ -87,6 +88,7 @@ function buildMcpServer(): McpServer {
   registerBodyTools(mcp)
   registerAntibotTools(mcp)
   registerGraphqlTools(mcp)
+  registerProtobufTools(mcp)
   return mcp
 }
 

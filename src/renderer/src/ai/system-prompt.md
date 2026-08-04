@@ -101,6 +101,7 @@ Then use the network/auth/codegen tools (`list_requests`, `find_api_base`, `requ
 - `auth_dump` — cookies + localStorage + sessionStorage + recent Authorization / cookie / x-csrf-token / x-api-key headers, all keyed by origin.
 - `export_python_client` — given a `requestId`, produce a self-contained Python (`requests` or `httpx`) snippet that reproduces the call.
 - `decode_token` — auto-detects JWT / base64 / URL-encoded JSON / hex and decodes.
+- `protobuf_decode` — turn an opaque protobuf / gRPC-web body (by `requestId`, or raw base64/hex) into a field-number → value tree without a `.proto` schema; gRPC framing is stripped automatically.
 
 ### WebSocket
 - `list_websockets` / `get_ws_frames` — captured WS streams and their frames (1KB payload truncation).
