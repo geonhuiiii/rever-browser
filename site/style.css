@@ -53,8 +53,8 @@ code, .mono { font-family: var(--mono); }
 .nav .inner { display: flex; align-items: center; gap: 16px; height: 60px; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 600 14px/1 var(--mono); letter-spacing: -.01em; }
 .mark {
-  width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center;
-  background: var(--accent-solid); color: #fff; font: 700 12px/1 var(--mono);
+  width: 22px; height: 22px; border-radius: 6px; flex: none; display: block;
+  object-fit: contain; image-rendering: -webkit-optimize-contrast;
 }
 .nav .links { margin-left: auto; display: flex; align-items: center; gap: 2px; }
 .nav .links a.lnk {

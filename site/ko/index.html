@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>rever-browser — 웹 API를 리버싱하는 에이전트</title>
 <meta name="description" content="브라우저가 주고받는 요청을 전부 캡처하고, 무슨 뜻인지 에이전트에게 묻고, 그대로 재현합니다. MIT 라이선스 오픈소스." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><text x='16' y='23' font-size='19' font-family='monospace' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>" />
+<link rel="icon" type="image/png" href="../icon.png" />
+<link rel="apple-touch-icon" href="../icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -19,7 +20,7 @@
 
 <div class="nav" id="nav">
   <div class="wrap inner">
-    <a class="brand" href="#top"><span class="mark">R</span> rever-browser</a>
+    <a class="brand" href="#top"><img class="mark" src="../icon.png" alt="" width="22" height="22" /> rever-browser</a>
     <nav class="links">
       <a class="lnk" href="#scenarios">시나리오</a>
       <a class="lnk" href="#features">기능</a>
@@ -43,10 +44,10 @@
         </div>
         <h1 id="headline"><span class="ln">브라우저가 주고받는 요청,</span><span class="ln">에이전트가 읽고</span><span class="ln">그대로 재현합니다.</span></h1>
         <p class="lede" data-reveal="fade">
-          <b>rever-browser</b>는 실제 크로미움 탭 옆에 리버싱 에이전트를 붙인 데스크톱 브라우저입니다.
-          평소처럼 사이트를 돌아다니면 앱이 <span class="u">CDP</span>로 모든 요청을 기록하고,
-          에이전트가 그 트래픽을 읽고 자바스크립트 번들을 열어보고 탭을 직접 조작합니다.
-          같은 도구가 <b>MCP</b>로 열려 있어서 외부 에이전트나 스크립트에서도 그대로 호출할 수 있습니다.
+          <b>rever-browser</b>는 웹 API 리버싱에 필요한 것들을 브라우저 안에 모아 둔 데스크톱 앱입니다.
+          트래픽 캡처, 번들 해독, 리피터와 인트루더, 프록시, 세션 유지, 화면에서 요소를 집어 바로 요청 보내기까지
+          한 창에서 끝납니다. 여기에 리버싱 순서를 아는 에이전트가 붙어서, 손으로 하면 지루한 구간을 대신 밟아 줍니다.
+          도구는 전부 <span class="u">MCP</span>로 열려 있어 외부 에이전트나 스크립트에서도 그대로 호출할 수 있습니다.
         </p>
         <div class="cta" data-reveal="fade">
           <a class="btn primary" href="#quickstart">시작하기</a>
@@ -58,9 +59,9 @@
         <div class="cap">한눈에 보기</div>
         <dl>
           <div class="row"><dt>MCP 도구</dt><dd><span data-count="134">0</span>개+</dd></div>
-          <div class="row"><dt>프로세스</dt><dd><span data-count="3">0</span>개 <small>격리</small></dd></div>
-          <div class="row"><dt>에이전트</dt><dd>claude code <small>· codex</small></dd></div>
-          <div class="row"><dt>지원 OS</dt><dd>macOS <small>· 윈도우 · 리눅스</small></dd></div>
+          <div class="row"><dt>프로세스</dt><dd><span data-count="3">0</span>개 · 격리</dd></div>
+          <div class="row"><dt>에이전트</dt><dd>claude code · codex</dd></div>
+          <div class="row"><dt>지원 OS</dt><dd>macOS · 윈도우 · 리눅스</dd></div>
           <div class="row"><dt>라이선스</dt><dd>MIT</dd></div>
         </dl>
       </div>
@@ -87,8 +88,8 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>01</b> 시나리오</div>
       <div>
-        <h2>한 줄로 물어보면, 재현 가능한 요청이 나옵니다.</h2>
-        <p class="sub">아래는 전부 실제 앱에서 그대로 녹화한 흐름입니다. 문장을 고르면 위쪽 화면이 그 장면을 다시 재생합니다.</p>
+        <h2>채팅으로 요청하세요. AI가 브라우저를 직접 조작해서 찾아냅니다.</h2>
+        <p class="sub">개발자 도구를 열어 요청을 하나씩 눌러 보고, 파라미터를 바꿔 다시 던지는 과정을 대신합니다. 아래는 전부 실제 앱에서 녹화한 흐름이고, 문장을 고르면 위쪽 화면이 그 장면을 다시 재생합니다.</p>
       </div>
     </div>
     <div class="tabs" id="tabs" data-reveal="stagger">
@@ -109,8 +110,8 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>02</b> 무엇이 들어 있나</div>
       <div>
-        <h2>브라우저 조작, 패킷 캡처, 그 둘을 함께 읽는 에이전트.</h2>
-        <p class="sub">따로 붙일 게 없습니다. 캡처 버퍼도, 번들 분석기도, 도구 서버도 지금 조작 중인 탭과 같은 창 안에 있습니다.</p>
+        <h2>브라우저 조작, 패킷 캡처, 프록시, 그리고 그걸 다 읽는 에이전트.</h2>
+        <p class="sub">따로 붙일 게 없습니다. 캡처 버퍼도, 프록시도, 번들 분석기도, 도구 서버도 지금 조작 중인 탭과 같은 창 안에 있습니다.</p>
       </div>
     </div>
 
@@ -125,15 +126,23 @@
       </div>
       <div class="row-item">
         <div class="num">02</div>
-        <h3>사용자가 보는 화면을 그대로 보는 에이전트</h3>
+        <h3>프록시와 세션 유지</h3>
         <div class="body">
-          <p>기본은 Claude Code, 대안으로 Codex를 쓸 수 있고 둘 다 stdio 위의 ACP로 붙습니다. 에이전트가 읽는 트래픽 저장소는 화면에 뜨는 것과 같은 저장소라, “방금 보낸 요청 설명해줘”에 복붙이 필요 없습니다.</p>
-          <p style="margin-top:8px">다른 모델이나 다른 에이전트를 붙이고 싶다면 저장소를 포크해서 추가하고 풀 리퀘스트를 보내주세요. 에이전트 목록은 파일 한 곳에서 관리합니다.</p>
-          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">기여 환영</span></div>
+          <p>업스트림 프록시를 http·https·socks5로 걸 수 있고 인증도 붙습니다. 설정은 세션에 바로 적용돼서 탭을 다시 띄울 필요가 없습니다.</p>
+          <p style="margin-top:8px">일반 탭은 하나의 영구 파티션을 공유하기 때문에 한 번 로그인하면 새 탭에서도 그대로 유지됩니다. 프록시 탭만 별도 쿠키 저장소를 써서, 같은 사이트를 다른 신원으로 동시에 열어 둘 수 있습니다.</p>
+          <div class="tags"><span class="tagchip">http · https · socks5</span><span class="tagchip">프록시 인증</span><span class="tagchip">쿠키 유지</span><span class="tagchip">탭별 격리</span></div>
         </div>
       </div>
       <div class="row-item">
         <div class="num">03</div>
+        <h3>요소 선택기 — 화면에서 집어 바로 요청</h3>
+        <div class="body">
+          <p>개발자 도구의 검사 모드처럼 화면에서 요소를 집으면 셀렉터가 그대로 넘어옵니다. 그 요소를 눌러 보라거나, 거기서 나가는 요청을 잡아 달라고 바로 이어서 시킬 수 있습니다.</p>
+          <div class="tags"><span class="tagchip">inspect 모드</span><span class="tagchip">셀렉터 복사</span><span class="tagchip">채팅으로 전달</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">04</div>
         <h3>브라우저 자동 조작</h3>
         <div class="body">
           <p>이동·클릭·입력·스크롤·스크린샷을 접근성 스냅샷 기반으로 실행합니다. 깨지기 쉬운 셀렉터 대신 짧은 <code class="i">rN</code> 참조를 씁니다.</p>
@@ -141,7 +150,7 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">04</div>
+        <div class="num">05</div>
         <h3>다시 내려받지 않는 번들 분석</h3>
         <div class="body">
           <p>이미 캡처에 들어 있는 자바스크립트를 그대로 grep 하고, 추출하고, 번들러를 판별하고, 난독화를 풉니다. <code class="i">webcrack</code>이 PATH에 있으면 압축을 풀어 주고, 사이트가 소스맵을 제공하면 원본을 복원합니다.</p>
@@ -149,7 +158,15 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">05</div>
+        <div class="num">06</div>
+        <h3>리버싱에 쓰는 도구 한 벌</h3>
+        <div class="body">
+          <p>리피터로 요청을 고쳐 다시 보내고, 인트루더로 값을 훑고, 헤더를 덮어쓰고, 요청을 가로채 중간에서 바꿉니다. 암호화·인코딩 해석, 시크릿 탐지, 웹소켓과 서비스 워커 점검, GraphQL·프로토버프 리더까지 같은 창에 있습니다.</p>
+          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">crypto</span><span class="tagchip">secrets</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">07</div>
         <h3>매크로 — 한 번 확인한 절차를 그대로 재생</h3>
         <div class="body">
           <p>로그인부터 목록 조회까지 방금 검증한 순서를 매크로로 저장해 두면, 다음부터는 모델을 거치지 않고 같은 절차가 그대로 실행됩니다. 아이디·비밀번호 같은 값은 변수로 빼두고 실행할 때 채웁니다.</p>
@@ -158,7 +175,7 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">06</div>
+        <div class="num">08</div>
         <h3>워크플로 — 여러 단계를 하나로 묶기</h3>
         <div class="body">
           <p>매크로 여러 개와 도구 호출을 순서대로 엮어 하나의 워크플로로 만듭니다. 상태 표시줄에서 실행 상황을 보고, 중간 결과는 발견 목록에 쌓입니다.</p>
@@ -166,15 +183,16 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">07</div>
-        <h3>깊게 파는 API 도구</h3>
+        <div class="num">09</div>
+        <h3>지루한 구간을 대신 밟는 에이전트</h3>
         <div class="body">
-          <p>리피터, 인트루더, 헤더 덮어쓰기, 요청 가로채기, 암호화·인코딩 해석 도우미, 웹소켓과 서비스 워커 점검, GraphQL·프로토버프 리더까지 들어 있습니다.</p>
-          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
+          <p>기본은 Claude Code, 대안으로 Codex를 쓸 수 있고 둘 다 stdio 위의 ACP로 붙습니다. 에이전트가 읽는 트래픽 저장소는 화면에 뜨는 것과 같은 저장소라, “방금 보낸 요청 설명해줘”에 복붙이 필요 없습니다.</p>
+          <p style="margin-top:8px">다른 모델이나 다른 에이전트를 붙이고 싶다면 저장소를 포크해서 추가하고 풀 리퀘스트를 보내주세요. 에이전트 목록은 파일 한 곳에서 관리합니다.</p>
+          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">기여 환영</span></div>
         </div>
       </div>
       <div class="row-item">
-        <div class="num">08</div>
+        <div class="num">10</div>
         <h3>기본값이 로컬</h3>
         <div class="body">
           <p>MCP 서버는 앱 안에서 돌고 <code class="i">127.0.0.1</code>의 임의 포트에 붙습니다. 에이전트를 처음 띄울 때만 시작되고, 캡처한 트래픽은 사용자 컴퓨터의 앱 메모리에 머뭅니다.</p>
