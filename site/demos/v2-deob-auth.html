@@ -477,12 +477,27 @@ body {
       return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
     },
     flash: function (el, kind, label) {
-      var r = rect(el);
+      /* The box tracks its target for as long as it is up: rows stream in under
+         it, cards fly into place, buttons relabel themselves. A rect measured
+         once drifts off the element inside the flash's own 1.5s lifetime. */
+      function place() {
+        var r = rect(el);
+        gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8 });
+      }
+      function unpin() {
+        if (flash.__pin) { gsap.ticker.remove(flash.__pin); flash.__pin = null; }
+      }
+      unpin();
       flash.className = 'rv-flash ' + (kind || 'click');
       flashtag.textContent = label || 'AI click';
-      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
-      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
-                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+      place();
+      gsap.set(flash, { opacity: 0 });
+      flash.__pin = place;
+      gsap.ticker.add(place);
+      var done = function () { if (flash.__pin === place) unpin(); };
+      return gsap.timeline({ onComplete: done, onInterrupt: done })
+        .to(flash, { opacity: 1, duration: .16 })
+        .to(flash, { opacity: 0, duration: .45, delay: .85 });
     },
     type: function (el, str, cps) {
       var tl = gsap.timeline(), per = 1 / (cps || 22);
@@ -632,6 +647,17 @@ body {
   function daFlash(tl, el, label, pos) {
     tl.call(function () { addSide(RV.flash(el, 'extract', label)); }, null, pos);
   }
+  /* same as daCursor, but measures the element's settled rect — used while the
+     target is still flying in, so the cursor aims at where it will land. */
+  function daCursorSettled(tl, el, pos, dur) {
+    tl.call(function () {
+      var keep = { x: gsap.getProperty(el, 'x'), y: gsap.getProperty(el, 'y'), scale: gsap.getProperty(el, 'scale') };
+      gsap.set(el, { x: 0, y: 0, scale: 1 });
+      var t = RV.cursorTo(el, dur || 0.6);
+      gsap.set(el, keep);
+      addSide(t);
+    }, null, pos);
+  }
   function addScramble(tl, d, pos) {
     var o = { n: 0 };
     tl.to(o, {
@@ -691,10 +717,10 @@ body {
 
     /* 5 — finding_add | the findings chip flies into the tray */
     tl.call(function () { RV.setTool(g, 2, 'run'); }, null, '+=0.15');
-    daCursor(tl, fchip, '<', 0.6);
+    daCursorSettled(tl, fchip, '<', 0.6);
     tl.to(fchip, { opacity: 1, x: 0, y: 0, scale: 1, duration: 0.6, ease: 'back.out(1.5)' }, '<+=0.15');
-    daFlash(tl, fchip, 'finding_add', '<+=0.1');
-    tl.call(function () { RV.setTool(g, 2, 'done', 'finding #1 saved'); }, null, '+=0.5');
+    daFlash(tl, fchip, 'finding_add', '>');
+    tl.call(function () { RV.setTool(g, 2, 'done', 'finding #1 saved'); }, null, '+=0.6');
 
     /* 6 — fold the tools away to the pill, then the final markdown answer */
     tl.call(function () { RV.collapse(g, 3, 1); }, null, '+=0.35');
