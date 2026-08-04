@@ -101,10 +101,12 @@ body {
 }
 .rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 /* ── body split: viewport | chat ──────────────────────────────────────── */
-.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+/* fixed height: the chat transcript must never grow the window — the landing
+   page embeds these at a constant size and any reflow reads as jitter. */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; height: 710px; min-height: 0; }
 .rv-view {
   position: relative; background: var(--viewport-bg); overflow: hidden;
-  height: 470px; border-right: 1px solid var(--border);
+  height: 710px; border-right: 1px solid var(--border);
 }
 /* ── chat panel ───────────────────────────────────────────────────────── */
 .rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
@@ -133,7 +135,9 @@ body {
 }
 .rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
 
-.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-msgs { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 10px;
+  display: flex; flex-direction: column; gap: 9px; scrollbar-width: none; }
+.rv-msgs::-webkit-scrollbar { display: none; }
 .rv-role { font-size: 10.5px; color: var(--text-dim); }
 .rv-text { font-size: 12px; color: var(--text); }
 .rv-text code {
@@ -207,6 +211,7 @@ body {
 @media (max-width: 860px) {
   body { padding: 10px; }
   .rv-body { grid-template-columns: 1fr; }
+  .rv-body { height: auto; }
   .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
   .rv-chat { max-height: 360px; }
   .rv-tbtn.opt { display: none; }
@@ -387,24 +392,24 @@ body {
             <div class="fsa-field" id="fsa-field">
               <svg class="fsa-mag" viewBox="0 0 12 12" fill="none" aria-hidden="true"><circle cx="5.2" cy="5.2" r="3.4" stroke="currentColor" stroke-width="1.2"/><path d="M7.8 7.8 10.4 10.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
               <span class="fsa-ph" id="fsa-ph">Search products…</span><span class="fsa-fieldtext" id="fsa-fieldtext"></span><span class="fsa-fcaret" id="fsa-fcaret"></span>
-              <span class="fsa-ref" id="fsa-ref7">r7</span>
+              <span class="fsa-ref" id="fsa-ref7">r5</span>
             </div>
-            <button class="fsa-btn" id="fsa-btn" type="button" tabindex="-1">Search<span class="fsa-ref" id="fsa-ref8">r8</span></button>
+            <button class="fsa-btn" id="fsa-btn" type="button" tabindex="-1">Search<span class="fsa-ref" id="fsa-ref8">r6</span></button>
           </div>
 
           <span class="fsa-hits" id="fsa-hits">10 results for "wireless earbuds" · 38 ms</span>
 
           <div class="fsa-grid" id="fsa-grid">
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">AirDot Pro 2</span><span class="fsa-cardp">$129</span><span class="fsa-ref">r5</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Nimbus Buds X</span><span class="fsa-cardp">$89</span><span class="fsa-ref">r6</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Echo Tips Lite</span><span class="fsa-cardp">$54</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Sonic Free 40</span><span class="fsa-cardp">$76</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Pulse Air Mini</span><span class="fsa-cardp">$62</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Wave Buds S</span><span class="fsa-cardp">$41</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Drift Buds Air</span><span class="fsa-cardp">$58</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Halo Tips Pro</span><span class="fsa-cardp">$112</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Vero Buds Neo</span><span class="fsa-cardp">$95</span></div>
-            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Loop Earbuds 3</span><span class="fsa-cardp">$48</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">AirDot Pro 2</span><span class="fsa-cardp">$129</span><span class="fsa-ref">r7</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Nimbus Buds X</span><span class="fsa-cardp">$89</span><span class="fsa-ref">r8</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Echo Tips Lite</span><span class="fsa-cardp">$54</span><span class="fsa-ref">r9</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Sonic Free 40</span><span class="fsa-cardp">$76</span><span class="fsa-ref">r10</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Pulse Air Mini</span><span class="fsa-cardp">$62</span><span class="fsa-ref">r11</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Wave Buds S</span><span class="fsa-cardp">$41</span><span class="fsa-ref">r12</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Drift Buds Air</span><span class="fsa-cardp">$58</span><span class="fsa-ref">r13</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Halo Tips Pro</span><span class="fsa-cardp">$112</span><span class="fsa-ref">r14</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Vero Buds Neo</span><span class="fsa-cardp">$95</span><span class="fsa-ref">r15</span></div>
+            <div class="fsa-card"><span class="fsa-thumb"></span><span class="fsa-bar"></span><span class="fsa-bar s"></span><span class="fsa-cardt">Loop Earbuds 3</span><span class="fsa-cardp">$48</span><span class="fsa-ref">r16</span></div>
           </div>
         </div>
 
@@ -559,15 +564,19 @@ body {
     }
   };
   window.RV = RV;
+
+  /* Keep the transcript pinned to its newest line. Text types in character by
+     character after the node is appended, so a one-shot scroll on append misses. */
+  if (window.gsap) gsap.ticker.add(function () { msgs.scrollTop = msgs.scrollHeight; });
 })();
 
 /* ── v2-find-search-api scenario ─────────────────────────────────────────────
    LEFT (store page + traffic drawer)            RIGHT (chat), same beat
    user prompt types out                         idle store page
    assistant · disclosure opens                  —
-   browser_snapshot  → 42 refs                    veil dims, r1..r8 refs pop in
-   browser_type r7   → 16 chars                   cursor→field, type flash, query types
-   browser_click r8  → 6 results                  cursor→Search, click flash, results swap
+   browser_snapshot  → 42 refs                    veil dims, r1..r16 refs pop in
+   browser_type r5   → 16 chars                   cursor→field, type flash, query types
+   browser_click r6  → 10 results                  cursor→Search, click flash, results swap
    list_requests     → 6 new · 2 POST             6 rows stream in, POST /search brightens
    get_request 91    → 200                         scanline + #91 expands to headers/body
    collapse → "tools 5 · thoughts 1"; answer + payload code block + saved line
@@ -595,8 +604,8 @@ body {
   var TOOLNAMES = ['browser_snapshot', 'browser_type', 'browser_click', 'list_requests', 'get_request'];
   var TOOLS = [
     { args: '',                res: '42 refs' },
-    { args: 'r7 "wireless earbuds"', res: '16 chars' },
-    { args: 'r8 "Search"',      res: '6 results' },
+    { args: 'r5 "wireless earbuds"', res: '16 chars' },
+    { args: 'r6 "Search"',      res: '10 results' },
     { args: 'since:last · 50',  res: '6 new · 2 POST' },
     { args: 'id:91 +body',      res: '200' }
   ];
@@ -782,7 +791,7 @@ body {
       .call(function () { tool(c.g, 0, 'done', TOOLS[0].res); }, null, T.t0 + 0.95)
       .to(els.veil, { autoAlpha: 0, duration: 0.32 }, T.t0 + 1.0);
 
-    /* 3 · browser_type r7 → cursor to field, type flash, query types */
+    /* 3 · browser_type r5 → cursor to field, type flash, query types */
     tl.call(function () { tool(c.g, 1, 'run'); els.ref7.classList.add('hot'); }, null, T.t1)
       .to(refOthers, { autoAlpha: 0, duration: 0.28 }, T.t1 - 0.08)
       .add(RV.cursorTo(els.field, 0.72), T.t1 - 0.05)
@@ -792,7 +801,7 @@ body {
       .add(RV.type(els.fieldText, QUERY, FIELD_CPS), T.t1 + 0.82)
       .call(function () { tool(c.g, 1, 'done', TOOLS[1].res); }, null, T.t1 + 0.95 + QUERY.length / FIELD_CPS);
 
-    /* 4 · browser_click r8 → cursor to Search, click flash, results swap */
+    /* 4 · browser_click r6 → cursor to Search, click flash, results swap */
     tl.call(function () { tool(c.g, 2, 'run'); els.ref7.classList.remove('hot'); els.ref8.classList.add('hot'); }, null, T.t2)
       .to(els.fCaret, { autoAlpha: 0, duration: 0.14 }, T.t2)
       .add(RV.cursorTo(els.btn, 0.5), T.t2)

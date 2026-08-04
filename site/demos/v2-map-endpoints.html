@@ -101,10 +101,12 @@ body {
 }
 .rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 /* ── body split: viewport | chat ──────────────────────────────────────── */
-.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+/* fixed height: the chat transcript must never grow the window — the landing
+   page embeds these at a constant size and any reflow reads as jitter. */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; height: 710px; min-height: 0; }
 .rv-view {
   position: relative; background: var(--viewport-bg); overflow: hidden;
-  height: 470px; border-right: 1px solid var(--border);
+  height: 710px; border-right: 1px solid var(--border);
 }
 /* ── chat panel ───────────────────────────────────────────────────────── */
 .rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
@@ -133,7 +135,9 @@ body {
 }
 .rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
 
-.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-msgs { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 10px;
+  display: flex; flex-direction: column; gap: 9px; scrollbar-width: none; }
+.rv-msgs::-webkit-scrollbar { display: none; }
 .rv-role { font-size: 10.5px; color: var(--text-dim); }
 .rv-text { font-size: 12px; color: var(--text); }
 .rv-text code {
@@ -207,6 +211,7 @@ body {
 @media (max-width: 860px) {
   body { padding: 10px; }
   .rv-body { grid-template-columns: 1fr; }
+  .rv-body { height: auto; }
   .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
   .rv-chat { max-height: 340px; }
   .rv-tbtn.opt { display: none; }
@@ -653,6 +658,10 @@ body {
     }
   };
   window.RV = RV;
+
+  /* Keep the transcript pinned to its newest line. Text types in character by
+     character after the node is appended, so a one-shot scroll on append misses. */
+  if (window.gsap) gsap.ticker.add(function () { msgs.scrollTop = msgs.scrollHeight; });
 
   /* ========================================================================
      SCENARIO — "Explore the whole app and map every API endpoint you can

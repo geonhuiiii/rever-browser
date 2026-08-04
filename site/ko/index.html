@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — 웹 API를 리버싱하는 에이전트</title>
+<meta name="description" content="리버싱 에이전트를 품은 데스크톱 브라우저. CDP로 모든 요청을 잡고, 그게 무슨 뜻인지 에이전트에게 묻고, 앱을 벗어나지 않고 그대로 재현합니다." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><text x='16' y='23' font-size='19' font-family='monospace' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../style.css" />
+</head>
+<body class="ko">
+<script>
+  document.documentElement.classList.add('js');
+  try { var t = localStorage.getItem('rv-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+
+<div class="nav" id="nav">
+  <div class="wrap inner">
+    <a class="brand" href="#top"><span class="mark">R</span> rever-browser</a>
+    <nav class="links">
+      <a class="lnk" href="#scenarios">시나리오</a>
+      <a class="lnk" href="#features">기능</a>
+      <a class="lnk" href="#architecture">구조</a>
+      <a class="lnk" href="#tools">도구</a>
+      <a class="lnk" href="#quickstart">시작하기</a>
+      <a class="lnk lang" href="../">English</a>
+      <button class="toggle" id="theme">dark</button>
+      <a class="btn sm" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<!-- ══ hero ══════════════════════════════════════════════════════════ -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="grid">
+      <div>
+        <div class="eyebrow" data-reveal="fade">
+          <span>일렉트론 데스크톱 앱</span><span class="sep"></span><span>MIT 라이선스</span>
+        </div>
+        <h1 id="headline"><span class="ln">요청을 전부 본다.</span><span class="ln">무슨 뜻인지 묻는다.</span><span class="ln">그대로 재현한다.</span></h1>
+        <p class="lede" data-reveal="fade">
+          <b>rever-browser</b>는 진짜 크로미움 탭 옆에 리버싱 에이전트를 붙여 놓은 데스크톱 브라우저입니다.
+          사용자가 대상 사이트를 돌아다니면 앱이 <span class="u">CDP</span>로 모든 요청을 기록하고,
+          에이전트가 그 트래픽을 읽고 자바스크립트 번들을 열어보고 탭을 직접 조작합니다.
+        </p>
+        <div class="cta" data-reveal="fade">
+          <a class="btn primary" href="#quickstart">시작하기</a>
+          <a class="btn" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">소스 보기</a>
+          <a class="btn ghost" href="../demos/" target="_blank" rel="noopener">데모 30개</a>
+        </div>
+      </div>
+
+      <div class="spec" data-reveal="fade">
+        <div class="cap">한눈에 보기</div>
+        <dl>
+          <div class="row"><dt>MCP 도구</dt><dd><span data-count="134">0</span>개+</dd></div>
+          <div class="row"><dt>프로세스</dt><dd><span data-count="3">0</span>개 <small>격리</small></dd></div>
+          <div class="row"><dt>에이전트</dt><dd>claude code <small>· codex</small></dd></div>
+          <div class="row"><dt>지원 OS</dt><dd>macOS <small>· 윈도우 · 리눅스</small></dd></div>
+          <div class="row"><dt>라이선스</dt><dd>MIT</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap stage" data-reveal="fade">
+    <p class="stage-cap">
+      <span class="n">데모</span>
+      <span>움직이는 화면은 <a href="../" style="color:var(--accent-text)">영문 페이지</a>에서 시나리오 7개를 눌러 볼 수 있습니다. 이 페이지는 문구만 옮긴 번역본입니다.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ══ scenarios ═════════════════════════════════════════════════════ -->
+<section class="sec" id="scenarios">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>01</b> 시나리오</div>
+      <div>
+        <h2>열 마디 던지면, 동작하는 요청 하나가 나옵니다.</h2>
+        <p class="sub">아래 항목은 전부 실제 앱을 그대로 녹화한 흐름입니다. 문장을 고르면 위쪽 화면이 그 장면을 재생합니다.</p>
+      </div>
+    </div>
+    <div class="tabs" data-reveal="stagger">
+      <span class="tab">검색 API 찾아줘</span>
+      <span class="tab">로그인해서 내 주문 가져와</span>
+      <span class="tab">난독화 풀고 인증 흐름 찾아줘</span>
+      <span class="tab">웹소켓 해독해줘</span>
+      <span class="tab">limit=500으로 다시 보내줘</span>
+      <span class="tab">IDOR 있는지 확인해줘</span>
+      <span class="tab">이 과정 반복 가능하게 만들어줘</span>
+    </div>
+    <p class="stage-cap" style="margin-top:18px">
+      <span class="n">설명</span>
+      <span>예를 들어 “검색 API 찾아줘”라고 하면, 에이전트가 페이지를 스냅샷으로 뜨고 검색 버튼을 누른 뒤 잡힌 트래픽을 읽고 엔드포인트를 알려줍니다.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ══ features ══════════════════════════════════════════════════════ -->
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>02</b> 무엇이 들어 있나</div>
+      <div>
+        <h2>브라우저와 패킷 캡처, 그리고 둘 다 읽는 에이전트.</h2>
+        <p class="sub">따로 붙일 게 없습니다. 캡처 버퍼도, 번들 분석기도, 도구 서버도 지금 조작 중인 탭과 같은 창 안에 있습니다.</p>
+      </div>
+    </div>
+
+    <div class="rows" data-reveal="stagger">
+      <div class="row-item">
+        <div class="num">01</div>
+        <h3>실시간 트래픽 캡처</h3>
+        <div class="body">
+          <p>탭에서 발생한 <code class="i">Network.*</code> 이벤트가 전부 링 버퍼에 쌓입니다. 응답 본문은 <code class="i">loadingFinished</code> 시점에 필요할 때만 가져오고, 이미지·비디오·폰트·CSS는 건너뛰어서 버퍼가 읽을 만한 상태로 유지됩니다.</p>
+          <div class="tags"><span class="tagchip">cdp</span><span class="tagchip">ring buffer</span><span class="tagchip">lazy bodies</span><span class="tagchip">har export</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">02</div>
+        <h3>사용자가 보는 화면을 그대로 보는 에이전트</h3>
+        <div class="body">
+          <p>기본은 Claude Code, 대안으로 Codex를 쓸 수 있고 둘 다 stdio 위의 ACP로 붙습니다. 에이전트가 읽는 트래픽 저장소는 화면에 뜨는 것과 같은 저장소라, “방금 보낸 요청 설명해줘”에 복붙이 필요 없습니다.</p>
+          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">streaming</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">03</div>
+        <h3>브라우저 자동 조작</h3>
+        <div class="body">
+          <p>이동·클릭·입력·스크롤·스크린샷을 접근성 스냅샷 기반으로 실행합니다. 깨지기 쉬운 셀렉터 대신 짧은 <code class="i">rN</code> 참조를 씁니다.</p>
+          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">set_viewport</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">04</div>
+        <h3>다시 내려받지 않는 번들 분석</h3>
+        <div class="body">
+          <p>이미 캡처에 들어 있는 자바스크립트를 그대로 grep 하고, 추출하고, 번들러를 판별하고, 난독화를 풉니다. <code class="i">webcrack</code>이 PATH에 있으면 압축을 풀어 주고, 사이트가 소스맵을 제공하면 원본을 복원합니다.</p>
+          <div class="tags"><span class="tagchip">grep_scripts</span><span class="tagchip">detect_bundler</span><span class="tagchip">deobfuscate_script</span><span class="tagchip">sourcemap</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">05</div>
+        <h3>깊게 파는 API 도구</h3>
+        <div class="body">
+          <p>리피터, 인트루더, 헤더 덮어쓰기, 요청 가로채기, 암호화·인코딩 해석 도우미, 웹소켓과 서비스 워커 점검, GraphQL·프로토버프 리더까지 들어 있습니다.</p>
+          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">06</div>
+        <h3>기본값이 로컬</h3>
+        <div class="body">
+          <p>MCP 서버는 앱 안에서 돌고 <code class="i">127.0.0.1</code>의 임의 포트에 붙습니다. 에이전트를 처음 띄울 때만 시작되고, 캡처한 트래픽은 사용자 컴퓨터의 앱 메모리에 머뭅니다.</p>
+          <div class="tags"><span class="tagchip">127.0.0.1</span><span class="tagchip">in-process</span><span class="tagchip">수집 서버 없음</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">07</div>
+        <h3>알아낸 것을 반복 가능하게</h3>
+        <div class="body">
+          <p>엔드포인트를 파악했으면 매크로나 워크플로로 저장해 다시 실행하고, 세션 전체를 HAR로 내보내고, 앱 밖에서 돌릴 클라이언트 코드까지 받아볼 수 있습니다.</p>
+          <div class="tags"><span class="tagchip">macros</span><span class="tagchip">workflows</span><span class="tagchip">findings</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ architecture ══════════════════════════════════════════════════ -->
+<section class="sec" id="architecture">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>03</b> 구조</div>
+      <div>
+        <h2>프로세스 셋, 경계는 하나.</h2>
+        <p class="sub">Node API와 CDP 디버거는 페이지 쪽으로 새어 나가지 않습니다. 모든 통신은 preload IPC를 거치고, 이 경계가 화면에 노출되는 API의 유일한 기준입니다.</p>
+      </div>
+    </div>
+
+    <div class="arch" data-reveal="stagger">
+      <div class="node">
+        <div class="pname">main</div>
+        <h4>크로미움과 에이전트를 소유</h4>
+        <p>Node와 일렉트론 API를 쓸 수 있는 유일한 프로세스입니다.</p>
+        <ul>
+          <li>webContents.debugger (CDP)</li>
+          <li>traffic-store 링 버퍼</li>
+          <li>ACP 자식 프로세스 실행</li>
+          <li>HTTP MCP 서버 구동</li>
+        </ul>
+      </div>
+      <div class="node">
+        <div class="pname">preload</div>
+        <h4>둘 사이의 유일한 문</h4>
+        <p>contextBridge로 <code class="i">window.rev</code>만 노출합니다.</p>
+        <ul>
+          <li>타입이 정의된 RevAPI</li>
+          <li>프롬프트별 업데이트 채널</li>
+          <li>페이지로 Node가 넘어가지 않음</li>
+        </ul>
+      </div>
+      <div class="node">
+        <div class="pname">renderer</div>
+        <h4>실제로 만지는 화면</h4>
+        <p>React 19와 Vite로 만든 탭, 트래픽 목록, 채팅입니다.</p>
+        <ul>
+          <li>&lt;webview&gt; 호스트</li>
+          <li>실시간 트래픽 목록</li>
+          <li>스트리밍 채팅 패널</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rail" id="rail1" data-reveal="fade">
+      <div class="line"></div>
+      <div class="lbl">캡처 &nbsp;·&nbsp; Network.* → traffic-store → network-event IPC → 트래픽 목록</div>
+      <div class="pkt"></div><div class="pkt"></div><div class="pkt"></div>
+    </div>
+    <div class="rail" id="rail2" data-reveal="fade">
+      <div class="line"></div>
+      <div class="lbl">에이전트 &nbsp;·&nbsp; 프롬프트 → ACP 세션 → MCP 도구 → CDP → 스트리밍 답변</div>
+      <div class="pkt"></div><div class="pkt"></div><div class="pkt"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ tools ═════════════════════════════════════════════════════════ -->
+<section class="sec" id="tools">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>04</b> 도구 목록</div>
+      <div>
+        <h2>도구 134개, 알아내려는 것 기준으로 묶었습니다.</h2>
+        <p class="sub">한 영역이 <code class="i">src/main/mcp/tools/</code> 아래 파일 하나입니다. 영역을 늘리려면 파일 하나 추가하고 서버 팩토리에 한 줄 넣으면 됩니다.</p>
+      </div>
+    </div>
+    <div class="catalog" data-reveal="stagger" id="catalog"></div>
+  </div>
+</section>
+
+<!-- ══ quickstart ════════════════════════════════════════════════════ -->
+<section class="sec" id="quickstart">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>05</b> 시작하기</div>
+      <div>
+        <h2>1분이면 실행됩니다.</h2>
+        <p class="sub">패키지 매니저는 npm이나 pnpm이 아니라 bun입니다. 에이전트 실행 파일은 별도 프로세스로 돌기 때문에 따로 설치합니다.</p>
+      </div>
+    </div>
+
+    <div class="qs">
+      <div class="term" data-reveal="fade">
+        <div class="bar"><span>zsh</span><button class="copy" data-copy>복사</button></div>
+<pre id="code"><span class="c"># 1 — PATH에 올라가야 하는 에이전트 실행 파일</span>
+<span class="p">$</span> npm i -g @agentclientprotocol/claude-agent-acp
+
+<span class="c"># 2 — 앱</span>
+<span class="p">$</span> git clone https://github.com/greekr4/rever-browser
+<span class="p">$</span> cd rever-browser
+<span class="p">$</span> bun install
+<span class="p">$</span> bun run dev
+
+<span class="c"># 선택 — 캡처한 번들 난독화 풀기</span>
+<span class="p">$</span> npm i -g webcrack</pre>
+      </div>
+
+      <div class="steps" data-reveal="stagger">
+        <div class="step"><div class="n">01</div><div><h4>대상 사이트를 연다</h4><p>내장 탭 주소창에 URL을 넣습니다. 요청이 발생하는 대로 트래픽 목록에 쌓입니다.</p></div></div>
+        <div class="step"><div class="n">02</div><div><h4>채팅 패널을 연다</h4><p>Claude Code나 Codex를 고릅니다. 세션은 API 리버싱용 시스템 프롬프트가 이미 걸린 상태로 시작합니다.</p></div></div>
+        <div class="step"><div class="n">03</div><div><h4>물어본다</h4><p>“검색 엔드포인트는 뭘 받아?” 하면 에이전트가 캡처를 읽고 번들을 뒤진 뒤, 요청을 다시 보내 스스로 확인합니다.</p></div></div>
+        <div class="step"><div class="n">04</div><div><h4>남긴다</h4><p>매크로로 저장하거나, HAR로 내보내거나, 생성된 클라이언트 코드를 앱 밖에서 실행합니다.</p></div></div>
+      </div>
+    </div>
+
+    <div class="note" data-reveal="fade">
+      <div class="cap">어디에 겨눌지 정하기 전에</div>
+      <div>
+        <p>rever-browser는 실제 브라우저로 실제 서버를 두드립니다. 본인이 운영하는 서비스, 서면으로 테스트 허가를 받은 시스템, 또는 테스트를 허용한 대상에만 쓰고, 해당 사이트의 약관과 거주 국가의 법을 따르세요.</p>
+        <p>이미 들여다볼 권한이 있는 사람을 위한 디버깅 도구입니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ closer ════════════════════════════════════════════════════════ -->
+<section class="closer">
+  <div class="wrap">
+    <div class="inner" data-reveal="fade">
+      <div>
+        <h2>캡처를 읽고, 그다음 코드를 읽으세요.</h2>
+        <p>MIT 라이선스이고 의존성 트리 어디에도 카피레프트가 없습니다. 이슈와 풀 리퀘스트 환영합니다.</p>
+      </div>
+      <div class="cta" style="margin:0">
+        <a class="btn primary" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">GitHub에서 보기</a>
+        <a class="btn" href="../">English</a>
+      </div>
+    </div>
+  </div>
+  <footer>
+    <div class="wrap inner">
+      <span>rever-browser · MIT</span>
+      <span class="sp">
+        <a href="https://github.com/greekr4/rever-browser">소스</a>
+        <a href="https://github.com/greekr4/rever-browser/blob/main/README.md">readme</a>
+        <a href="https://github.com/greekr4/rever-browser/issues">이슈</a>
+        <a href="../demos/">데모</a>
+      </span>
+    </div>
+  </footer>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script>
+(function () {
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var hasGsap = !!window.gsap;
+  if (hasGsap && window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
+  var root = document.documentElement;
+
+  var themeBtn = document.getElementById('theme');
+  function paintThemeBtn() { themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; }
+  paintThemeBtn();
+  themeBtn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('rv-theme', next); } catch (e) {}
+    paintThemeBtn();
+  });
+
+  addEventListener('scroll', function () {
+    document.getElementById('nav').classList.toggle('is-stuck', scrollY > 8);
+  }, { passive: true });
+
+  var TOOLS = [
+    ['browser', 24], ['debugger', 9], ['intercept', 8], ['storage', 7], ['macros', 7], ['scripts', 6],
+    ['console', 5], ['inject', 5], ['websocket', 5], ['crypto', 4], ['headers', 4], ['dialog', 4],
+    ['dom_edit', 4], ['findings', 4], ['traffic', 3], ['sourcemap', 3], ['override', 3], ['sw_inspect', 3],
+    ['crypto_trace', 3], ['auth', 2], ['deob', 2], ['diff', 2], ['path_probe', 2], ['repeater', 1],
+    ['intruder', 1], ['har', 1], ['graphql', 1], ['protobuf', 1], ['secrets', 1], ['antibot', 1],
+    ['decode', 1], ['body', 1], ['burst', 1], ['crlf', 1], ['payload_probe', 1], ['security_inspect', 1],
+    ['vision', 1], ['wait', 1]
+  ];
+  var cat = document.getElementById('catalog');
+  TOOLS.forEach(function (t) {
+    var el = document.createElement('span');
+    el.className = 'toolchip';
+    el.innerHTML = t[0] + ' <b>' + t[1] + '</b>';
+    cat.appendChild(el);
+  });
+
+  document.querySelector('[data-copy]').addEventListener('click', function () {
+    var btn = this;
+    var txt = document.getElementById('code').innerText.split('\n')
+      .filter(function (l) { return l.trim() && l.trim()[0] !== '#'; })
+      .map(function (l) { return l.replace(/^\$\s?/, ''); }).join('\n');
+    navigator.clipboard.writeText(txt).then(function () {
+      btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1400);
+    });
+  });
+
+  if (!hasGsap || reduced) {
+    [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) { el.style.opacity = 1; });
+    [].forEach.call(document.querySelectorAll('[data-count]'), function (el) { el.textContent = el.dataset.count; });
+    return;
+  }
+
+  /* headline: 어절 단위로 올라오게 */
+  var h1 = document.getElementById('headline');
+  /* 문장(.ln)은 줄바꿈 위치를 고정하고, 그 안에서 어절 단위로 올린다 */
+  [].forEach.call(h1.querySelectorAll('.ln'), function (ln) {
+    ln.innerHTML = ln.textContent.trim().split(/\s+/).map(function (w) {
+      return '<span class="w">' + w + '</span>';
+    }).join(' ');
+  });
+  h1.style.overflow = 'hidden';
+  h1.style.paddingBottom = '.06em';
+  var words = h1.querySelectorAll('.w');
+  gsap.set(words, { yPercent: 108, opacity: 0 });
+
+  gsap.timeline({ delay: 0.1 })
+    .to(words, { yPercent: 0, opacity: 1, duration: 0.9, ease: 'power3.out', stagger: 0.04 })
+    .fromTo('.eyebrow', { y: -8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
+    .fromTo('.lede, .hero .cta, .stage', { y: 12, opacity: 0 },
+      { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', stagger: 0.08 }, 0.4)
+    .fromTo('.spec', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.5)
+    .fromTo('.spec .row', { opacity: 0, x: 10 }, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, 0.6);
+
+  var OWNED = ['stage', 'eyebrow', 'lede', 'spec'];
+  [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) {
+    for (var i = 0; i < OWNED.length; i++) if (el.classList.contains(OWNED[i])) return;
+    if (el.classList.contains('cta') && el.closest('.hero')) return;
+    var stagger = el.dataset.reveal === 'stagger';
+    gsap.set(el, { opacity: 1 });
+    gsap.from(stagger ? el.children : [el], {
+      opacity: 0, y: 22, duration: 0.65, ease: 'power2.out', stagger: stagger ? 0.05 : 0,
+      scrollTrigger: { trigger: el, start: 'top 88%', once: true }
+    });
+  });
+
+  [].forEach.call(document.querySelectorAll('[data-count]'), function (el) {
+    var o = { v: 0 };
+    gsap.to(o, { v: +el.dataset.count, duration: 1.5, ease: 'power2.out', delay: 0.8,
+      onUpdate: function () { el.textContent = Math.round(o.v); } });
+  });
+
+  ['rail1', 'rail2'].forEach(function (id, ri) {
+    var rail = document.getElementById(id);
+    var pkts = rail.querySelectorAll('.pkt');
+    var toRight = ri === 0;
+    var tl = gsap.timeline({ repeat: -1, paused: true });
+    [].forEach.call(pkts, function (p, i) {
+      tl.fromTo(p, { left: toRight ? '2%' : '100%', opacity: 0 },
+        { left: toRight ? '100%' : '2%', opacity: 1, duration: 2.6, ease: 'none' }, i * 0.9);
+      tl.to(p, { opacity: 0, duration: 0.5 }, i * 0.9 + 2.1);
+    });
+    ScrollTrigger.create({
+      trigger: rail, start: 'top 96%', end: 'bottom 4%',
+      onEnter: function () { tl.play(); }, onLeave: function () { tl.pause(); },
+      onEnterBack: function () { tl.play(); }, onLeaveBack: function () { tl.pause(); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
