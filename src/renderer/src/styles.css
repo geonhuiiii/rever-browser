@@ -481,6 +481,34 @@ body.resizing webview { pointer-events: none; }
   overflow: hidden;
 }
 
+/* Count badge next to the panel title — mirrors .chip-count on the bar */
+.chip-panel-count {
+  margin-left: 6px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+/* ── Shared chrome for panel bodies inside the bottom slide panel ──
+   .panel-toolbar — the control row at the top of a panel body
+   .panel-empty   — the "nothing here yet" placeholder                */
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.panel-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* ── Bot check (bottom-left floating) ────────────────────────── */
 .botcheck {
   position: absolute;

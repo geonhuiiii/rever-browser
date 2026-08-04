@@ -274,7 +274,7 @@ export function CookiesPanel() {
                 </tr>
               ))}
               {cookies.length === 0 && (
-                <tr><Td colSpan={7} style={{ opacity: 0.5, padding: 16, textAlign: 'center' }}>no cookies for {origin ?? 'this origin'}</Td></tr>
+                <tr><Td colSpan={7} style={{ color: 'var(--text-dim)', padding: '24px 12px', textAlign: 'center' }}>No cookies for {origin ?? 'this origin'}</Td></tr>
               )}
             </tbody>
           </table>

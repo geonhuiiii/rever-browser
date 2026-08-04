@@ -92,12 +92,13 @@ export function TrafficList() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <header
         style={{
-          padding: '8px 12px',
+          padding: '6px 10px',
           borderBottom: '1px solid var(--border)',
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
-          fontSize: 12
+          fontSize: 11,
+          flexShrink: 0
         }}
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -170,7 +171,7 @@ export function TrafficList() {
         }}
       >
         {list.length === 0 && (
-          <p style={{ padding: 12, opacity: 0.5 }}>Open a page — traffic will appear here.</p>
+          <div className="panel-empty">Open a page — traffic will appear here.</div>
         )}
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>

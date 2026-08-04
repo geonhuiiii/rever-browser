@@ -43,7 +43,7 @@ export function ExceptionsPanel() {
           key={i}
           style={{
             padding: '6px 10px',
-            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            borderBottom: '1px solid var(--border)',
             cursor: e.stackTrace ? 'pointer' : 'default'
           }}
           onClick={() => e.stackTrace && toggle(i)}
@@ -80,7 +80,7 @@ export function ExceptionsPanel() {
         </div>
       ))}
       {items.length === 0 && (
-        <div style={{ padding: '12px 10px', opacity: 0.4, textAlign: 'center' }}>No exceptions</div>
+        <div className="panel-empty">No exceptions</div>
       )}
       </div>
     </div>

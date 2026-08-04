@@ -116,6 +116,18 @@ export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
     workflows: 'Workflows'
   }
 
+  // Same counts the chip badges show, surfaced in the panel header too.
+  const panelCount: Partial<Record<PanelId, number>> = {
+    traffic: trafficCount,
+    apimap: apiCount,
+    console: consoleCount,
+    exceptions: exceptionCount,
+    websocket: wsCount,
+    repeater: repeaterHistoryLen,
+    history: historyCount,
+    workflows: workflowCount
+  }
+
   // The bottom menu bar is fixed at the bottom; the panel slides up above it.
   const SPRING = { type: 'spring' as const, stiffness: 320, damping: 32 }
 
@@ -206,7 +218,12 @@ export function FloatingChips({ openPanel, setOpenPanel }: FloatingChipsProps) {
 
             {/* Panel header */}
             <div className="chip-panel-header">
-              <span className="chip-panel-title">{panelTitle[openPanel]}</span>
+              <span className="chip-panel-title">
+                {panelTitle[openPanel]}
+                {(panelCount[openPanel] ?? 0) > 0 && (
+                  <span className="chip-panel-count">{panelCount[openPanel]}</span>
+                )}
+              </span>
               <button
                 className="chip-panel-close"
                 onClick={() => {

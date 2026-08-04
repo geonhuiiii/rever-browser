@@ -32,7 +32,7 @@ export function RepeaterPanel() {
 
   if (!active) {
     return (
-      <div style={{ padding: 20, opacity: 0.6, fontSize: 12 }}>
+      <div className="panel-empty">
         Right-click a row in Traffic and choose <strong>Send to Repeater</strong> to start.
       </div>
     )
@@ -42,17 +42,7 @@ export function RepeaterPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <div
-        style={{
-          padding: '8px 12px',
-          borderBottom: '1px solid var(--border)',
-          display: 'flex',
-          gap: 8,
-          alignItems: 'center',
-          fontSize: 11,
-          flexShrink: 0
-        }}
-      >
+      <div className="panel-toolbar">
         <span style={{ opacity: 0.6 }}>source:</span>
         <span
           style={{

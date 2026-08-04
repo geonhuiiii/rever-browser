@@ -136,7 +136,7 @@ export function ApiMapPanel() {
 
   if (endpoints.length === 0) {
     return (
-      <div style={{ padding: '24px 10px', opacity: 0.4, textAlign: 'center', fontSize: 12 }}>
+      <div className="panel-empty">
         No API calls captured yet — browse the target site and XHR/Fetch requests will map here.
       </div>
     )
@@ -154,17 +154,7 @@ export function ApiMapPanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '5px 10px',
-          borderBottom: '1px solid var(--border)',
-          fontSize: 11,
-          flexShrink: 0
-        }}
-      >
+      <div className="panel-toolbar">
         <select
           value={domain ?? ''}
           onChange={(e) => {

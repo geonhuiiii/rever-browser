@@ -92,7 +92,7 @@ export function HistoryPanel() {
         }}
       >
         {filtered.length === 0 && (
-          <div style={{ padding: 24, textAlign: 'center', opacity: 0.5, fontSize: 11 }}>
+          <div className="panel-empty">
             {entries.length === 0 ? 'No history yet — navigate somewhere to start.' : 'No matches.'}
           </div>
         )}

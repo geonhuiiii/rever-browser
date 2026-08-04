@@ -45,16 +45,7 @@ export function ConsolePanel() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          padding: '4px 10px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          flexShrink: 0
-        }}
-      >
+      <div className="panel-toolbar" style={{ justifyContent: 'flex-end' }}>
         <button
           onClick={() => void handleClear()}
           style={{ fontSize: 11, padding: '2px 8px' }}
@@ -68,7 +59,7 @@ export function ConsolePanel() {
             key={i}
             style={{
               padding: '2px 10px',
-              borderBottom: '1px solid rgba(255,255,255,0.03)',
+              borderBottom: '1px solid var(--border)',
               color: TYPE_COLOR[e.type] ?? 'var(--text)',
               display: 'flex',
               gap: 8,
@@ -85,7 +76,7 @@ export function ConsolePanel() {
           </div>
         ))}
         {entries.length === 0 && (
-          <div style={{ padding: '12px 10px', opacity: 0.4, textAlign: 'center' }}>No console output</div>
+          <div className="panel-empty">No console output</div>
         )}
       </div>
     </div>

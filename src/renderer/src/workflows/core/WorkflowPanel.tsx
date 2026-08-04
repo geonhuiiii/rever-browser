@@ -62,7 +62,8 @@ export function WorkflowPanel(): React.ReactElement {
     return (
       <div
         style={{
-          padding: 12,
+          padding: 10,
+          fontSize: 12,
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
@@ -100,7 +101,7 @@ export function WorkflowPanel(): React.ReactElement {
   }
 
   return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10, height: '100%' }}>
+    <div style={{ padding: 10, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 10, height: '100%', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         <span style={{ color: 'var(--text-dim)', marginRight: 4 }}>New:</span>
         {kinds.length === 0 && (
@@ -114,7 +115,7 @@ export function WorkflowPanel(): React.ReactElement {
       </div>
 
       {workflows.length === 0 ? (
-        <div style={{ color: 'var(--text-dim)', fontStyle: 'italic', padding: '8px 2px' }}>
+        <div className="panel-empty">
           No saved workflows yet.
         </div>
       ) : (
