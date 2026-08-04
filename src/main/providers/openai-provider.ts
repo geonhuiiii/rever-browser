@@ -5,11 +5,13 @@ import { randomUUID } from 'node:crypto'
 
 import { startMcpServer } from '../mcp/server'
 import { getApiKey } from '../settings'
+import { capToolsForOpenAI, OPENAI_MAX_TOOLS } from './openai-tool-cap'
 
 import type { SessionNotification } from '@agentclientprotocol/sdk'
 import type {
   ChatCompletionMessageParam,
   ChatCompletionTool,
+  ChatCompletionFunctionTool,
   ChatCompletionMessageToolCall
 } from 'openai/resources/chat/completions'
 
@@ -51,7 +53,7 @@ async function getMcpBridge(): Promise<{ client: Client; tools: ChatCompletionTo
     const client = new Client({ name: 'rever-openai', version: '0.1.0' })
     await client.connect(new StreamableHTTPClientTransport(new URL(url)))
     const listed = await client.listTools()
-    const tools: ChatCompletionTool[] = listed.tools.map((t) => ({
+    const mapped: ChatCompletionFunctionTool[] = listed.tools.map((t) => ({
       type: 'function',
       function: {
         name: t.name,
@@ -59,6 +61,13 @@ async function getMcpBridge(): Promise<{ client: Client; tools: ChatCompletionTo
         parameters: t.inputSchema as Record<string, unknown>
       }
     }))
+    // OpenAI caps tools at 128 per request; trim the least-useful first.
+    const { tools, dropped } = capToolsForOpenAI(mapped)
+    if (dropped.length) {
+      console.warn(
+        `[openai] tool list capped ${mapped.length}→${tools.length} (OpenAI max ${OPENAI_MAX_TOOLS}); dropped: ${dropped.join(', ')}`
+      )
+    }
     return { client, tools }
   })()
   return mcpBridge
