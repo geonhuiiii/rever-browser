@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — metrics band (odometer + bars)</title>
+<style>
+/* ============================================================================
+   CANONICAL APP SHELL — copy this whole <style> + the .rv-app markup verbatim.
+   Tokens are lifted from src/renderer/src/styles.css. Light is the default
+   (matches the real app screenshot); [data-theme='dark'] is the override.
+   RULE: never put a colored accent strip / left-border on a card. Cards are
+   plain --surface on --border. Color appears only in action flashes, method
+   badges, status dots and severity text.
+   ========================================================================= */
+:root, :root[data-theme='light'] {
+  --bg: #fbfbfc; --bg-bar: #eef0f2; --surface: #ffffff; --surface-2: #f0f1f3;
+  --surface-3: #e6e8ea; --border: #e2e4e8; --border-2: #d3d6db; --border-3: #bcc0c6;
+  --text: #1b1d21; --text-2: #3f444b; --text-dim: #6a7078; --viewport-bg: #ffffff;
+  --code-bg: #f3f4f6; --inline-code-bg: #eceef1; --link: #2f6fed; --accent: #2f6fed;
+  --accent-soft: rgba(47,111,237,0.14); --accent-border: rgba(47,111,237,0.35);
+  --shadow: rgba(0,0,0,0.16);
+  --chip-ok-bg:#e7f6e9; --chip-ok-border:#bfe3c4; --chip-ok-text:#1f7a34;
+  --chip-warn-bg:#fbf3e2; --chip-warn-border:#e6d5a8; --chip-warn-text:#8a6a1f;
+  --chip-info-bg:#e8f0fb; --chip-info-border:#c3d6ef; --chip-info-text:#2f5fa8;
+  --chip-danger-bg:#fbeaea; --chip-danger-border:#eabcbc; --chip-danger-text:#a52f2f;
+  /* agent action colours (main/ai-events.ts kinds) */
+  --act-click:#e5484d; --act-hover:#d9a300; --act-type:#2f6fed; --act-navigate:#8b5cf6;
+  --act-scroll:#1f9d55; --act-evaluate:#c2691a; --act-extract:#0f9b8e;
+  --get:#1f9d55; --post:#c2691a;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc;
+  --text-dim:#999; --viewport-bg:#000; --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d;
+  --link:#7ab7ff; --accent:#4a8fff; --accent-soft:rgba(80,140,255,0.18);
+  --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.4);
+  --chip-ok-bg:#1f2a1f; --chip-ok-border:#2a4a2a; --chip-ok-text:#aea;
+  --chip-warn-bg:#2a261f; --chip-warn-border:#4a402a; --chip-warn-text:#eca;
+  --chip-info-bg:#1f242a; --chip-info-border:#2a3a4a; --chip-info-text:#ace;
+  --chip-danger-bg:#3a1f1f; --chip-danger-border:#5a2a2a; --chip-danger-text:#eaa;
+  --act-click:#ff3b30; --act-hover:#ffd60a; --act-type:#0a84ff; --act-navigate:#a855f7;
+  --act-scroll:#30d158; --act-evaluate:#ff9f0a; --act-extract:#2dd4bf;
+  --get:#30d158; --post:#ff9f0a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: 18px; overflow-x: hidden;
+}
+
+/* ── window frame ─────────────────────────────────────────────────────── */
+.rv-app {
+  max-width: 1180px; margin: 0 auto; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 50px var(--shadow); display: flex; flex-direction: column;
+}
+/* ── titlebar: traffic lights + tab strip ─────────────────────────────── */
+.rv-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-lights { display: flex; gap: 6px; flex: none; }
+.rv-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.rv-lights i:nth-child(1){background:#ff5f57} .rv-lights i:nth-child(2){background:#febc2e}
+.rv-lights i:nth-child(3){background:#28c840}
+.rv-tab {
+  display: flex; align-items: center; gap: 7px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tab .fav { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-3); flex: none; }
+.rv-newtab {
+  width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: default; flex: none;
+}
+.rv-themebtn {
+  margin-left: auto; width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-border);
+}
+/* ── toolbar ──────────────────────────────────────────────────────────── */
+.rv-toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-navbtn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); font-size: 12px;
+  display: grid; place-items: center; flex: none;
+}
+.rv-url {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; font: 12px/1.3 var(--sans); color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 11.5px; font-weight: 500; flex: none;
+}
+.rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* ── body split: viewport | chat ──────────────────────────────────────── */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+.rv-view {
+  position: relative; background: var(--viewport-bg); overflow: hidden;
+  height: 470px; border-right: 1px solid var(--border);
+}
+/* ── chat panel ───────────────────────────────────────────────────────── */
+.rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+.rv-chathead {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px;
+}
+.rv-agent {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2);
+}
+.rv-agent .av {
+  width: 15px; height: 15px; border-radius: 4px; background: var(--accent-soft);
+  color: var(--accent); font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.rv-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); }
+.rv-models {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text-dim); font-size: 11px;
+}
+.rv-ready { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.rv-chipbar { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.rv-chip {
+  font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+}
+.rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
+
+.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-role { font-size: 10.5px; color: var(--text-dim); }
+.rv-text { font-size: 12px; color: var(--text); }
+.rv-text code {
+  font: 11px var(--mono); background: var(--inline-code-bg);
+  padding: 1px 4px; border-radius: 4px;
+}
+/* the real WorkGroup disclosure — 11px, transparent, 1px border, radius 12 */
+.rv-group {
+  display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; font-size: 11px;
+  background: transparent; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-dim); align-self: flex-start; white-space: nowrap;
+}
+.rv-group .dim { opacity: .5; }
+.rv-groupbody { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 5px; }
+.rv-tool { font: 10.5px/1.45 var(--mono); color: var(--text-dim); display: flex; gap: 6px; align-items: baseline; }
+.rv-tool .nm { color: var(--text-2); }
+.rv-tool .st { margin-left: auto; flex: none; }
+.rv-tool.is-run .st { color: var(--chip-warn-text); }
+.rv-tool.is-done .st { color: var(--chip-ok-text); }
+.rv-caret { display: inline-block; width: 1.5px; height: 12px; background: var(--accent); vertical-align: -2px; }
+.rv-compose { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--border); }
+.rv-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); padding: 6px 10px; font-size: 11.5px; color: var(--text-dim);
+}
+.rv-send {
+  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 13px; font-size: 11.5px; font-weight: 600; flex: none;
+}
+/* ── status bar ───────────────────────────────────────────────────────── */
+.rv-status {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px; overflow-x: auto;
+  background: var(--bg-bar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); scrollbar-width: none;
+}
+.rv-status::-webkit-scrollbar { display: none; }
+.rv-status b { font-weight: 600; color: var(--text-2); }
+.rv-status .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rv-status .is-on { color: var(--accent); }
+
+/* ── in-viewport overlay: ghost cursor + action flash ─────────────────── */
+.rv-cursor { position: absolute; width: 20px; height: 20px; z-index: 30; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); opacity: 0; }
+.rv-flash { position: absolute; z-index: 25; pointer-events: none; opacity: 0; border-radius: 6px;
+  border: 2px solid var(--act-click); box-shadow: 0 0 0 4px rgba(229,72,77,.16); }
+.rv-flash .tag { position: absolute; top: -20px; left: -2px; font: 600 10px/1 var(--sans);
+  color: #fff; background: var(--act-click); padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.rv-flash.hover { border-color: var(--act-hover); box-shadow: 0 0 0 4px rgba(217,163,0,.16); }
+.rv-flash.hover .tag { background: var(--act-hover); color: #221c00; }
+.rv-flash.type { border-color: var(--act-type); box-shadow: 0 0 0 4px rgba(47,111,237,.16); }
+.rv-flash.type .tag { background: var(--act-type); }
+.rv-flash.navigate { border-color: var(--act-navigate); box-shadow: 0 0 0 4px rgba(139,92,246,.16); }
+.rv-flash.navigate .tag { background: var(--act-navigate); }
+.rv-flash.extract { border-color: var(--act-extract); box-shadow: 0 0 0 4px rgba(15,155,142,.16); }
+.rv-flash.extract .tag { background: var(--act-extract); }
+
+/* ── generic page furniture for the fake site inside .rv-view ─────────── */
+.rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.rv-badge { font: 600 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.rv-badge.get { color: var(--get); background: rgba(31,157,85,.12); }
+.rv-badge.post { color: var(--post); background: rgba(194,105,26,.12); }
+
+.rv-replay {
+  position: absolute; right: 10px; bottom: 10px; z-index: 40;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 5px 11px; font-size: 11px; cursor: pointer;
+}
+.rv-replay:hover { color: var(--text); border-color: var(--border-3); }
+
+/* ── responsive: stack chat under the viewport ────────────────────────── */
+@media (max-width: 860px) {
+  body { padding: 10px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rv-chat { max-height: 340px; }
+  .rv-tbtn.opt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-cursor, .rv-flash { display: none !important; }
+}
+
+/* ============================================================================
+   stat-counters — block-specific styles (.statCt-* / #statCt-*), APPENDED.
+   A light metrics band living inside .rv-view: two eased count-ups, one
+   slot-machine odometer (full comma-grouped digits, never abbreviated), and
+   two comparison bars — rever-browser in --accent, manual in --text-dim.
+   No accent strips: cells are plain text, the meters box is plain --surface.
+   ========================================================================= */
+#statCt-view {
+  position: absolute; inset: 0; overflow: auto;
+  padding: clamp(16px, 3.2vw, 26px);
+}
+#statCt-view::-webkit-scrollbar { width: 8px; }
+#statCt-view::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; }
+
+.statCt-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; margin-bottom: 11px;
+  border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); color: var(--text-dim);
+  font: 600 10px/1 var(--mono); letter-spacing: .09em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.statCt-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); flex: none; }
+.statCt-title {
+  margin: 0 0 6px; font-size: clamp(18px, 2.7vw, 25px); line-height: 1.14;
+  font-weight: 700; letter-spacing: -.025em; color: var(--text);
+}
+.statCt-lead {
+  margin: 0; max-width: 40rem; color: var(--text-dim);
+  font-size: 12.5px; line-height: 1.55;
+}
+
+/* hairline sweep rail */
+.statCt-railWrap { position: relative; height: 3px; margin: clamp(14px, 3vw, 20px) 0; }
+.statCt-rail {
+  position: absolute; left: 0; right: 0; top: 1px; height: 1px;
+  transform: scaleX(0); transform-origin: left center; background: var(--border-2);
+}
+.statCt-railGlow {
+  position: absolute; left: 0; top: 0; width: 22%; height: 3px;
+  opacity: 0; border-radius: 999px;
+  background: linear-gradient(90deg, rgba(47,111,237,0) 0%, var(--accent) 50%, rgba(47,111,237,0) 100%);
+}
+
+/* stat grid — container-driven, no dividers, no strips */
+.statCt-grid3 {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: clamp(14px, 3vw, 22px);
+  margin-bottom: clamp(16px, 3.6vw, 22px);
+}
+.statCt-cell { min-width: 0; }
+.statCt-num, .statCt-odo {
+  --cell: 1.22em;
+  display: block; height: var(--cell); line-height: var(--cell);
+  font-size: clamp(26px, 4.6vw, 39px); font-weight: 700; letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  color: var(--text);
+}
+.statCt-label {
+  display: block; margin-top: 9px; font-size: 12px; font-weight: 600;
+  letter-spacing: -.005em; color: var(--text-2);
+}
+.statCt-sub {
+  display: block; margin-top: 3px; color: var(--text-dim);
+  font: 11px var(--mono); letter-spacing: .01em;
+}
+
+/* odometer reels */
+.statCt-odo {
+  display: flex; align-items: flex-start;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 16%, #000 84%, transparent 100%);
+}
+.statCt-odoDigit { display: block; flex: none; height: var(--cell); overflow: hidden; }
+.statCt-reel { display: block; will-change: transform; backface-visibility: hidden; }
+.statCt-cellDigit { display: block; height: var(--cell); line-height: var(--cell); text-align: center; }
+.statCt-odoSep { display: block; flex: none; height: var(--cell); line-height: var(--cell); padding: 0 .02em; color: var(--text-dim); }
+
+/* comparison meters — plain surface card, no strip */
+.statCt-meters {
+  padding: clamp(13px, 3vw, 16px) clamp(13px, 3vw, 17px);
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.statCt-metersHead {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  margin-bottom: clamp(11px, 3vw, 15px);
+}
+.statCt-metersTitle { margin: 0; font-size: clamp(13px, 2.7vw, 14.5px); font-weight: 600; letter-spacing: -.01em; color: var(--text); }
+.statCt-metersKicker { color: var(--text-dim); font: 10.5px var(--mono); letter-spacing: .05em; text-transform: uppercase; }
+.statCt-meter + .statCt-meter { margin-top: clamp(10px, 2.8vw, 13px); }
+.statCt-meterTop {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 4px 8px; margin-bottom: 6px;
+}
+.statCt-meterName {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  color: var(--text-2); font: 11.5px var(--mono); letter-spacing: .01em;
+}
+.statCt-badge {
+  padding: 1px 6px; border: 1px solid var(--accent-border); border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 9.5px; letter-spacing: .03em; white-space: nowrap;
+}
+.statCt-meterVal {
+  font-size: clamp(15px, 3.2vw, 18px); font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1; white-space: nowrap;
+}
+.statCt-unit { margin-left: .24em; color: var(--text-dim); font: 500 .62em var(--mono); letter-spacing: .04em; }
+.statCt-meterSlow .statCt-meterVal { color: var(--text-2); }
+.statCt-meterFast .statCt-meterVal { color: var(--accent); }
+.statCt-track {
+  position: relative; height: 9px; border-radius: 999px;
+  background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+.statCt-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 999px; }
+.statCt-fillSlow { background: var(--text-dim); }
+.statCt-fillFast { background: var(--accent); }
+.statCt-note {
+  margin: clamp(10px, 2.8vw, 13px) 0 0; color: var(--text-dim);
+  font: 10.5px/1.55 var(--mono); letter-spacing: .01em;
+}
+
+/* entry states */
+.statCt-fade { opacity: 0; transform: translateY(12px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .statCt-fade { opacity: 1 !important; transform: none !important; }
+  .statCt-rail { transform: scaleX(1) !important; }
+  .statCt-railGlow { opacity: 0 !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== COPY FROM HERE ===================================================== -->
+<div class="rv-app">
+  <div class="rv-titlebar">
+    <div class="rv-lights"><i></i><i></i><i></i></div>
+    <div class="rv-tab"><span class="fav"></span><span>rever-browser — by the numbers</span></div>
+    <div class="rv-newtab">+</div>
+    <div class="rv-themebtn">☀</div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-navbtn">‹</div>
+    <div class="rv-navbtn">›</div>
+    <div class="rv-navbtn">⟳</div>
+    <div class="rv-navbtn">&lt;/&gt;</div>
+    <div class="rv-url" id="sh-url">https://rever-browser.dev/#numbers</div>
+    <div class="rv-tbtn">Go</div>
+    <div class="rv-tbtn opt">Auto</div>
+    <div class="rv-tbtn opt">Proxy</div>
+    <div class="rv-tbtn opt">Desktop</div>
+    <div class="rv-tbtn opt">Embedded</div>
+  </div>
+
+  <div class="rv-body">
+    <!-- LEFT: the driven page — a light metrics band -->
+    <div class="rv-view" id="sh-view">
+      <div id="statCt-view">
+        <div class="statCt-eyebrow statCt-fade"><span class="statCt-dot"></span>By the numbers</div>
+        <h2 class="statCt-title statCt-fade">One session, measured.</h2>
+        <p class="statCt-lead statCt-fade">
+          The agent watches the whole tab over the DevTools Protocol. Every request lands in a ring
+          buffer it can query, grep and replay — so finding an undocumented endpoint stops being an afternoon.
+        </p>
+
+        <div class="statCt-railWrap">
+          <div class="statCt-rail" id="statCt-rail"></div>
+          <span class="statCt-railGlow" id="statCt-railGlow"></span>
+        </div>
+
+        <div class="statCt-grid3">
+          <div class="statCt-cell statCt-fade">
+            <span class="statCt-num" id="statCt-n1">0</span>
+            <span class="statCt-label">Isolated processes</span>
+            <span class="statCt-sub">main · preload · renderer</span>
+          </div>
+
+          <div class="statCt-cell statCt-fade">
+            <span class="statCt-num" id="statCt-n2">0</span>
+            <span class="statCt-label">Agent MCP tools</span>
+            <span class="statCt-sub">traffic · browser · scripts</span>
+          </div>
+
+          <div class="statCt-cell statCt-fade" id="statCt-cellOdo">
+            <span class="statCt-odo" id="statCt-odo" role="img" aria-label="12,480"></span>
+            <span class="statCt-label">Requests captured in a session</span>
+            <span class="statCt-sub">ring-buffered straight off CDP</span>
+          </div>
+        </div>
+
+        <div class="statCt-meters statCt-fade" id="statCt-meters">
+          <div class="statCt-metersHead">
+            <h3 class="statCt-metersTitle">Time to find an undocumented endpoint</h3>
+            <span class="statCt-metersKicker">same target, same tester</span>
+          </div>
+
+          <div class="statCt-meter statCt-meterSlow">
+            <div class="statCt-meterTop">
+              <span class="statCt-meterName">Manual DevTools</span>
+              <span class="statCt-meterVal"><span id="statCt-v1">0</span><span class="statCt-unit">min</span></span>
+            </div>
+            <div class="statCt-track"><div class="statCt-fill statCt-fillSlow" id="statCt-fill1"></div></div>
+          </div>
+
+          <div class="statCt-meter statCt-meterFast">
+            <div class="statCt-meterTop">
+              <span class="statCt-meterName">With rever-browser<span class="statCt-badge">27&times; faster</span></span>
+              <span class="statCt-meterVal"><span id="statCt-v2">0</span><span class="statCt-unit">sec</span></span>
+            </div>
+            <div class="statCt-track"><div class="statCt-fill statCt-fillFast" id="statCt-fill2"></div></div>
+          </div>
+
+          <p class="statCt-note">
+            Both runs chase the same paginated search API on a first-time target. Bars are drawn to scale —
+            40 seconds is 3.7% of 18 minutes.
+          </p>
+        </div>
+      </div>
+
+      <div class="rv-flash" id="sh-flash"><span class="tag" id="sh-flashtag">AI click</span></div>
+      <svg class="rv-cursor" id="sh-cursor" viewBox="0 0 24 24">
+        <path d="M5 3l14 8-6 1.5L10 20 5 3z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      <button class="rv-replay" id="sh-replay">↻ Replay</button>
+    </div>
+
+    <!-- RIGHT: chat panel -->
+    <div class="rv-chat">
+      <div class="rv-chathead">
+        <span class="rv-agent"><span class="av">C</span> Claude Code <span class="on"></span> ▾</span>
+        <span class="rv-models">no models yet ▾</span>
+        <span class="rv-ready">ready</span>
+      </div>
+      <div class="rv-chipbar">
+        <span class="rv-chip ok">Auto-approve</span>
+        <span class="rv-chip">History (2)</span>
+        <span class="rv-chip">+ New</span>
+      </div>
+      <div class="rv-msgs" id="sh-msgs"></div>
+      <div class="rv-compose">
+        <div class="rv-input">Type a message…</div>
+        <div class="rv-send">Send</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rv-status" id="sh-status">
+    <span><b>Traffic</b> <span class="n" id="sh-traffic">12,480</span></span>
+    <span><b>Console</b></span>
+    <span><b>Exceptions</b></span>
+    <span><b>WebSocket</b></span>
+    <span><b>Repeater</b></span>
+    <span><b>Storage</b></span>
+    <span><b>History</b> <span class="n">340</span></span>
+    <span><b>Workflows</b> <span class="n">2</span></span>
+  </div>
+</div>
+<!-- ===== COPY TO HERE ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* Shell helper API (copied verbatim). RV.cursorTo / press / flash / type /
+   role / text / group / setTool / collapse / reset. Positions are measured
+   against .rv-view so the cursor never escapes it. */
+(function () {
+  var view = document.getElementById('sh-view');
+  var cursor = document.getElementById('sh-cursor');
+  var flash = document.getElementById('sh-flash');
+  var flashtag = document.getElementById('sh-flashtag');
+  var msgs = document.getElementById('sh-msgs');
+  if (!view || !cursor || !flash || !msgs) return;
+
+  function rect(el) {
+    var v = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height };
+  }
+  var RV = {
+    cursorTo: function (el, dur) {
+      var r = rect(el);
+      return gsap.to(cursor, { opacity: 1, left: r.x + r.w / 2 - 3, top: r.y + r.h / 2 - 2,
+        duration: dur || 0.85, ease: 'power2.inOut' });
+    },
+    press: function () {
+      return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
+    },
+    flash: function (el, kind, label) {
+      var r = rect(el);
+      flash.className = 'rv-flash ' + (kind || 'click');
+      flashtag.textContent = label || 'AI click';
+      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
+      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
+                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+    },
+    type: function (el, str, cps) {
+      var tl = gsap.timeline(), per = 1 / (cps || 22);
+      tl.call(function () { el.textContent = ''; });
+      for (var i = 0; i < str.length; i++) {
+        (function (c) { tl.call(function () { el.textContent += c; }, null, '+=' + per); })(str[i]);
+      }
+      return tl;
+    },
+    role: function (txt) {
+      var d = document.createElement('div'); d.className = 'rv-role'; d.textContent = txt;
+      msgs.appendChild(d); return d;
+    },
+    text: function (html) {
+      var d = document.createElement('div'); d.className = 'rv-text'; if (html) d.innerHTML = html;
+      msgs.appendChild(d); return d;
+    },
+    group: function (tools) {
+      var wrap = document.createElement('div');
+      var head = document.createElement('span');
+      head.className = 'rv-group';
+      head.innerHTML = '<span>▾</span><span class="sum">work</span><span class="dim">· hide</span>';
+      var body = document.createElement('div');
+      body.className = 'rv-groupbody';
+      tools.forEach(function (t) {
+        var row = document.createElement('div');
+        row.className = 'rv-tool';
+        row.innerHTML = '<span class="nm">' + t + '</span><span class="st">·</span>';
+        body.appendChild(row);
+      });
+      wrap.appendChild(head); wrap.appendChild(body); msgs.appendChild(wrap);
+      wrap._head = head; wrap._body = body;
+      return wrap;
+    },
+    setTool: function (g, i, state, result) {
+      var row = g._body.children[i]; if (!row) return;
+      row.className = 'rv-tool is-' + state;
+      row.querySelector('.st').textContent = state === 'done' ? (result || '✓') : '…';
+    },
+    collapse: function (g, tools, thoughts) {
+      var sum = [tools ? 'tools ' + tools : null, thoughts ? 'thoughts ' + thoughts : null]
+        .filter(Boolean).join(' · ') || 'work';
+      return gsap.timeline()
+        .to(g._body, { height: 0, opacity: 0, marginTop: 0, duration: .35, ease: 'power2.inOut',
+          onComplete: function () { g._body.style.display = 'none'; } })
+        .call(function () {
+          g._head.innerHTML = '<span>▸</span><span class="sum">' + sum + '</span><span class="dim">· show more</span>';
+        });
+    },
+    reset: function () {
+      msgs.innerHTML = '';
+      gsap.set(cursor, { opacity: 0, left: 30, top: 320, scale: 1 });
+      gsap.set(flash, { opacity: 0 });
+    }
+  };
+  window.RV = RV;
+})();
+</script>
+
+<script>
+/* -----------------------------------------------------------------------
+   stat-counters — metrics band timeline (retune the numbers here first)
+   viewport:  header fades → hairline rail sweep + accent glow → three stat
+              cells fade → count-ups (3, 16) → odometer rolls to 12,480 →
+              meters card + bars run to scale (manual grey, rever accent)
+   chat:      user asks the speed question; assistant folds its tool activity
+              into "▸ tools 3 · thoughts 1 · show more" and answers.
+   Numbers are always rendered in full, comma-grouped — never abbreviated.
+   ----------------------------------------------------------------------- */
+(function () {
+  'use strict';
+
+  var RV = window.RV;
+  var byId = function (id) { return document.getElementById(id); };
+  var root = byId('statCt-view');
+  if (!root || !RV) return;
+
+  /* ---------- config ---------- */
+  var ODO_TARGET = 12480;   // full digits, comma-grouped, never abbreviated
+  var LOOPS = 3;
+  var CELLS = 10 * LOOPS;
+  var SLOW_MIN = 18;        // manual DevTools, minutes
+  var FAST_SEC = 40;        // rever-browser, seconds
+  var FAST_PCT = 3.7;       // 40s as a share of 18min, drawn to scale
+
+  var fmt = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var ODO_STR = fmt(ODO_TARGET);
+
+  /* ---------- build the odometer once ---------- */
+  var odo = byId('statCt-odo');
+  var reelEls = [];
+  var reelTargets = [];
+  if (odo) {
+    odo.textContent = '';
+    for (var i = 0; i < ODO_STR.length; i++) {
+      var ch = ODO_STR.charAt(i);
+      if (ch < '0' || ch > '9') {
+        var sep = document.createElement('span');
+        sep.className = 'statCt-odoSep';
+        sep.textContent = ch;
+        odo.appendChild(sep);
+        continue;
+      }
+      var win = document.createElement('span');
+      win.className = 'statCt-odoDigit';
+      var reel = document.createElement('span');
+      reel.className = 'statCt-reel';
+      for (var l = 0; l < LOOPS; l++) {
+        for (var d = 0; d < 10; d++) {
+          var cell = document.createElement('span');
+          cell.className = 'statCt-cellDigit';
+          cell.textContent = String(d);
+          reel.appendChild(cell);
+        }
+      }
+      win.appendChild(reel);
+      odo.appendChild(win);
+      reelEls.push(reel);
+      reelTargets.push(-((10 * (LOOPS - 1) + Number(ch)) / CELLS) * 100);
+    }
+    odo.setAttribute('aria-label', ODO_STR);
+  }
+
+  /* ---------- handles (all guarded) ---------- */
+  var fades = Array.prototype.slice.call(root.querySelectorAll('.statCt-fade'));
+  var rail = byId('statCt-rail');
+  var railGlow = byId('statCt-railGlow');
+
+  var counters = [
+    { el: byId('statCt-n1'), to: 3 },
+    { el: byId('statCt-n2'), to: 16 }
+  ].filter(function (c) { return !!c.el; });
+
+  var bars = [
+    { fill: byId('statCt-fill1'), val: byId('statCt-v1'), to: SLOW_MIN, pct: 100, dur: 1.3, at: 0 },
+    { fill: byId('statCt-fill2'), val: byId('statCt-v2'), to: FAST_SEC, pct: FAST_PCT, dur: 0.55, at: 0.26 }
+  ].filter(function (b) { return b.fill && b.val; });
+
+  var g = window.gsap;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- static end state (reduced motion / no GSAP) ---------- */
+  function paintStatic() {
+    fades.forEach(function (el) { el.style.opacity = 1; el.style.transform = 'none'; });
+    if (rail) rail.style.transform = 'scaleX(1)';
+    if (railGlow) railGlow.style.opacity = '0';
+    counters.forEach(function (c) { c.el.textContent = fmt(c.to); });
+    reelEls.forEach(function (el, i) { el.style.transform = 'translateY(' + reelTargets[i] + '%)'; });
+    bars.forEach(function (b) { b.fill.style.width = b.pct + '%'; b.val.textContent = fmt(b.to); });
+    // static chat: role labels + collapsed disclosure, no bubbles
+    RV.reset();
+    RV.role('user'); RV.text('How much time does this actually save?');
+    RV.role('assistant');
+    var grp = RV.group(['list_requests', 'get_request 8f2c', 'grep_scripts search']);
+    grp._body.style.display = 'none';
+    grp._head.innerHTML = '<span>▸</span><span class="sum">tools 3 · thoughts 1</span><span class="dim">· show more</span>';
+    RV.text('About <code>27×</code> — 18 min of manual DevTools down to 40 sec on the same target.');
+  }
+
+  if (reduced || !g) {
+    paintStatic();
+    return;
+  }
+
+  /* ---------- reset before each loop ---------- */
+  function reset() {
+    RV.reset();
+    g.set(fades, { opacity: 0, y: 12 });
+    if (rail) g.set(rail, { scaleX: 0 });
+    if (railGlow) g.set(railGlow, { xPercent: -120, opacity: 0 });
+    counters.forEach(function (c) { c.el.textContent = '0'; });
+    if (reelEls.length) g.set(reelEls, { yPercent: 0 });
+    bars.forEach(function (b) { b.fill.style.width = '0%'; b.val.textContent = '0'; });
+  }
+
+  /* ---------- master timeline (viewport + chat, looping) ---------- */
+  var tl = null;
+  function build() {
+    reset();
+    tl = g.timeline({ repeat: -1, repeatDelay: 2, defaults: { ease: 'power3.out' } });
+
+    // viewport entrance
+    tl.to(fades, { opacity: 1, y: 0, duration: 0.55, stagger: 0.08 }, 0.1);
+    if (rail) tl.to(rail, { scaleX: 1, duration: 0.85, ease: 'power2.inOut' }, 0.2);
+    if (railGlow) {
+      tl.fromTo(railGlow, { xPercent: -120, opacity: 0 },
+        { xPercent: 360, opacity: 1, duration: 1.1, ease: 'power2.inOut' }, 0.24)
+        .to(railGlow, { opacity: 0, duration: 0.22, ease: 'power1.out' }, 1.1);
+    }
+
+    counters.forEach(function (c, i) {
+      var proxy = { v: 0 };
+      tl.fromTo(proxy, { v: 0 }, {
+        v: c.to, duration: 1.4, ease: 'power2.out',
+        onUpdate: function () { c.el.textContent = fmt(proxy.v); }
+      }, 0.62 + i * 0.08);
+    });
+
+    if (reelEls.length) {
+      tl.fromTo(reelEls, { yPercent: 0 },
+        { yPercent: function (i) { return reelTargets[i]; },
+          duration: 1.5, ease: 'power4.out', stagger: 0.1 }, 0.72);
+    }
+
+    bars.forEach(function (b) {
+      var at = 1.5 + b.at;
+      tl.fromTo(b.fill, { width: '0%' }, { width: b.pct + '%', duration: b.dur, ease: 'power3.out' }, at);
+      var proxy = { v: 0 };
+      tl.fromTo(proxy, { v: 0 }, {
+        v: b.to, duration: b.dur, ease: 'power3.out',
+        onUpdate: function () { b.val.textContent = fmt(proxy.v); }
+      }, at);
+    });
+
+    // chat — real role labels + folded tool disclosure, runs alongside
+    var grp;
+    tl.call(function () { RV.role('user'); tl._u = RV.text(''); }, null, 0.15);
+    tl.add(RV.type(tl._u, 'How much time does this actually save?', 30), 0.25);
+    tl.call(function () { RV.role('assistant'); }, null, '+=0.2');
+    tl.call(function () {
+      grp = RV.group(['list_requests', 'get_request 8f2c', 'grep_scripts search']);
+      RV.setTool(grp, 0, 'run');
+    });
+    tl.call(function () { RV.setTool(grp, 0, 'done', '12,480'); RV.setTool(grp, 1, 'run'); }, null, '+=0.6');
+    tl.call(function () { RV.setTool(grp, 1, 'done', '200'); RV.setTool(grp, 2, 'run'); }, null, '+=0.5');
+    tl.call(function () { RV.setTool(grp, 2, 'done', '63'); }, null, '+=0.5');
+    tl.call(function () { RV.collapse(grp, 3, 1); }, null, '+=0.35');
+    tl.call(function () {
+      RV.text('About <code>27×</code> — 18 min of manual DevTools down to 40 sec on the same target.');
+    }, null, '+=0.7');
+
+    return tl;
+  }
+
+  window.addEventListener('load', function () {
+    setTimeout(build, 120);
+  });
+
+  var rp = byId('sh-replay');
+  if (rp) rp.addEventListener('click', function () { if (tl) tl.kill(); build(); });
+})();
+</script>
+</body>
+</html>

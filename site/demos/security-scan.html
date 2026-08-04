@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — security header audit</title>
+<style>
+/* ============================================================================
+   CANONICAL APP SHELL — copy this whole <style> + the .rv-app markup verbatim.
+   Tokens are lifted from src/renderer/src/styles.css. Light is the default
+   (matches the real app screenshot); [data-theme='dark'] is the override.
+   RULE: never put a colored accent strip / left-border on a card. Cards are
+   plain --surface on --border. Color appears only in action flashes, method
+   badges, status dots and severity text.
+   ========================================================================= */
+:root, :root[data-theme='light'] {
+  --bg: #fbfbfc; --bg-bar: #eef0f2; --surface: #ffffff; --surface-2: #f0f1f3;
+  --surface-3: #e6e8ea; --border: #e2e4e8; --border-2: #d3d6db; --border-3: #bcc0c6;
+  --text: #1b1d21; --text-2: #3f444b; --text-dim: #6a7078; --viewport-bg: #ffffff;
+  --code-bg: #f3f4f6; --inline-code-bg: #eceef1; --link: #2f6fed; --accent: #2f6fed;
+  --accent-soft: rgba(47,111,237,0.14); --accent-border: rgba(47,111,237,0.35);
+  --shadow: rgba(0,0,0,0.16);
+  --chip-ok-bg:#e7f6e9; --chip-ok-border:#bfe3c4; --chip-ok-text:#1f7a34;
+  --chip-warn-bg:#fbf3e2; --chip-warn-border:#e6d5a8; --chip-warn-text:#8a6a1f;
+  --chip-info-bg:#e8f0fb; --chip-info-border:#c3d6ef; --chip-info-text:#2f5fa8;
+  --chip-danger-bg:#fbeaea; --chip-danger-border:#eabcbc; --chip-danger-text:#a52f2f;
+  /* agent action colours (main/ai-events.ts kinds) */
+  --act-click:#e5484d; --act-hover:#d9a300; --act-type:#2f6fed; --act-navigate:#8b5cf6;
+  --act-scroll:#1f9d55; --act-evaluate:#c2691a; --act-extract:#0f9b8e;
+  --get:#1f9d55; --post:#c2691a;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc;
+  --text-dim:#999; --viewport-bg:#000; --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d;
+  --link:#7ab7ff; --accent:#4a8fff; --accent-soft:rgba(80,140,255,0.18);
+  --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.4);
+  --chip-ok-bg:#1f2a1f; --chip-ok-border:#2a4a2a; --chip-ok-text:#aea;
+  --chip-warn-bg:#2a261f; --chip-warn-border:#4a402a; --chip-warn-text:#eca;
+  --chip-info-bg:#1f242a; --chip-info-border:#2a3a4a; --chip-info-text:#ace;
+  --chip-danger-bg:#3a1f1f; --chip-danger-border:#5a2a2a; --chip-danger-text:#eaa;
+  --act-click:#ff3b30; --act-hover:#ffd60a; --act-type:#0a84ff; --act-navigate:#a855f7;
+  --act-scroll:#30d158; --act-evaluate:#ff9f0a; --act-extract:#2dd4bf;
+  --get:#30d158; --post:#ff9f0a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: 18px; overflow-x: hidden;
+}
+
+/* ── window frame ─────────────────────────────────────────────────────── */
+.rv-app {
+  max-width: 1180px; margin: 0 auto; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 50px var(--shadow); display: flex; flex-direction: column;
+}
+/* ── titlebar: traffic lights + tab strip ─────────────────────────────── */
+.rv-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-lights { display: flex; gap: 6px; flex: none; }
+.rv-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.rv-lights i:nth-child(1){background:#ff5f57} .rv-lights i:nth-child(2){background:#febc2e}
+.rv-lights i:nth-child(3){background:#28c840}
+.rv-tab {
+  display: flex; align-items: center; gap: 7px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tab .fav { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-3); flex: none; }
+.rv-newtab {
+  width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: default; flex: none;
+}
+.rv-themebtn {
+  margin-left: auto; width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-border);
+}
+/* ── toolbar ──────────────────────────────────────────────────────────── */
+.rv-toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-navbtn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); font-size: 12px;
+  display: grid; place-items: center; flex: none;
+}
+.rv-url {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; font: 12px/1.3 var(--sans); color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 11.5px; font-weight: 500; flex: none;
+}
+.rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* ── body split: viewport | chat ──────────────────────────────────────── */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+.rv-view {
+  position: relative; background: var(--viewport-bg); overflow: hidden;
+  height: 470px; border-right: 1px solid var(--border);
+}
+/* ── chat panel ───────────────────────────────────────────────────────── */
+.rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+.rv-chathead {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px;
+}
+.rv-agent {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2);
+}
+.rv-agent .av {
+  width: 15px; height: 15px; border-radius: 4px; background: var(--accent-soft);
+  color: var(--accent); font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.rv-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); }
+.rv-models {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text-dim); font-size: 11px;
+}
+.rv-ready { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.rv-chipbar { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.rv-chip {
+  font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+}
+.rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
+
+.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-role { font-size: 10.5px; color: var(--text-dim); }
+.rv-text { font-size: 12px; color: var(--text); }
+.rv-text code {
+  font: 11px var(--mono); background: var(--inline-code-bg);
+  padding: 1px 4px; border-radius: 4px;
+}
+/* the real WorkGroup disclosure — 11px, transparent, 1px border, radius 12 */
+.rv-group {
+  display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; font-size: 11px;
+  background: transparent; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-dim); align-self: flex-start; white-space: nowrap;
+}
+.rv-group .dim { opacity: .5; }
+.rv-groupbody { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 5px; }
+.rv-tool { font: 10.5px/1.45 var(--mono); color: var(--text-dim); display: flex; gap: 6px; align-items: baseline; }
+.rv-tool .nm { color: var(--text-2); }
+.rv-tool .st { margin-left: auto; flex: none; }
+.rv-tool.is-run .st { color: var(--chip-warn-text); }
+.rv-tool.is-done .st { color: var(--chip-ok-text); }
+.rv-caret { display: inline-block; width: 1.5px; height: 12px; background: var(--accent); vertical-align: -2px; }
+.rv-compose { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--border); }
+.rv-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); padding: 6px 10px; font-size: 11.5px; color: var(--text-dim);
+}
+.rv-send {
+  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 13px; font-size: 11.5px; font-weight: 600; flex: none;
+}
+/* ── status bar ───────────────────────────────────────────────────────── */
+.rv-status {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px; overflow-x: auto;
+  background: var(--bg-bar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); scrollbar-width: none;
+}
+.rv-status::-webkit-scrollbar { display: none; }
+.rv-status b { font-weight: 600; color: var(--text-2); }
+.rv-status .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rv-status .is-on { color: var(--accent); }
+
+/* ── in-viewport overlay: ghost cursor + action flash ─────────────────── */
+.rv-cursor { position: absolute; width: 20px; height: 20px; z-index: 30; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); opacity: 0; }
+.rv-flash { position: absolute; z-index: 25; pointer-events: none; opacity: 0; border-radius: 6px;
+  border: 2px solid var(--act-click); box-shadow: 0 0 0 4px rgba(229,72,77,.16); }
+.rv-flash .tag { position: absolute; top: -20px; left: -2px; font: 600 10px/1 var(--sans);
+  color: #fff; background: var(--act-click); padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.rv-flash.hover { border-color: var(--act-hover); box-shadow: 0 0 0 4px rgba(217,163,0,.16); }
+.rv-flash.hover .tag { background: var(--act-hover); color: #221c00; }
+.rv-flash.type { border-color: var(--act-type); box-shadow: 0 0 0 4px rgba(47,111,237,.16); }
+.rv-flash.type .tag { background: var(--act-type); }
+.rv-flash.navigate { border-color: var(--act-navigate); box-shadow: 0 0 0 4px rgba(139,92,246,.16); }
+.rv-flash.navigate .tag { background: var(--act-navigate); }
+.rv-flash.extract { border-color: var(--act-extract); box-shadow: 0 0 0 4px rgba(15,155,142,.16); }
+.rv-flash.extract .tag { background: var(--act-extract); }
+
+/* ── generic page furniture for the fake site inside .rv-view ─────────── */
+.rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.rv-badge { font: 600 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.rv-badge.get { color: var(--get); background: rgba(31,157,85,.12); }
+.rv-badge.post { color: var(--post); background: rgba(194,105,26,.12); }
+
+.rv-replay {
+  position: absolute; right: 10px; bottom: 10px; z-index: 40;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 5px 11px; font-size: 11px; cursor: pointer;
+}
+.rv-replay:hover { color: var(--text); border-color: var(--border-3); }
+
+/* ── responsive: stack chat under the viewport ────────────────────────── */
+@media (max-width: 860px) {
+  body { padding: 10px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rv-chat { max-height: 340px; }
+  .rv-tbtn.opt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-cursor, .rv-flash { display: none !important; }
+}
+</style>
+
+<!-- ===== block-specific styles (slug: security-scan) ====================== -->
+<style>
+.ss-stage {
+  position: absolute; inset: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px 16px; background: var(--viewport-bg);
+}
+.ss-pagehead { flex: none; }
+.ss-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-dim); border: 1px solid var(--border); background: var(--surface);
+  border-radius: 999px; padding: 4px 10px 4px 8px;
+}
+.ss-eyebrow i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--chip-danger-text);
+  box-shadow: 0 0 0 3px var(--chip-danger-bg); display: block;
+}
+.ss-title { margin: 9px 0 2px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.ss-sub { margin: 0; color: var(--text-dim); font-size: 11.5px; line-height: 1.5; max-width: 62ch; }
+
+/* ── severity meter ─────────────────────────────────────────────────── */
+.ss-meter {
+  flex: none; display: flex; align-items: center; gap: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 14px;
+}
+.ss-ringBox { position: relative; flex: 0 0 auto; width: 66px; }
+.ss-ring { display: block; width: 100%; height: auto; }
+.ss-arcBase { stroke: var(--surface-3); }
+#ss-arcHigh   { stroke: var(--chip-danger-text); stroke-dasharray: 95.53 155.80; stroke-dashoffset: 0; }
+#ss-arcMedium { stroke: var(--chip-warn-text);   stroke-dasharray: 95.53 155.80; stroke-dashoffset: -100.53; }
+#ss-arcLow    { stroke: var(--text-dim);          stroke-dasharray: 45.27 206.06; stroke-dashoffset: -201.06; }
+.ss-ringCore {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; pointer-events: none;
+}
+.ss-total { font: 600 18px/1 var(--mono); color: var(--text); }
+.ss-totalLbl { font: 8px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--text-dim); }
+.ss-ringGlow {
+  position: absolute; left: 50%; top: 50%; width: 78%; height: 78%;
+  margin: -39% 0 0 -39%; border-radius: 50%;
+  border: 1px solid var(--chip-danger-border); opacity: 0; pointer-events: none;
+}
+
+.ss-bars { flex: 1 1 auto; min-width: 0; display: grid; gap: 7px; }
+.ss-barRow { display: flex; align-items: center; gap: 9px; }
+.ss-barLbl { flex: 0 0 auto; width: 58px; font: 9.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+.ss-track { flex: 1 1 auto; min-width: 0; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.ss-fill { display: block; height: 100%; width: 100%; border-radius: 99px; transform: scaleX(0); transform-origin: 0 50%; background: var(--c); }
+.ss-barRow[data-sev="high"]   { --c: var(--chip-danger-text); }
+.ss-barRow[data-sev="medium"] { --c: var(--chip-warn-text); }
+.ss-barRow[data-sev="low"]    { --c: var(--text-dim); }
+.ss-num { flex: 0 0 auto; width: 14px; text-align: right; font: 12px/1 var(--mono); color: var(--text); }
+.ss-status {
+  flex: 0 0 auto; align-self: center; display: inline-flex; align-items: center; gap: 7px;
+  font: 10.5px/1 var(--mono); color: var(--text-dim); white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface-2); border-radius: 999px; padding: 5px 11px 5px 9px;
+}
+.ss-statusDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); flex: 0 0 6px; }
+.ss-statusDot.is-done { background: var(--chip-danger-text); box-shadow: 0 0 0 3px var(--chip-danger-bg); }
+
+/* ── grid: header stream | issue cards ──────────────────────────────── */
+.ss-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0,1.04fr) minmax(0,1fr); gap: 12px; align-items: stretch; }
+.ss-panel {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px;
+}
+.ss-panelHead { display: flex; align-items: center; gap: 8px; padding: 0 1px 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.ss-panelTitle { font: 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); }
+.ss-panelMeta { margin-left: auto; font: 10px/1 var(--mono); color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ss-verb { font: 600 9.5px/1 var(--mono); letter-spacing: .06em; color: var(--get); border: 1px solid rgba(31,157,85,.32); background: rgba(31,157,85,.1); border-radius: 5px; padding: 3px 6px; }
+
+/* ── header rows ── */
+.ss-rows { position: relative; overflow: hidden; }
+.ss-row { position: relative; display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 8px; align-items: start; padding: 9px 8px; border-radius: 7px; line-height: 1.4; }
+.ss-row + .ss-row { margin-top: 2px; }
+.ss-row[data-sev="high"]   { --sc: var(--chip-danger-text); }
+.ss-row[data-sev="medium"] { --sc: var(--chip-warn-text); }
+.ss-row[data-sev="low"]    { --sc: var(--text-dim); }
+.ss-mark { position: relative; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.ss-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--border-3); display: block; }
+.ss-ic { position: absolute; left: 1px; top: 1px; display: block; opacity: 0; }
+.ss-row[data-verdict="issue"] .ss-ic { color: var(--sc); }
+.ss-check { color: var(--chip-ok-text); }
+.ss-kv { min-width: 0; font: clamp(10px,1.05vw,11.5px)/1.4 var(--mono); }
+.ss-k { color: var(--text-2); overflow-wrap: anywhere; }
+.ss-v { color: var(--text-dim); overflow-wrap: anywhere; }
+.ss-miss { font-style: normal; }
+.ss-tag { align-self: center; font: 700 8.5px/1 var(--mono); letter-spacing: .1em; color: var(--sc); opacity: 0; white-space: nowrap; }
+.ss-scan { position: absolute; left: 0; right: 0; top: 0; height: 2px; opacity: 0; pointer-events: none;
+  background: linear-gradient(90deg, rgba(47,111,237,0), var(--accent) 50%, rgba(47,111,237,0)); }
+.ss-scan::before { content: ""; position: absolute; left: 0; right: 0; bottom: 2px; height: 32px; background: linear-gradient(180deg, rgba(47,111,237,0), var(--accent-soft)); pointer-events: none; }
+.ss-foot { margin-top: auto; padding-top: 9px; font: 9px/1.5 var(--mono); color: var(--text-dim); overflow-wrap: anywhere; }
+
+/* ── issue cards (neutral; severity via pill only, NO colored strip) ── */
+.ss-cardsBox { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.ss-cards { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.ss-cards.ss-abs .ss-card { position: absolute; left: 0; right: 0; top: 0; }
+.ss-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px 9px; will-change: transform; }
+.ss-cardTop { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ss-pill { font: 700 8.5px/1 var(--mono); letter-spacing: .1em; border-radius: 4px; padding: 3px 6px; border: 1px solid transparent; }
+.ss-card[data-sev="high"] .ss-pill   { background: var(--chip-danger-bg); border-color: var(--chip-danger-border); color: var(--chip-danger-text); }
+.ss-card[data-sev="medium"] .ss-pill { background: var(--chip-warn-bg); border-color: var(--chip-warn-border); color: var(--chip-warn-text); }
+.ss-card[data-sev="low"] .ss-pill    { background: var(--surface-2); border-color: var(--border); color: var(--text-dim); }
+.ss-ref { font: 9.5px/1 var(--mono); color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-msg { margin: 0; font-size: 12px; line-height: 1.38; color: var(--text); }
+.ss-det { margin: 4px 0 0; font: 9.5px/1.45 var(--mono); color: var(--text-dim); overflow-wrap: anywhere; }
+.ss-empty { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px;
+  border: 1px dashed var(--border); border-radius: 8px; padding: 10px 12px; opacity: 0; pointer-events: none;
+  font: 10.5px/1 var(--mono); color: var(--text-dim); }
+.ss-empty i { width: 5px; height: 5px; border-radius: 50%; background: var(--border-3); display: block; flex: 0 0 5px; }
+
+@media (max-width: 620px) {
+  .ss-grid { grid-template-columns: 1fr; }
+  .ss-meter { flex-wrap: wrap; }
+  .ss-status { order: 3; width: 100%; justify-content: center; }
+}
+@media (max-width: 400px) {
+  .ss-panelMeta { display: none; }
+  .ss-barLbl { width: 46px; letter-spacing: .05em; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== COPY FROM HERE ===================================================== -->
+<div class="rv-app">
+  <div class="rv-titlebar">
+    <div class="rv-lights"><i></i><i></i><i></i></div>
+    <div class="rv-tab"><span class="fav"></span><span>Northwind — Console</span></div>
+    <div class="rv-newtab">+</div>
+    <div class="rv-themebtn">☀</div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-navbtn">‹</div>
+    <div class="rv-navbtn">›</div>
+    <div class="rv-navbtn">⟳</div>
+    <div class="rv-navbtn">&lt;/&gt;</div>
+    <div class="rv-url" id="sh-url">https://app.northwind.dev/settings/security</div>
+    <div class="rv-tbtn">Go</div>
+    <div class="rv-tbtn opt">Auto</div>
+    <div class="rv-tbtn opt is-on">Proxy</div>
+    <div class="rv-tbtn opt">Desktop</div>
+    <div class="rv-tbtn opt">Embedded</div>
+  </div>
+
+  <div class="rv-body">
+    <!-- LEFT: the driven page -->
+    <div class="rv-view" id="sh-view">
+
+      <div class="ss-stage">
+        <div class="ss-pagehead">
+          <span class="ss-eyebrow"><i></i>security_inspect</span>
+          <div class="ss-title">Response headers, audited into ranked issues</div>
+          <p class="ss-sub">Every captured response is swept for transport, framing, cookie and CORS policy. Headers that hold up are checked off; the rest become severity-ranked findings.</p>
+        </div>
+
+        <!-- severity meter -->
+        <div class="ss-meter">
+          <div class="ss-ringBox">
+            <svg class="ss-ring" viewBox="0 0 96 96" aria-hidden="true">
+              <circle class="ss-arcBase" cx="48" cy="48" r="40" fill="none" stroke-width="8"></circle>
+              <g transform="rotate(-90 48 48)" stroke-width="8" stroke-linecap="butt" fill="none">
+                <circle id="ss-arcHigh"   cx="48" cy="48" r="40"></circle>
+                <circle id="ss-arcMedium" cx="48" cy="48" r="40"></circle>
+                <circle id="ss-arcLow"    cx="48" cy="48" r="40"></circle>
+              </g>
+            </svg>
+            <div class="ss-ringGlow" id="ss-ringGlow"></div>
+            <div class="ss-ringCore">
+              <span class="ss-total" id="ss-total">0</span>
+              <span class="ss-totalLbl">issues</span>
+            </div>
+          </div>
+
+          <div class="ss-bars">
+            <div class="ss-barRow" data-sev="high">
+              <span class="ss-barLbl">High</span>
+              <span class="ss-track"><b class="ss-fill" id="ss-fillHigh"></b></span>
+              <span class="ss-num" id="ss-numHigh">0</span>
+            </div>
+            <div class="ss-barRow" data-sev="medium">
+              <span class="ss-barLbl">Medium</span>
+              <span class="ss-track"><b class="ss-fill" id="ss-fillMedium"></b></span>
+              <span class="ss-num" id="ss-numMedium">0</span>
+            </div>
+            <div class="ss-barRow" data-sev="low">
+              <span class="ss-barLbl">Low</span>
+              <span class="ss-track"><b class="ss-fill" id="ss-fillLow"></b></span>
+              <span class="ss-num" id="ss-numLow">0</span>
+            </div>
+          </div>
+
+          <span class="ss-status">
+            <i class="ss-statusDot" id="ss-statusDot"></i><span id="ss-statusText">scanning headers…</span>
+          </span>
+        </div>
+
+        <!-- stage grid -->
+        <div class="ss-grid">
+          <!-- left: header stream -->
+          <div class="ss-panel">
+            <div class="ss-panelHead">
+              <span class="ss-verb">GET</span>
+              <span class="ss-panelTitle">Response headers</span>
+              <span class="ss-panelMeta">200 · /api/v2/session</span>
+            </div>
+
+            <div class="ss-rows" id="ss-rows">
+
+              <div class="ss-row" data-verdict="issue" data-sev="high" data-card="0">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M7 2.1l5.3 9.5H1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+                    <path d="M7 5.6v2.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                    <circle cx="7" cy="10.2" r=".8" fill="currentColor"></circle>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">content-security-policy:</span> <span class="ss-v">default-src 'self' 'unsafe-inline'</span></span>
+                <span class="ss-tag">HIGH</span>
+              </div>
+
+              <div class="ss-row" data-verdict="issue" data-sev="medium" data-card="3">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M7 2.1l5.3 9.5H1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+                    <path d="M7 5.6v2.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                    <circle cx="7" cy="10.2" r=".8" fill="currentColor"></circle>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">strict-transport-security:</span> <span class="ss-v ss-miss">— not set —</span></span>
+                <span class="ss-tag">MED</span>
+              </div>
+
+              <div class="ss-row" data-verdict="pass">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic ss-check" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M2.6 7.3l2.8 2.8 6-6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">x-frame-options:</span> <span class="ss-v">DENY</span></span>
+                <span class="ss-tag"></span>
+              </div>
+
+              <div class="ss-row" data-verdict="pass">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic ss-check" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M2.6 7.3l2.8 2.8 6-6.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">x-content-type-options:</span> <span class="ss-v">nosniff</span></span>
+                <span class="ss-tag"></span>
+              </div>
+
+              <div class="ss-row" data-verdict="issue" data-sev="medium" data-card="2">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M7 2.1l5.3 9.5H1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+                    <path d="M7 5.6v2.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                    <circle cx="7" cy="10.2" r=".8" fill="currentColor"></circle>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">access-control-allow-origin:</span> <span class="ss-v">*</span></span>
+                <span class="ss-tag">MED</span>
+              </div>
+
+              <div class="ss-row" data-verdict="issue" data-sev="high" data-card="1">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M7 2.1l5.3 9.5H1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+                    <path d="M7 5.6v2.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                    <circle cx="7" cy="10.2" r=".8" fill="currentColor"></circle>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">set-cookie:</span> <span class="ss-v">sid=a3f91c…; Path=/; SameSite=None</span></span>
+                <span class="ss-tag">HIGH</span>
+              </div>
+
+              <div class="ss-row" data-verdict="issue" data-sev="low" data-card="4">
+                <span class="ss-mark"><i class="ss-dot"></i>
+                  <svg class="ss-ic" viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <path d="M7 2.1l5.3 9.5H1.7z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"></path>
+                    <path d="M7 5.6v2.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+                    <circle cx="7" cy="10.2" r=".8" fill="currentColor"></circle>
+                  </svg>
+                </span>
+                <span class="ss-kv"><span class="ss-k">server:</span> <span class="ss-v">nginx/1.18.0</span></span>
+                <span class="ss-tag">LOW</span>
+              </div>
+
+              <div class="ss-scan" id="ss-scan"></div>
+            </div>
+
+            <div class="ss-foot">security_inspect({ checks: ['csp', 'tls', 'cookies', 'cors', 'disclosure'] })</div>
+          </div>
+
+          <!-- right: issue cards -->
+          <div class="ss-panel">
+            <div class="ss-panelHead">
+              <span class="ss-panelTitle">Issues</span>
+              <span class="ss-panelMeta">sorted by severity</span>
+            </div>
+
+            <div class="ss-cardsBox">
+              <div class="ss-empty" id="ss-empty"><i></i>waiting for the scan to reach a header…</div>
+
+              <div class="ss-cards" id="ss-cards">
+                <article class="ss-card" data-sev="high">
+                  <div class="ss-cardTop"><span class="ss-pill">HIGH</span><span class="ss-ref">content-security-policy</span></div>
+                  <p class="ss-msg">CSP allows 'unsafe-inline' — XSS mitigations bypassable</p>
+                  <p class="ss-det">script-src falls back to default-src, so injected inline script executes</p>
+                </article>
+
+                <article class="ss-card" data-sev="high">
+                  <div class="ss-cardTop"><span class="ss-pill">HIGH</span><span class="ss-ref">set-cookie</span></div>
+                  <p class="ss-msg">Cookie sid missing HttpOnly and Secure</p>
+                  <p class="ss-det">readable from document.cookie and sent over plaintext; SameSite=None</p>
+                </article>
+
+                <article class="ss-card" data-sev="medium">
+                  <div class="ss-cardTop"><span class="ss-pill">MEDIUM</span><span class="ss-ref">access-control-allow-origin</span></div>
+                  <p class="ss-msg">Access-Control-Allow-Origin: * on an authenticated endpoint</p>
+                  <p class="ss-det">wildcard origin on a route that answers with session data</p>
+                </article>
+
+                <article class="ss-card" data-sev="medium">
+                  <div class="ss-cardTop"><span class="ss-pill">MEDIUM</span><span class="ss-ref">strict-transport-security</span></div>
+                  <p class="ss-msg">HSTS not set</p>
+                  <p class="ss-det">no max-age on an HTTPS origin — downgrade on first request</p>
+                </article>
+
+                <article class="ss-card" data-sev="low">
+                  <div class="ss-cardTop"><span class="ss-pill">LOW</span><span class="ss-ref">server</span></div>
+                  <p class="ss-msg">Server version disclosed</p>
+                  <p class="ss-det">server: nginx/1.18.0 — narrows public CVE search</p>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rv-flash" id="sh-flash"><span class="tag" id="sh-flashtag">AI click</span></div>
+      <svg class="rv-cursor" id="sh-cursor" viewBox="0 0 24 24">
+        <path d="M5 3l14 8-6 1.5L10 20 5 3z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      <button class="rv-replay" id="sh-replay">↻ Replay</button>
+    </div>
+
+    <!-- RIGHT: chat panel -->
+    <div class="rv-chat">
+      <div class="rv-chathead">
+        <span class="rv-agent"><span class="av">C</span> Claude Code <span class="on"></span> ▾</span>
+        <span class="rv-models">no models yet ▾</span>
+        <span class="rv-ready">ready</span>
+      </div>
+      <div class="rv-chipbar">
+        <span class="rv-chip ok">Auto-approve</span>
+        <span class="rv-chip">History (2)</span>
+        <span class="rv-chip">+ New</span>
+      </div>
+      <div class="rv-msgs" id="sh-msgs"></div>
+      <div class="rv-compose">
+        <div class="rv-input">Type a message…</div>
+        <div class="rv-send">Send</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rv-status" id="sh-status">
+    <span><b>Traffic</b> <span class="n" id="sh-traffic">61</span></span>
+    <span><b>Console</b></span>
+    <span><b>Exceptions</b></span>
+    <span><b>WebSocket</b></span>
+    <span><b>Repeater</b></span>
+    <span><b>Storage</b></span>
+    <span><b>History</b> <span class="n">312</span></span>
+    <span><b>Workflows</b> <span class="n">1</span></span>
+  </div>
+</div>
+<!-- ===== COPY TO HERE ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* Shell helper API (verbatim helper; the shell's own demo timeline is replaced
+   below by the security-scan orchestration). */
+(function () {
+  var view = document.getElementById('sh-view');
+  var cursor = document.getElementById('sh-cursor');
+  var flash = document.getElementById('sh-flash');
+  var flashtag = document.getElementById('sh-flashtag');
+  var msgs = document.getElementById('sh-msgs');
+  if (!view || !cursor || !flash || !msgs) return;
+
+  function rect(el) {
+    var v = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height };
+  }
+  var RV = {
+    cursorTo: function (el, dur) {
+      var r = rect(el);
+      return gsap.to(cursor, { opacity: 1, left: r.x + r.w / 2 - 3, top: r.y + r.h / 2 - 2,
+        duration: dur || 0.85, ease: 'power2.inOut' });
+    },
+    press: function () {
+      return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
+    },
+    flash: function (el, kind, label) {
+      var r = rect(el);
+      flash.className = 'rv-flash ' + (kind || 'click');
+      flashtag.textContent = label || 'AI click';
+      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
+      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
+                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+    },
+    type: function (el, str, cps) {
+      var tl = gsap.timeline(), per = 1 / (cps || 22);
+      tl.call(function () { el.textContent = ''; });
+      for (var i = 0; i < str.length; i++) {
+        (function (c) { tl.call(function () { el.textContent += c; }, null, '+=' + per); })(str[i]);
+      }
+      return tl;
+    },
+    role: function (txt) {
+      var d = document.createElement('div'); d.className = 'rv-role'; d.textContent = txt;
+      msgs.appendChild(d); return d;
+    },
+    text: function (html) {
+      var d = document.createElement('div'); d.className = 'rv-text'; if (html) d.innerHTML = html;
+      msgs.appendChild(d); return d;
+    },
+    group: function (tools) {
+      var wrap = document.createElement('div');
+      var head = document.createElement('span');
+      head.className = 'rv-group';
+      head.innerHTML = '<span>▾</span><span class="sum">work</span><span class="dim">· hide</span>';
+      var body = document.createElement('div');
+      body.className = 'rv-groupbody';
+      tools.forEach(function (t) {
+        var row = document.createElement('div');
+        row.className = 'rv-tool';
+        row.innerHTML = '<span class="nm">' + t + '</span><span class="st">·</span>';
+        body.appendChild(row);
+      });
+      wrap.appendChild(head); wrap.appendChild(body); msgs.appendChild(wrap);
+      wrap._head = head; wrap._body = body;
+      return wrap;
+    },
+    setTool: function (g, i, state, result) {
+      var row = g._body.children[i]; if (!row) return;
+      row.className = 'rv-tool is-' + state;
+      row.querySelector('.st').textContent = state === 'done' ? (result || '✓') : '…';
+    },
+    collapse: function (g, tools, thoughts) {
+      var sum = [tools ? 'tools ' + tools : null, thoughts ? 'thoughts ' + thoughts : null]
+        .filter(Boolean).join(' · ') || 'work';
+      return gsap.timeline()
+        .to(g._body, { height: 0, opacity: 0, marginTop: 0, duration: .35, ease: 'power2.inOut',
+          onComplete: function () { g._body.style.display = 'none'; } })
+        .call(function () {
+          g._head.innerHTML = '<span>▸</span><span class="sum">' + sum + '</span><span class="dim">· show more</span>';
+        });
+    },
+    reset: function () {
+      msgs.innerHTML = '';
+      gsap.set(cursor, { opacity: 0, left: 30, top: 320, scale: 1 });
+      gsap.set(flash, { opacity: 0 });
+    }
+  };
+  window.RV = RV;
+})();
+</script>
+
+<script>
+/*
+  security-scan — re-skin of landing-kit/security-scan.html for the light app shell.
+  Left viewport plays the original header-audit animation:
+    1. STREAM  — the 7 response-header rows fade/slide in.
+    2. SWEEP   — an accent scanline glides to each row and adjudicates it: a pass row
+                 gets a green check and dims; an issue row reveals its severity TEXT tag
+                 and spawns a neutral card (severity shown by a colored pill, no strip).
+    3. LAND    — the card enters its severity-sorted slot; ring arc + bar + counters grow.
+    4. HOLD then RESET — everything resets and repeats.
+  The chat panel narrates the same run via the shell RV helper (role labels + disclosure).
+*/
+(function () {
+  "use strict";
+
+  var RV = window.RV;
+  var root = document.getElementById("ss-rows");
+  var cardsEl = document.getElementById("ss-cards");
+  var scan = document.getElementById("ss-scan");
+  var emptyEl = document.getElementById("ss-empty");
+  var totalEl = document.getElementById("ss-total");
+  var glow = document.getElementById("ss-ringGlow");
+  var statusText = document.getElementById("ss-statusText");
+  var statusDot = document.getElementById("ss-statusDot");
+  var replay = document.getElementById("sh-replay");
+  if (!root || !cardsEl || !scan || !totalEl) return;
+
+  var rowEls = Array.prototype.slice.call(root.querySelectorAll(".ss-row"));
+  var cardEls = Array.prototype.slice.call(cardsEl.querySelectorAll(".ss-card"));
+  if (!rowEls.length || !cardEls.length) return;
+
+  var arcs = {
+    high: document.getElementById("ss-arcHigh"),
+    medium: document.getElementById("ss-arcMedium"),
+    low: document.getElementById("ss-arcLow")
+  };
+  var fills = {
+    high: document.getElementById("ss-fillHigh"),
+    medium: document.getElementById("ss-fillMedium"),
+    low: document.getElementById("ss-fillLow")
+  };
+  var nums = {
+    high: document.getElementById("ss-numHigh"),
+    medium: document.getElementById("ss-numMedium"),
+    low: document.getElementById("ss-numLow")
+  };
+
+  /* ---- tuning ---- */
+  var STAGGER = 0.07, ROW_IN = 0.34;
+  var STEP_MOVE = 0.30, STEP_VERDICT = 0.34, STEP_PAD = 0.46;
+  var HOLD = 2.4, GAP_CARD = 8;
+
+  /* ---- ring geometry ---- */
+  var R = 40, C = 2 * Math.PI * R, TOTAL_ISSUES = 5, UNIT = C / TOTAL_ISSUES, ARC_GAP = 5;
+  var ARC_START = { high: 0, medium: 2 * UNIT, low: 4 * UNIT };
+  var arcProxy = { high: { v: 0 }, medium: { v: 0 }, low: { v: 0 } };
+  function arcLen(n) { return n <= 0 ? 0 : (n * UNIT - ARC_GAP); }
+  function paint(sev) {
+    var el = arcs[sev]; if (!el) return;
+    var len = Math.max(0, arcProxy[sev].v);
+    el.style.strokeDasharray = len + " " + Math.max(0, C - len);
+    el.style.strokeDashoffset = String(-ARC_START[sev]);
+  }
+
+  /* card index (DOM order == severity order) -> its severity bucket */
+  var CARD_SEV = ["high", "high", "medium", "medium", "low"];
+
+  var heights = [], tl = null, chatTl = null, lastW = window.innerWidth;
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function part(row, sel) { return row.querySelector(sel); }
+
+  function measure() {
+    cardsEl.classList.remove("ss-abs");
+    heights = cardEls.map(function (el) { return el.offsetHeight; });
+    cardsEl.classList.add("ss-abs");
+    var total = 0;
+    heights.forEach(function (h, i) { total += h + (i ? GAP_CARD : 0); });
+    cardsEl.style.height = total + "px";
+  }
+
+  function slots(landed) {
+    var map = {}, y = 0;
+    landed.forEach(function (idx) { map[idx] = y; y += heights[idx] + GAP_CARD; });
+    return map;
+  }
+
+  function setCounts(h, m, l, t) {
+    if (nums.high) nums.high.textContent = String(h);
+    if (nums.medium) nums.medium.textContent = String(m);
+    if (nums.low) nums.low.textContent = String(l);
+    totalEl.textContent = String(t);
+  }
+
+  function resetState() {
+    gsap.set(rowEls, { opacity: 0, x: -12, backgroundColor: "rgba(0,0,0,0)" });
+    rowEls.forEach(function (row) {
+      gsap.set(part(row, ".ss-dot"), { opacity: 1, scale: 1 });
+      gsap.set(part(row, ".ss-ic"), { opacity: 0, scale: .5 });
+      gsap.set(part(row, ".ss-tag"), { opacity: 0, scale: .6 });
+    });
+    gsap.set(scan, { opacity: 0, y: 0 });
+    gsap.set(cardEls, { opacity: 0, x: 28, y: 0 });
+    gsap.set(emptyEl, { opacity: 1 });
+    gsap.set([fills.high, fills.medium, fills.low], { scaleX: 0 });
+    gsap.set(glow, { opacity: 0, scale: 1 });
+    arcProxy.high.v = arcProxy.medium.v = arcProxy.low.v = 0;
+    paint("high"); paint("medium"); paint("low");
+    setCounts(0, 0, 0, 0);
+    if (statusText) statusText.textContent = "scanning headers…";
+    if (statusDot) statusDot.classList.remove("is-done");
+  }
+
+  function renderStatic() {
+    measure();
+    gsap.set(rowEls, { opacity: 1, x: 0, backgroundColor: "rgba(0,0,0,0)" });
+    rowEls.forEach(function (row) {
+      var issue = row.getAttribute("data-verdict") === "issue";
+      gsap.set(part(row, ".ss-dot"), { opacity: 0 });
+      gsap.set(part(row, ".ss-ic"), { opacity: 1, scale: 1 });
+      gsap.set(part(row, ".ss-tag"), { opacity: issue ? 1 : 0, scale: 1 });
+      gsap.set(row, { opacity: issue ? 1 : .5 });
+    });
+    gsap.set(scan, { opacity: 0, y: 0 });
+    var all = cardEls.map(function (_, i) { return i; });
+    var pos = slots(all);
+    cardEls.forEach(function (c, i) { gsap.set(c, { opacity: 1, x: 0, y: pos[i] }); });
+    gsap.set(emptyEl, { opacity: 0 });
+    gsap.set(fills.high, { scaleX: 2 / TOTAL_ISSUES });
+    gsap.set(fills.medium, { scaleX: 2 / TOTAL_ISSUES });
+    gsap.set(fills.low, { scaleX: 1 / TOTAL_ISSUES });
+    arcProxy.high.v = arcLen(2); arcProxy.medium.v = arcLen(2); arcProxy.low.v = arcLen(1);
+    paint("high"); paint("medium"); paint("low");
+    setCounts(2, 2, 1, 5);
+    if (statusText) statusText.textContent = "5 issues · 2 high";
+    if (statusDot) statusDot.classList.add("is-done");
+    gsap.set(glow, { opacity: 0 });
+  }
+
+  function build() {
+    if (tl) { tl.kill(); tl = null; }
+    measure();
+    resetState();
+
+    tl = gsap.timeline({ repeat: -1, paused: true });
+    var t = 0.2;
+
+    tl.to(rowEls, { opacity: 1, x: 0, duration: ROW_IN, stagger: STAGGER, ease: "power2.out" }, t);
+    t += ROW_IN + STAGGER * (rowEls.length - 1) + 0.05;
+
+    tl.to(scan, { opacity: 1, duration: .3, ease: "power1.out" }, t - 0.22);
+
+    var landed = [];
+    var seen = { high: 0, medium: 0, low: 0 };
+    rowEls.forEach(function (row) {
+      var mid = row.offsetTop + row.offsetHeight / 2;
+      var issue = row.getAttribute("data-verdict") === "issue";
+      var vt = t + STEP_MOVE + 0.04;
+
+      tl.to(scan, { y: mid, duration: STEP_MOVE, ease: "power2.inOut" }, t);
+      tl.to(row, { backgroundColor: "rgba(47,111,237,0.08)", duration: .16 }, t + 0.12);
+      tl.to(row, { backgroundColor: "rgba(0,0,0,0)", duration: .4 }, vt + 0.08);
+
+      tl.to(part(row, ".ss-dot"), { opacity: 0, scale: .4, duration: .14 }, vt);
+      tl.fromTo(part(row, ".ss-ic"), { opacity: 0, scale: .5 },
+        { opacity: 1, scale: 1, duration: STEP_VERDICT, ease: "back.out(2.6)", immediateRender: false }, vt);
+
+      if (!issue) {
+        tl.to(row, { opacity: .5, duration: .42, ease: "power2.out" }, vt + 0.12);
+        t = vt + STEP_PAD - 0.08;
+        return;
+      }
+
+      tl.fromTo(part(row, ".ss-tag"), { opacity: 0, scale: .6 },
+        { opacity: 1, scale: 1, duration: .32, ease: "back.out(2.2)", immediateRender: false }, vt + 0.04);
+
+      /* ---- card lands into its severity slot ---- */
+      var ci = parseInt(row.getAttribute("data-card"), 10);
+      if (isNaN(ci) || !cardEls[ci]) { t = vt + STEP_PAD; return; }
+      var ct = vt + 0.1;
+      var first = landed.length === 0;
+      landed.push(ci);
+      landed.sort(function (a, b) { return a - b; });
+      var pos = slots(landed);
+
+      landed.forEach(function (idx) {
+        if (idx === ci) return;
+        tl.to(cardEls[idx], { y: pos[idx], duration: .5, ease: "power3.out" }, ct);
+      });
+      tl.set(cardEls[ci], { y: pos[ci] }, ct);
+      tl.fromTo(cardEls[ci], { opacity: 0, x: 30 },
+        { opacity: 1, x: 0, duration: .46, ease: "power3.out", immediateRender: false }, ct);
+      if (first) tl.to(emptyEl, { opacity: 0, duration: .26 }, ct);
+
+      /* ---- meter (ordinal follows scan order, not card order) ---- */
+      var sev = CARD_SEV[ci];
+      seen[sev] += 1;
+      var ord = seen[sev];
+      var mt = ct + 0.08;
+      tl.fromTo(arcProxy[sev], { v: arcLen(ord - 1) },
+        { v: arcLen(ord), duration: .5, ease: "power2.out", onUpdate: paint, onUpdateParams: [sev], immediateRender: false }, mt);
+      tl.to(fills[sev], { scaleX: ord / TOTAL_ISSUES, duration: .5, ease: "power2.out" }, mt);
+      tl.call(function (s, o, tot) {
+        if (nums[s]) nums[s].textContent = String(o);
+        totalEl.textContent = String(tot);
+      }, [sev, ord, landed.length], mt);
+      tl.fromTo(nums[sev], { scale: 1.5 }, { scale: 1, duration: .38, ease: "power2.out", immediateRender: false }, mt);
+      tl.fromTo(totalEl, { scale: 1.22 }, { scale: 1, duration: .38, ease: "power2.out", immediateRender: false }, mt);
+      tl.fromTo(glow, { opacity: .4, scale: .92 },
+        { opacity: 0, scale: 1.14, duration: .62, ease: "power2.out", immediateRender: false }, mt);
+
+      t = vt + STEP_PAD + 0.06;
+    });
+
+    /* ---- resolve ---- */
+    t += 0.1;
+    tl.to(scan, { y: root.offsetHeight, duration: .34, ease: "power2.in" }, t);
+    tl.to(scan, { opacity: 0, duration: .26 }, t + 0.2);
+    tl.call(function () {
+      if (statusText) statusText.textContent = "5 issues · 2 high";
+      if (statusDot) statusDot.classList.add("is-done");
+    }, null, t + 0.3);
+    tl.fromTo(glow, { opacity: .5, scale: .9 }, { opacity: 0, scale: 1.2, duration: .8, ease: "power2.out", immediateRender: false }, t + 0.3);
+
+    /* ---- hold, then reset for the next pass ---- */
+    t += HOLD;
+    tl.to(cardEls, { opacity: 0, x: 22, duration: .3, stagger: .04, ease: "power2.in" }, t);
+    tl.to(rowEls, { opacity: 0, x: -12, duration: .34, stagger: .025, ease: "power2.in" }, t);
+    tl.to(rowEls.map(function (r) { return part(r, ".ss-ic"); }), { opacity: 0, scale: .5, duration: .26 }, t);
+    tl.to(rowEls.map(function (r) { return part(r, ".ss-tag"); }), { opacity: 0, scale: .6, duration: .26 }, t);
+    tl.to([fills.high, fills.medium, fills.low], { scaleX: 0, duration: .4, ease: "power2.inOut" }, t);
+    ["high", "medium", "low"].forEach(function (sev) {
+      tl.fromTo(arcProxy[sev], { v: arcLen(sev === "low" ? 1 : 2) },
+        { v: 0, duration: .45, ease: "power2.inOut", onUpdate: paint, onUpdateParams: [sev], immediateRender: false }, t);
+    });
+    tl.call(function () {
+      setCounts(0, 0, 0, 0);
+      if (statusText) statusText.textContent = "scanning headers…";
+      if (statusDot) statusDot.classList.remove("is-done");
+    }, null, t + 0.45);
+    tl.to(emptyEl, { opacity: 1, duration: .3 }, t + 0.4);
+    tl.set(rowEls, { opacity: 0 }, t + 0.5);
+    tl.set(rowEls.map(function (r) { return part(r, ".ss-dot"); }), { opacity: 1, scale: 1 }, t + 0.5);
+    tl.set(scan, { y: 0 }, t + 0.5);
+    tl.set(cardEls, { y: 0 }, t + 0.5);
+    tl.to({}, { duration: .45 }, t + 0.5);
+  }
+
+  /* ---------- chat narration (shell RV helper) ---------- */
+  function buildChat() {
+    if (!RV) return null;
+    if (chatTl) { chatTl.kill(); chatTl = null; }
+    RV.reset();
+    var ctl = gsap.timeline();
+    RV.role('user');
+    var u = RV.text('');
+    ctl.add(RV.type(u, 'Audit the security headers on /api/v2/session.', 30));
+    ctl.call(function () { RV.role('assistant'); });
+    var g;
+    ctl.call(function () { g = RV.group(['list_requests', 'get_request #38', 'security_inspect']); });
+    ctl.call(function () { RV.setTool(g, 0, 'run'); });
+    ctl.to({}, { duration: .5 });
+    ctl.call(function () { RV.setTool(g, 0, 'done', '61'); RV.setTool(g, 1, 'run'); });
+    ctl.to({}, { duration: .5 });
+    ctl.call(function () { RV.setTool(g, 1, 'done', '200'); RV.setTool(g, 2, 'run'); });
+    ctl.to({}, { duration: .95 });
+    ctl.call(function () { RV.setTool(g, 2, 'done', '5 issues'); });
+    ctl.call(function () { RV.collapse(g, 3, 1); });
+    ctl.call(function () {
+      RV.text("5 issues — <code>2 high</code>, 2 medium, 1 low. CSP allows <code>'unsafe-inline'</code>, and the session cookie has no <code>HttpOnly</code>/<code>Secure</code>.");
+    }, null, '+=.5');
+    chatTl = ctl;
+    return ctl;
+  }
+
+  function paintChatStatic() {
+    if (!RV) return;
+    RV.reset();
+    RV.role('user'); RV.text('Audit the security headers on /api/v2/session.');
+    RV.role('assistant');
+    var g = RV.group(['list_requests', 'get_request #38', 'security_inspect']);
+    g._body.style.display = 'none';
+    g._head.innerHTML = '<span>▸</span><span class="sum">tools 3 · thoughts 1</span><span class="dim">· show more</span>';
+    RV.text("5 issues — <code>2 high</code>, 2 medium, 1 low. CSP allows <code>'unsafe-inline'</code>, and the session cookie has no <code>HttpOnly</code>/<code>Secure</code>.");
+  }
+
+  /* ---------- reduced motion: static end state ---------- */
+  if (reduced) {
+    requestAnimationFrame(function () { renderStatic(); paintChatStatic(); });
+    if (replay) replay.addEventListener("click", function () { renderStatic(); paintChatStatic(); });
+    window.addEventListener("resize", function () {
+      if (Math.abs(window.innerWidth - lastW) < 2) return;
+      lastW = window.innerWidth;
+      renderStatic();
+    });
+    return;
+  }
+
+  var visible = true;
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        visible = e.isIntersecting;
+        if (!tl) return;
+        if (visible) tl.play(); else tl.pause();
+      });
+    }, { threshold: 0 });
+    io.observe(root);
+  }
+
+  requestAnimationFrame(function () {
+    build();
+    buildChat();
+    if (visible) tl.play();
+  });
+
+  if (replay) {
+    replay.addEventListener("click", function () {
+      if (tl) { resetState(); tl.restart(true); tl.play(); }
+      buildChat();
+    });
+  }
+
+  var rt = 0;
+  window.addEventListener("resize", function () {
+    if (Math.abs(window.innerWidth - lastW) < 2) return;
+    lastW = window.innerWidth;
+    clearTimeout(rt);
+    rt = setTimeout(function () {
+      build();
+      if (tl && visible) tl.play();
+    }, 260);
+  });
+})();
+</script>
+
+</body>
+</html>

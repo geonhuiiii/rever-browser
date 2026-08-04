@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — an agent that reverse-engineers web APIs</title>
+<meta name="description" content="A desktop browser with a reverse-engineering agent built in. Capture every request over CDP, ask the agent what it means, and reproduce the API without leaving the app." />
+<meta property="og:title" content="rever-browser" />
+<meta property="og:description" content="See every request. Ask what it means. Reproduce it." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><text x='16' y='23' font-size='19' font-family='monospace' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ── tokens: the app's own palette (src/renderer/src/styles.css), light-first ── */
+:root, :root[data-theme='light'] {
+  --bg:#fbfbfc; --bg-bar:#eef0f2; --surface:#ffffff; --surface-2:#f0f1f3; --surface-3:#e6e8ea;
+  --border:#e2e4e8; --border-2:#d3d6db; --border-3:#bcc0c6;
+  --text:#1b1d21; --text-2:#3f444b; --text-dim:#6a7078;
+  --code-bg:#f3f4f6; --inline-code-bg:#eceef1; --accent:#2f6fed;
+  --accent-soft:rgba(47,111,237,0.12); --accent-border:rgba(47,111,237,0.35); --shadow:rgba(0,0,0,0.13);
+  --grid:rgba(27,29,33,0.045);
+  --warn-bg:#fbf3e2; --warn-border:#e6d5a8; --warn-text:#7a5c16;
+  --sans:'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:'IBM Plex Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc; --text-dim:#8f9399;
+  --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d; --accent:#4a8fff;
+  --accent-soft:rgba(80,140,255,0.16); --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.55);
+  --grid:rgba(255,255,255,0.05);
+  --warn-bg:#231f18; --warn-border:#3d3524; --warn-text:#d9c08a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+/* hairline blueprint grid, fading out down the page */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: linear-gradient(180deg, #000 0, rgba(0,0,0,.35) 55%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0, rgba(0,0,0,.35) 55%, transparent 100%);
+}
+a { color: inherit; }
+code, .mono { font-family: var(--mono); }
+.wrap { width: 100%; max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 640px) { .wrap { padding: 0 18px; } }
+
+/* ── nav ─────────────────────────────────────────────────────────────── */
+.nav {
+  position: sticky; top: 0; z-index: 60;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(180%) blur(10px);
+  border-bottom: 1px solid transparent; transition: border-color .2s ease;
+}
+.nav.is-stuck { border-bottom-color: var(--border); }
+.nav .inner { display: flex; align-items: center; gap: 16px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; font: 600 14px/1 var(--mono); letter-spacing: -.01em; }
+.mark {
+  width: 22px; height: 22px; border-radius: 6px; flex: none; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font: 700 12px/1 var(--mono);
+}
+.nav .links { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.nav .links a.lnk {
+  font: 400 12.5px/1 var(--mono); color: var(--text-dim); text-decoration: none;
+  padding: 8px 10px; border-radius: 6px;
+}
+.nav .links a.lnk:hover { color: var(--text); background: var(--surface-2); }
+@media (max-width: 800px) { .nav .links a.lnk { display: none; } }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; border-radius: 7px; text-decoration: none;
+  font: 500 13px/1 var(--sans); padding: 10px 16px; border: 1px solid var(--border-2);
+  background: var(--surface); color: var(--text-2); cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, transform .15s ease, background .15s ease;
+}
+.btn:hover { border-color: var(--border-3); color: var(--text); transform: translateY(-1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { color: #fff; filter: brightness(1.07); }
+.btn.sm { padding: 7px 12px; font-size: 12.5px; }
+.btn.ghost { background: transparent; }
+.toggle {
+  font: 400 12px/1 var(--mono); color: var(--text-dim); background: transparent;
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; cursor: pointer; white-space: nowrap;
+}
+.toggle:hover { color: var(--text-2); border-color: var(--border-2); }
+
+/* ── hero ────────────────────────────────────────────────────────────── */
+.hero { padding: 86px 0 0; }
+.hero .grid {
+  display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 56px; align-items: end;
+}
+@media (max-width: 940px) { .hero .grid { grid-template-columns: 1fr; gap: 34px; align-items: start; } }
+.eyebrow {
+  font: 500 12px/1 var(--mono); color: var(--text-dim); letter-spacing: .02em;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.eyebrow .sep { width: 26px; height: 1px; background: var(--border-2); }
+h1 {
+  margin: 26px 0 0; font-weight: 600; letter-spacing: -.035em;
+  font-size: clamp(38px, 6.4vw, 68px); line-height: 1.02; max-width: 13ch;
+}
+h1 .w { display: inline-block; }
+.lede { margin: 26px 0 0; max-width: 58ch; font-size: 16.5px; color: var(--text-2); }
+.lede b { font-weight: 600; color: var(--text); }
+.lede .u { border-bottom: 1px solid var(--accent-border); padding-bottom: 1px; }
+.cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 32px; }
+
+/* right column: the spec sheet */
+.spec { border-top: 1px solid var(--text); padding-top: 12px; }
+.spec .cap { font: 500 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-dim); }
+.spec dl { margin: 14px 0 0; display: grid; gap: 0; }
+.spec .row {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 11px 0; border-bottom: 1px solid var(--border);
+}
+.spec dt { font: 400 12.5px/1 var(--mono); color: var(--text-dim); flex: none; }
+.spec dd { margin: 0; margin-left: auto; text-align: right; font: 500 15px/1 var(--mono); color: var(--text);
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.spec dd small { font-size: 12px; color: var(--text-dim); font-weight: 400; }
+
+/* ── app frame ───────────────────────────────────────────────────────── */
+.stage { margin: 64px auto 0; }
+.frame {
+  position: relative; border: 1px solid var(--border-2); border-radius: 12px; overflow: hidden;
+  background: var(--bg-bar); box-shadow: 0 24px 60px var(--shadow);
+}
+.frame .scaler { position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.frame iframe { width: 1216px; height: 700px; border: 0; display: block; transform-origin: top left; background: var(--bg); }
+.frame .ph {
+  position: absolute; inset: 0; display: grid; place-items: center; background: var(--bg);
+  color: var(--text-dim); font: 400 12px/1 var(--mono); transition: opacity .3s ease;
+}
+.frame .ph.gone { opacity: 0; pointer-events: none; }
+.stage-cap {
+  margin: 14px 2px 0; font: 400 12.5px/1.6 var(--mono); color: var(--text-dim);
+  display: flex; gap: 14px; align-items: baseline;
+}
+.stage-cap .n { color: var(--accent); flex: none; }
+
+/* ── section scaffold ────────────────────────────────────────────────── */
+.sec { padding: 108px 0 0; }
+.sec-head { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 28px; border-top: 1px solid var(--text); padding-top: 20px; }
+@media (max-width: 760px) { .sec-head { grid-template-columns: 1fr; gap: 12px; } }
+.sec-head .idx { font: 500 11.5px/1.6 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--text-dim); }
+.sec-head .idx b { display: block; color: var(--accent); font-weight: 600; }
+h2 { margin: 0; font-size: clamp(26px, 3.6vw, 40px); line-height: 1.1; letter-spacing: -.03em; font-weight: 600; max-width: 19ch; }
+.sec-head .sub { margin: 16px 0 0; color: var(--text-dim); font-size: 15.5px; max-width: 62ch; }
+code.i { font-size: .86em; background: var(--inline-code-bg); padding: 2px 6px; border-radius: 4px; color: var(--text-2); }
+
+/* ── scenarios ───────────────────────────────────────────────────────── */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
+.tab {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 9px 13px; font: 400 12.5px/1.2 var(--mono); cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.tab:hover { color: var(--text-2); border-color: var(--border-2); }
+.tab.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); font-weight: 500; }
+
+/* ── features: numbered rows, hairlines instead of boxes ─────────────── */
+.rows { margin-top: 34px; border-top: 1px solid var(--border); }
+.row-item {
+  display: grid; grid-template-columns: 64px minmax(0, 300px) minmax(0, 1fr); gap: 24px;
+  padding: 26px 6px; border-bottom: 1px solid var(--border); align-items: start;
+  transition: background .18s ease;
+}
+.row-item:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+@media (max-width: 860px) {
+  .row-item { grid-template-columns: 44px minmax(0, 1fr); gap: 10px 14px; }
+  .row-item .body { grid-column: 2; }
+}
+.row-item .num { font: 500 12px/1.8 var(--mono); color: var(--text-dim); }
+.row-item h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -.015em; }
+.row-item .body p { margin: 0; color: var(--text-dim); font-size: 14.5px; }
+.row-item .tags { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tagchip {
+  font: 400 11.5px/1 var(--mono); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; background: var(--surface);
+}
+
+/* ── architecture ────────────────────────────────────────────────────── */
+.arch { margin-top: 38px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border-top: 1px solid var(--border); }
+@media (max-width: 900px) { .arch { grid-template-columns: 1fr; } }
+.node { padding: 24px 22px 26px; border-bottom: 1px solid var(--border); }
+.node + .node { border-left: 1px solid var(--border); }
+@media (max-width: 900px) { .node + .node { border-left: 0; } }
+.node .pname { font: 600 11.5px/1 var(--mono); color: var(--accent); letter-spacing: .1em; text-transform: uppercase; }
+.node h4 { margin: 14px 0 8px; font-size: 16px; font-weight: 600; letter-spacing: -.015em; }
+.node p { margin: 0; font-size: 14px; color: var(--text-dim); }
+.node ul { margin: 16px 0 0; padding: 0 0 0 14px; list-style: none; display: grid; gap: 8px; border-left: 1px solid var(--border-2); }
+.node li { font: 400 12px/1.45 var(--mono); color: var(--text-2); }
+.rail { position: relative; height: 52px; }
+.rail .line { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border); }
+.rail .pkt {
+  position: absolute; top: 50%; width: 6px; height: 6px; border-radius: 50%; margin-top: -3px;
+  background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.rail .lbl {
+  position: absolute; z-index: 2; left: 0; top: 50%; transform: translateY(-50%);
+  background: var(--bg); padding-right: 14px; font: 400 12px/1 var(--mono); color: var(--text-dim);
+}
+@media (max-width: 700px) { .rail .lbl { font-size: 10.5px; } }
+
+/* ── tools ───────────────────────────────────────────────────────────── */
+.catalog { margin-top: 32px; display: flex; flex-wrap: wrap; gap: 7px; }
+.toolchip {
+  font: 400 12.5px/1 var(--mono); color: var(--text-2); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px;
+  transition: border-color .15s ease, color .15s ease;
+}
+.toolchip:hover { border-color: var(--accent-border); color: var(--text); }
+.toolchip b { color: var(--accent); font-weight: 500; margin-left: 3px; }
+
+/* ── quickstart ──────────────────────────────────────────────────────── */
+.qs { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 28px; margin-top: 36px; align-items: start; }
+@media (max-width: 900px) { .qs { grid-template-columns: 1fr; } }
+.term { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.term .bar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 13px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+  font: 400 12px/1 var(--mono); color: var(--text-dim);
+}
+.term .bar .copy {
+  margin-left: auto; border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 5px; padding: 5px 9px; font: 400 11.5px/1 var(--mono); cursor: pointer;
+}
+.term .bar .copy:hover { color: var(--accent); border-color: var(--accent-border); }
+.term pre { margin: 0; padding: 18px; overflow-x: auto; background: var(--code-bg); font: 12.5px/1.9 var(--mono); color: var(--text-2); }
+.term pre .c { color: var(--text-dim); }
+.term pre .p { color: var(--accent); }
+.steps { border-top: 1px solid var(--border); }
+.step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; padding: 16px 2px; border-bottom: 1px solid var(--border); }
+.step .n { font: 500 12px/1.7 var(--mono); color: var(--text-dim); }
+.step h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.step p { margin: 0; font-size: 14px; color: var(--text-dim); }
+
+/* ── note + closer ───────────────────────────────────────────────────── */
+.note {
+  margin-top: 44px; display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px;
+  padding: 20px 22px; border: 1px solid var(--warn-border); background: var(--warn-bg);
+  border-radius: 10px; color: var(--warn-text);
+}
+@media (max-width: 760px) { .note { grid-template-columns: 1fr; gap: 10px; } }
+.note .cap { font: 500 11.5px/1.6 var(--mono); letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+.note p { margin: 0; font-size: 14px; }
+.note p + p { margin-top: 8px; }
+.closer { padding: 112px 0 0; }
+.closer .inner { border-top: 1px solid var(--text); padding-top: 26px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 28px; align-items: end; }
+@media (max-width: 760px) { .closer .inner { grid-template-columns: 1fr; align-items: start; } }
+.closer h2 { max-width: 16ch; }
+.closer p { margin: 14px 0 0; color: var(--text-dim); font-size: 15px; max-width: 52ch; }
+footer { margin-top: 84px; border-top: 1px solid var(--border); }
+footer .inner { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; padding: 26px 0 34px;
+  font: 400 12.5px/1.6 var(--mono); color: var(--text-dim); }
+footer .sp { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+footer a { text-decoration: none; }
+footer a:hover { color: var(--accent); }
+
+.js [data-reveal] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .js [data-reveal] { opacity: 1 !important; transform: none !important; } }
+</style>
+</head>
+<body>
+<script>
+  document.documentElement.classList.add('js');
+  try { var t = localStorage.getItem('rv-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+
+<div class="nav" id="nav">
+  <div class="wrap inner">
+    <a class="brand" href="#top"><span class="mark">R</span> rever-browser</a>
+    <nav class="links">
+      <a class="lnk" href="#scenarios">scenarios</a>
+      <a class="lnk" href="#features">features</a>
+      <a class="lnk" href="#architecture">architecture</a>
+      <a class="lnk" href="#tools">tools</a>
+      <a class="lnk" href="#quickstart">quickstart</a>
+      <button class="toggle" id="theme">dark</button>
+      <a class="btn sm" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<!-- ══ hero ══════════════════════════════════════════════════════════ -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div class="grid">
+      <div>
+        <div class="eyebrow" data-reveal="fade">
+          <span>electron desktop app</span><span class="sep"></span><span>mit licensed</span>
+        </div>
+        <h1 id="headline">See every request. Ask what it means. Reproduce it.</h1>
+        <p class="lede" data-reveal="fade">
+          <b>rever-browser</b> puts a reverse-engineering agent next to a real Chromium tab.
+          You browse the target; the app records every request over <span class="u">CDP</span>, and the agent
+          reads that traffic, cracks open the JavaScript bundles, and drives the tab itself.
+        </p>
+        <div class="cta" data-reveal="fade">
+          <a class="btn primary" href="#quickstart">Get started</a>
+          <a class="btn" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">Read the source</a>
+          <a class="btn ghost" href="demos/" target="_blank" rel="noopener">All 30 demos</a>
+        </div>
+      </div>
+
+      <div class="spec" data-reveal="fade">
+        <div class="cap">at a glance</div>
+        <dl>
+          <div class="row"><dt>mcp tools</dt><dd><span data-count="134">0</span>+</dd></div>
+          <div class="row"><dt>processes</dt><dd><span data-count="3">0</span> <small>isolated</small></dd></div>
+          <div class="row"><dt>agents</dt><dd>claude code <small>· codex</small></dd></div>
+          <div class="row"><dt>runs on</dt><dd>macOS <small>· win · linux</small></dd></div>
+          <div class="row"><dt>license</dt><dd>MIT</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap stage" data-reveal="stage">
+    <div class="frame">
+      <div class="scaler" id="scaler">
+        <iframe id="demo" title="rever-browser scenario walkthrough" src="demos/v2-find-search-api.html"></iframe>
+        <div class="ph" id="ph">loading demo…</div>
+      </div>
+    </div>
+    <p class="stage-cap">
+      <span class="n" id="capnum">01</span>
+      <span id="capture">A recorded walkthrough of the real UI: the agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint.</span>
+    </p>
+  </div>
+</section>
+
+<!-- ══ scenarios ═════════════════════════════════════════════════════ -->
+<section class="sec" id="scenarios">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>01</b> scenarios</div>
+      <div>
+        <h2>Ten words in, a working request out.</h2>
+        <p class="sub">Each one is a real flow through the app, recorded from the shipping UI. Pick a prompt and the frame above replays it.</p>
+      </div>
+    </div>
+    <div class="tabs" id="tabs" data-reveal="stagger">
+      <button class="tab is-on" data-src="v2-find-search-api" data-cap="The agent snapshots the page, clicks the search button, reads the captured traffic, and answers with the endpoint.">Find the search API</button>
+      <button class="tab" data-src="v2-login-orders" data-cap="Logs in with your session, walks to the orders page, and pulls out the request that returns the list.">Log in and get my orders</button>
+      <button class="tab" data-src="v2-deob-auth" data-cap="Unminifies the captured bundle with webcrack, then reads the auth flow out of the restored source.">Deobfuscate and find auth</button>
+      <button class="tab" data-src="v2-websocket-decode" data-cap="Reads the WebSocket frames, decodes the payload envelope, and explains the message schema.">Decode the WebSocket</button>
+      <button class="tab" data-src="v2-repeater-tamper" data-cap="Sends the request again through the repeater with a tampered parameter, then diffs the response.">Resend with limit=500</button>
+      <button class="tab" data-src="v2-idor-fuzz" data-cap="Walks a range of object ids through the intruder and flags the ones that answer with someone else's data.">Check for IDOR</button>
+      <button class="tab" data-src="v2-build-macro" data-cap="Turns the sequence you just verified into a saved macro you can replay later.">Make it repeatable</button>
+    </div>
+  </div>
+</section>
+
+<!-- ══ features ══════════════════════════════════════════════════════ -->
+<section class="sec" id="features">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>02</b> what's inside</div>
+      <div>
+        <h2>A browser, a packet capture, and an agent reading both.</h2>
+        <p class="sub">Nothing to wire up. The capture buffer, the bundle analyzer and the tool server all live in the same window as the tab you are driving.</p>
+      </div>
+    </div>
+
+    <div class="rows" data-reveal="stagger">
+      <div class="row-item">
+        <div class="num">01</div>
+        <h3>Live traffic capture</h3>
+        <div class="body">
+          <p>Every <code class="i">Network.*</code> event from the tab lands in a ring buffer. Response bodies are fetched lazily on <code class="i">loadingFinished</code>, and image, video, font and CSS payloads are skipped so the buffer stays readable.</p>
+          <div class="tags"><span class="tagchip">cdp</span><span class="tagchip">ring buffer</span><span class="tagchip">lazy bodies</span><span class="tagchip">har export</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">02</div>
+        <h3>An agent that sees what you see</h3>
+        <div class="body">
+          <p>Claude Code by default, Codex as an alternative, both over ACP on stdio. The agent reads the same traffic store the UI renders, so “explain the request I just made” needs no copy-paste.</p>
+          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">streaming</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">03</div>
+        <h3>Browser automation</h3>
+        <div class="body">
+          <p>Navigate, click, type, scroll and screenshot, driven off accessibility snapshots with short <code class="i">rN</code> refs rather than brittle selectors.</p>
+          <div class="tags"><span class="tagchip">browser_snapshot</span><span class="tagchip">browser_click</span><span class="tagchip">set_viewport</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">04</div>
+        <h3>Bundle analysis without a re-download</h3>
+        <div class="body">
+          <p>Grep, extract, detect the bundler and deobfuscate the JavaScript already sitting in the capture. <code class="i">webcrack</code> unminifies when it is on your PATH, and source maps are restored when the site ships them.</p>
+          <div class="tags"><span class="tagchip">grep_scripts</span><span class="tagchip">detect_bundler</span><span class="tagchip">deobfuscate_script</span><span class="tagchip">sourcemap</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">05</div>
+        <h3>Deep API tooling</h3>
+        <div class="body">
+          <p>Repeater, intruder, header overrides, request interception, crypto and decode helpers, WebSocket and service-worker inspection, GraphQL and protobuf readers.</p>
+          <div class="tags"><span class="tagchip">repeater</span><span class="tagchip">intruder</span><span class="tagchip">intercept</span><span class="tagchip">graphql</span><span class="tagchip">protobuf</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">06</div>
+        <h3>Local by construction</h3>
+        <div class="body">
+          <p>The MCP server is in-process, binds to a random port on <code class="i">127.0.0.1</code>, and starts lazily on the first agent spawn. Captured traffic stays in memory inside your own app.</p>
+          <div class="tags"><span class="tagchip">127.0.0.1</span><span class="tagchip">in-process</span><span class="tagchip">no analytics backend</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">07</div>
+        <h3>From finding to repeatable</h3>
+        <div class="body">
+          <p>Once an endpoint is understood, record it as a macro or a workflow, replay it, export the session as HAR, or ask for client code that reproduces the request outside the app.</p>
+          <div class="tags"><span class="tagchip">macros</span><span class="tagchip">workflows</span><span class="tagchip">findings</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ architecture ══════════════════════════════════════════════════ -->
+<section class="sec" id="architecture">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>03</b> architecture</div>
+      <div>
+        <h2>Three processes, one strict boundary.</h2>
+        <p class="sub">Node APIs and the CDP debugger never leak into the page. Everything crosses through preload IPC, the single source of truth for the renderer-visible surface.</p>
+      </div>
+    </div>
+
+    <div class="arch" data-reveal="stagger">
+      <div class="node">
+        <div class="pname">main</div>
+        <h4>Owns Chromium and the agent</h4>
+        <p>The only process with Node and Electron APIs.</p>
+        <ul>
+          <li>webContents.debugger (CDP)</li>
+          <li>traffic-store ring buffer</li>
+          <li>spawns the ACP child process</li>
+          <li>hosts the HTTP MCP server</li>
+        </ul>
+      </div>
+      <div class="node">
+        <div class="pname">preload</div>
+        <h4>The only door between them</h4>
+        <p>Exposes <code class="i">window.rev</code> through contextBridge.</p>
+        <ul>
+          <li>typed RevAPI surface</li>
+          <li>per-prompt update channels</li>
+          <li>no Node reaches the page</li>
+        </ul>
+      </div>
+      <div class="node">
+        <div class="pname">renderer</div>
+        <h4>What you actually touch</h4>
+        <p>React 19 and Vite: the tab, the traffic list, the chat.</p>
+        <ul>
+          <li>&lt;webview&gt; host</li>
+          <li>live traffic list</li>
+          <li>streaming chat panel</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rail" id="rail1" data-reveal="fade">
+      <div class="line"></div>
+      <div class="lbl">capture &nbsp;·&nbsp; Network.* → traffic-store → network-event IPC → TrafficList</div>
+      <div class="pkt"></div><div class="pkt"></div><div class="pkt"></div>
+    </div>
+    <div class="rail" id="rail2" data-reveal="fade">
+      <div class="line"></div>
+      <div class="lbl">agent &nbsp;·&nbsp; prompt → ACP session → MCP tool → CDP → streamed answer</div>
+      <div class="pkt"></div><div class="pkt"></div><div class="pkt"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ tools ═════════════════════════════════════════════════════════ -->
+<section class="sec" id="tools">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>04</b> tool surface</div>
+      <div>
+        <h2>134 tools, grouped by what you are trying to learn.</h2>
+        <p class="sub">Each domain is one file under <code class="i">src/main/mcp/tools/</code>. Adding a domain is a new file plus one line in the server factory.</p>
+      </div>
+    </div>
+    <div class="catalog" data-reveal="stagger" id="catalog"></div>
+  </div>
+</section>
+
+<!-- ══ quickstart ════════════════════════════════════════════════════ -->
+<section class="sec" id="quickstart">
+  <div class="wrap">
+    <div class="sec-head" data-reveal="fade">
+      <div class="idx"><b>05</b> quickstart</div>
+      <div>
+        <h2>Running in about a minute.</h2>
+        <p class="sub">Bun is the package manager, not npm or pnpm. The agent binary installs separately because it runs as its own process.</p>
+      </div>
+    </div>
+
+    <div class="qs">
+      <div class="term" data-reveal="fade">
+        <div class="bar"><span>zsh</span><button class="copy" data-copy>copy</button></div>
+<pre id="code"><span class="c"># 1 — the agent binary, on your PATH</span>
+<span class="p">$</span> npm i -g @agentclientprotocol/claude-agent-acp
+
+<span class="c"># 2 — the app</span>
+<span class="p">$</span> git clone https://github.com/greekr4/rever-browser
+<span class="p">$</span> cd rever-browser
+<span class="p">$</span> bun install
+<span class="p">$</span> bun run dev
+
+<span class="c"># optional — unminify captured bundles</span>
+<span class="p">$</span> npm i -g webcrack</pre>
+      </div>
+
+      <div class="steps" data-reveal="stagger">
+        <div class="step"><div class="n">01</div><div><h4>Browse your target</h4><p>Type a URL into the embedded tab. Requests appear in the traffic list as they happen.</p></div></div>
+        <div class="step"><div class="n">02</div><div><h4>Open the chat panel</h4><p>Pick Claude Code or Codex. The session starts with the API-reversing system prompt already loaded.</p></div></div>
+        <div class="step"><div class="n">03</div><div><h4>Ask</h4><p>“What does the search endpoint take?” The agent reads the capture, greps the bundle, and replays the request to check itself.</p></div></div>
+        <div class="step"><div class="n">04</div><div><h4>Keep it</h4><p>Save a macro, export HAR, or take the generated client code and run it outside the app.</p></div></div>
+      </div>
+    </div>
+
+    <div class="note" data-reveal="fade">
+      <div class="cap">before you point it somewhere</div>
+      <div>
+        <p>rever-browser drives a real browser against real servers. Use it on your own services, on systems you have written permission to test, or on targets that invite it, and follow the site's terms and your local law.</p>
+        <p>It is a debugging tool for people who already have the right to look.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ closer ════════════════════════════════════════════════════════ -->
+<section class="closer">
+  <div class="wrap">
+    <div class="inner" data-reveal="fade">
+      <div>
+        <h2>Read the capture. Then read the code.</h2>
+        <p>MIT licensed, with no copyleft anywhere in the dependency tree. Issues and pull requests welcome.</p>
+      </div>
+      <div class="cta" style="margin:0">
+        <a class="btn primary" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">Open on GitHub</a>
+        <a class="btn" href="demos/" target="_blank" rel="noopener">Motion kit</a>
+      </div>
+    </div>
+  </div>
+  <footer>
+    <div class="wrap inner">
+      <span>rever-browser · MIT</span>
+      <span class="sp">
+        <a href="https://github.com/greekr4/rever-browser">source</a>
+        <a href="https://github.com/greekr4/rever-browser/blob/main/README.md">readme</a>
+        <a href="https://github.com/greekr4/rever-browser/issues">issues</a>
+        <a href="demos/">demos</a>
+      </span>
+    </div>
+  </footer>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script>
+(function () {
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var hasGsap = !!window.gsap;
+  if (hasGsap && window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
+  var root = document.documentElement;
+
+  /* ── theme, shared with the embedded demo ────────────────────────── */
+  function syncDemoTheme() {
+    var f = document.getElementById('demo');
+    try { if (f && f.contentDocument) f.contentDocument.documentElement.setAttribute('data-theme', root.getAttribute('data-theme')); }
+    catch (e) { /* file:// blocks cross-document access; harmless */ }
+  }
+  var themeBtn = document.getElementById('theme');
+  function paintThemeBtn() { themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; }
+  paintThemeBtn();
+  themeBtn.addEventListener('click', function () {
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('rv-theme', next); } catch (e) {}
+    paintThemeBtn(); syncDemoTheme();
+  });
+
+  addEventListener('scroll', function () {
+    document.getElementById('nav').classList.toggle('is-stuck', scrollY > 8);
+  }, { passive: true });
+
+  /* ── demo frame: keep the 1216px app layout and scale it to fit ──── */
+  var scaler = document.getElementById('scaler');
+  var demo = document.getElementById('demo');
+  var ph = document.getElementById('ph');
+  var BASE_W = 1216, BASE_H = 700, ro = null;
+  function contentHeight() {
+    try {
+      /* body fills the iframe, so measure the app window itself + its page padding */
+      var d = demo.contentDocument;
+      var app = d && d.querySelector('.rv-app');
+      if (app) return Math.ceil(app.getBoundingClientRect().height) + 36;
+    } catch (e) { /* file:// */ }
+    return BASE_H;
+  }
+  function fit() {
+    var h = Math.min(860, Math.max(520, contentHeight()));
+    if (Math.abs(parseFloat(demo.style.height || 0) - h) > 3) demo.style.height = h + 'px';
+    /* below ~510px the app would be unreadable; keep a floor and let the frame scroll */
+    var s = Math.max(0.42, Math.min(1, scaler.clientWidth / BASE_W));
+    demo.style.transform = 'scale(' + s + ')';
+    scaler.style.height = Math.round(h * s) + 'px';
+  }
+  addEventListener('resize', fit); fit();
+  demo.addEventListener('load', function () {
+    ph.classList.add('gone'); syncDemoTheme(); fit();
+    /* demos change height as their timeline runs (chat transcripts grow) */
+    if (ro) { ro.disconnect(); ro = null; }
+    try {
+      if (window.ResizeObserver && demo.contentDocument) {
+        ro = new ResizeObserver(function () { fit(); });
+        ro.observe(demo.contentDocument.body);
+      }
+    } catch (e) { /* file:// */ }
+  });
+
+  /* ── scenario tabs ───────────────────────────────────────────────── */
+  var tabs = document.getElementById('tabs');
+  var capNum = document.getElementById('capnum'), capText = document.getElementById('capture');
+  tabs.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tab'); if (!btn) return;
+    var all = [].slice.call(this.querySelectorAll('.tab'));
+    all.forEach(function (t) { t.classList.toggle('is-on', t === btn); });
+    ph.classList.remove('gone');
+    demo.src = 'demos/' + btn.dataset.src + '.html';
+    capNum.textContent = ('0' + (all.indexOf(btn) + 1)).slice(-2);
+    capText.textContent = btn.dataset.cap;
+    scrollTo({ top: scaler.getBoundingClientRect().top + scrollY - 92, behavior: reduced ? 'auto' : 'smooth' });
+  });
+
+  /* ── tool catalog, counts read off src/main/mcp/tools/ ───────────── */
+  var TOOLS = [
+    ['browser', 24], ['debugger', 9], ['intercept', 8], ['storage', 7], ['macros', 7], ['scripts', 6],
+    ['console', 5], ['inject', 5], ['websocket', 5], ['crypto', 4], ['headers', 4], ['dialog', 4],
+    ['dom_edit', 4], ['findings', 4], ['traffic', 3], ['sourcemap', 3], ['override', 3], ['sw_inspect', 3],
+    ['crypto_trace', 3], ['auth', 2], ['deob', 2], ['diff', 2], ['path_probe', 2], ['repeater', 1],
+    ['intruder', 1], ['har', 1], ['graphql', 1], ['protobuf', 1], ['secrets', 1], ['antibot', 1],
+    ['decode', 1], ['body', 1], ['burst', 1], ['crlf', 1], ['payload_probe', 1], ['security_inspect', 1],
+    ['vision', 1], ['wait', 1]
+  ];
+  var cat = document.getElementById('catalog');
+  TOOLS.forEach(function (t) {
+    var el = document.createElement('span');
+    el.className = 'toolchip';
+    el.innerHTML = t[0] + ' <b>' + t[1] + '</b>';
+    cat.appendChild(el);
+  });
+
+  /* ── copy the install block ──────────────────────────────────────── */
+  document.querySelector('[data-copy]').addEventListener('click', function () {
+    var btn = this;
+    var txt = document.getElementById('code').innerText.split('\n')
+      .filter(function (l) { return l.trim() && l.trim()[0] !== '#'; })
+      .map(function (l) { return l.replace(/^\$\s?/, ''); }).join('\n');
+    navigator.clipboard.writeText(txt).then(function () {
+      btn.textContent = 'copied'; setTimeout(function () { btn.textContent = 'copy'; }, 1400);
+    });
+  });
+
+  /* ── motion ──────────────────────────────────────────────────────── */
+  if (!hasGsap || reduced) {
+    [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) { el.style.opacity = 1; });
+    [].forEach.call(document.querySelectorAll('[data-count]'), function (el) { el.textContent = el.dataset.count; });
+    return;
+  }
+
+  /* headline: word-by-word rise */
+  var h1 = document.getElementById('headline');
+  h1.innerHTML = h1.textContent.trim().split(/\s+/).map(function (w) {
+    return '<span class="w">' + w + '</span>';
+  }).join(' ');
+  h1.style.overflow = 'hidden';
+  h1.style.paddingBottom = '.06em';
+  var words = h1.querySelectorAll('.w');
+  gsap.set(words, { yPercent: 108, opacity: 0 });
+
+  gsap.timeline({ delay: 0.1 })
+    .to(words, { yPercent: 0, opacity: 1, duration: 0.9, ease: 'power3.out', stagger: 0.04 })
+    .fromTo('.eyebrow', { y: -8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
+    .fromTo('.lede, .hero .cta', { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', stagger: 0.08 }, 0.4)
+    .fromTo('.spec', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.5)
+    .fromTo('.spec .row', { opacity: 0, x: 10 }, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, 0.6);
+
+  gsap.fromTo('.stage', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.55 });
+
+  /* scroll reveals — the hero intro owns its own elements */
+  var OWNED = ['stage', 'eyebrow', 'lede', 'spec'];
+  [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) {
+    for (var i = 0; i < OWNED.length; i++) if (el.classList.contains(OWNED[i])) return;
+    if (el.classList.contains('cta') && el.closest('.hero')) return;
+    var stagger = el.dataset.reveal === 'stagger';
+    gsap.set(el, { opacity: 1 });
+    gsap.from(stagger ? el.children : [el], {
+      opacity: 0, y: 22, duration: 0.65, ease: 'power2.out', stagger: stagger ? 0.05 : 0,
+      scrollTrigger: { trigger: el, start: 'top 88%', once: true }
+    });
+  });
+
+  /* spec-sheet counters */
+  [].forEach.call(document.querySelectorAll('[data-count]'), function (el) {
+    var o = { v: 0 };
+    gsap.to(o, {
+      v: +el.dataset.count, duration: 1.5, ease: 'power2.out', delay: 0.8,
+      onUpdate: function () { el.textContent = Math.round(o.v); }
+    });
+  });
+
+  /* architecture rails: packets crossing the boundary, paused off-screen */
+  ['rail1', 'rail2'].forEach(function (id, ri) {
+    var rail = document.getElementById(id);
+    var pkts = rail.querySelectorAll('.pkt');
+    var toRight = ri === 0;
+    var tl = gsap.timeline({ repeat: -1, paused: true });
+    [].forEach.call(pkts, function (p, i) {
+      tl.fromTo(p,
+        { left: toRight ? '2%' : '100%', opacity: 0 },
+        { left: toRight ? '100%' : '2%', opacity: 1, duration: 2.6, ease: 'none' }, i * 0.9);
+      tl.to(p, { opacity: 0, duration: 0.5 }, i * 0.9 + 2.1);
+    });
+    ScrollTrigger.create({
+      trigger: rail, start: 'top 96%', end: 'bottom 4%',
+      onEnter: function () { tl.play(); }, onLeave: function () { tl.pause(); },
+      onEnterBack: function () { tl.play(); }, onLeaveBack: function () { tl.pause(); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

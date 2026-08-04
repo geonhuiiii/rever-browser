@@ -1,0 +1,740 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — Repeater: edit, resend, diff</title>
+<style>
+/* ============================================================================
+   CANONICAL APP SHELL — copy this whole <style> + the .rv-app markup verbatim.
+   Tokens are lifted from src/renderer/src/styles.css. Light is the default
+   (matches the real app screenshot); [data-theme='dark'] is the override.
+   RULE: never put a colored accent strip / left-border on a card. Cards are
+   plain --surface on --border. Color appears only in action flashes, method
+   badges, status dots and severity text.
+   ========================================================================= */
+:root, :root[data-theme='light'] {
+  --bg: #fbfbfc; --bg-bar: #eef0f2; --surface: #ffffff; --surface-2: #f0f1f3;
+  --surface-3: #e6e8ea; --border: #e2e4e8; --border-2: #d3d6db; --border-3: #bcc0c6;
+  --text: #1b1d21; --text-2: #3f444b; --text-dim: #6a7078; --viewport-bg: #ffffff;
+  --code-bg: #f3f4f6; --inline-code-bg: #eceef1; --link: #2f6fed; --accent: #2f6fed;
+  --accent-soft: rgba(47,111,237,0.14); --accent-border: rgba(47,111,237,0.35);
+  --shadow: rgba(0,0,0,0.16);
+  --chip-ok-bg:#e7f6e9; --chip-ok-border:#bfe3c4; --chip-ok-text:#1f7a34;
+  --chip-warn-bg:#fbf3e2; --chip-warn-border:#e6d5a8; --chip-warn-text:#8a6a1f;
+  --chip-info-bg:#e8f0fb; --chip-info-border:#c3d6ef; --chip-info-text:#2f5fa8;
+  --chip-danger-bg:#fbeaea; --chip-danger-border:#eabcbc; --chip-danger-text:#a52f2f;
+  /* agent action colours (main/ai-events.ts kinds) */
+  --act-click:#e5484d; --act-hover:#d9a300; --act-type:#2f6fed; --act-navigate:#8b5cf6;
+  --act-scroll:#1f9d55; --act-evaluate:#c2691a; --act-extract:#0f9b8e;
+  --get:#1f9d55; --post:#c2691a;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc;
+  --text-dim:#999; --viewport-bg:#000; --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d;
+  --link:#7ab7ff; --accent:#4a8fff; --accent-soft:rgba(80,140,255,0.18);
+  --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.4);
+  --chip-ok-bg:#1f2a1f; --chip-ok-border:#2a4a2a; --chip-ok-text:#aea;
+  --chip-warn-bg:#2a261f; --chip-warn-border:#4a402a; --chip-warn-text:#eca;
+  --chip-info-bg:#1f242a; --chip-info-border:#2a3a4a; --chip-info-text:#ace;
+  --chip-danger-bg:#3a1f1f; --chip-danger-border:#5a2a2a; --chip-danger-text:#eaa;
+  --act-click:#ff3b30; --act-hover:#ffd60a; --act-type:#0a84ff; --act-navigate:#a855f7;
+  --act-scroll:#30d158; --act-evaluate:#ff9f0a; --act-extract:#2dd4bf;
+  --get:#30d158; --post:#ff9f0a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: 18px; overflow-x: hidden;
+}
+
+/* ── window frame ─────────────────────────────────────────────────────── */
+.rv-app {
+  max-width: 1180px; margin: 0 auto; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 50px var(--shadow); display: flex; flex-direction: column;
+}
+/* ── titlebar: traffic lights + tab strip ─────────────────────────────── */
+.rv-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-lights { display: flex; gap: 6px; flex: none; }
+.rv-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.rv-lights i:nth-child(1){background:#ff5f57} .rv-lights i:nth-child(2){background:#febc2e}
+.rv-lights i:nth-child(3){background:#28c840}
+.rv-tab {
+  display: flex; align-items: center; gap: 7px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tab .fav { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-3); flex: none; }
+.rv-newtab {
+  width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: default; flex: none;
+}
+.rv-themebtn {
+  margin-left: auto; width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-border);
+}
+/* ── toolbar ──────────────────────────────────────────────────────────── */
+.rv-toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-navbtn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); font-size: 12px;
+  display: grid; place-items: center; flex: none;
+}
+.rv-url {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; font: 12px/1.3 var(--sans); color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 11.5px; font-weight: 500; flex: none;
+}
+.rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* ── body split: viewport | chat ──────────────────────────────────────── */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+.rv-view {
+  position: relative; background: var(--viewport-bg); overflow: hidden;
+  height: 470px; border-right: 1px solid var(--border);
+}
+/* ── chat panel ───────────────────────────────────────────────────────── */
+.rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+.rv-chathead {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px;
+}
+.rv-agent {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2);
+}
+.rv-agent .av {
+  width: 15px; height: 15px; border-radius: 4px; background: var(--accent-soft);
+  color: var(--accent); font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.rv-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); }
+.rv-models {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text-dim); font-size: 11px;
+}
+.rv-ready { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.rv-chipbar { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.rv-chip {
+  font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+}
+.rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
+
+.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-role { font-size: 10.5px; color: var(--text-dim); }
+.rv-text { font-size: 12px; color: var(--text); }
+.rv-text code {
+  font: 11px var(--mono); background: var(--inline-code-bg);
+  padding: 1px 4px; border-radius: 4px;
+}
+/* the real WorkGroup disclosure — 11px, transparent, 1px border, radius 12 */
+.rv-group {
+  display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; font-size: 11px;
+  background: transparent; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-dim); align-self: flex-start; white-space: nowrap;
+}
+.rv-group .dim { opacity: .5; }
+.rv-groupbody { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 5px; }
+.rv-tool { font: 10.5px/1.45 var(--mono); color: var(--text-dim); display: flex; gap: 6px; align-items: baseline; }
+.rv-tool .nm { color: var(--text-2); }
+.rv-tool .st { margin-left: auto; flex: none; }
+.rv-tool.is-run .st { color: var(--chip-warn-text); }
+.rv-tool.is-done .st { color: var(--chip-ok-text); }
+.rv-caret { display: inline-block; width: 1.5px; height: 12px; background: var(--accent); vertical-align: -2px; }
+.rv-compose { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--border); }
+.rv-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); padding: 6px 10px; font-size: 11.5px; color: var(--text-dim);
+}
+.rv-send {
+  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 13px; font-size: 11.5px; font-weight: 600; flex: none;
+}
+/* ── status bar ───────────────────────────────────────────────────────── */
+.rv-status {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px; overflow-x: auto;
+  background: var(--bg-bar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); scrollbar-width: none;
+}
+.rv-status::-webkit-scrollbar { display: none; }
+.rv-status b { font-weight: 600; color: var(--text-2); }
+.rv-status .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rv-status .is-on { color: var(--accent); }
+
+/* ── in-viewport overlay: ghost cursor + action flash ─────────────────── */
+.rv-cursor { position: absolute; width: 20px; height: 20px; z-index: 30; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); opacity: 0; }
+.rv-flash { position: absolute; z-index: 25; pointer-events: none; opacity: 0; border-radius: 6px;
+  border: 2px solid var(--act-click); box-shadow: 0 0 0 4px rgba(229,72,77,.16); }
+.rv-flash .tag { position: absolute; top: -20px; left: -2px; font: 600 10px/1 var(--sans);
+  color: #fff; background: var(--act-click); padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.rv-flash.hover { border-color: var(--act-hover); box-shadow: 0 0 0 4px rgba(217,163,0,.16); }
+.rv-flash.hover .tag { background: var(--act-hover); color: #221c00; }
+.rv-flash.type { border-color: var(--act-type); box-shadow: 0 0 0 4px rgba(47,111,237,.16); }
+.rv-flash.type .tag { background: var(--act-type); }
+.rv-flash.navigate { border-color: var(--act-navigate); box-shadow: 0 0 0 4px rgba(139,92,246,.16); }
+.rv-flash.navigate .tag { background: var(--act-navigate); }
+.rv-flash.extract { border-color: var(--act-extract); box-shadow: 0 0 0 4px rgba(15,155,142,.16); }
+.rv-flash.extract .tag { background: var(--act-extract); }
+
+/* ── generic page furniture for the fake site inside .rv-view ─────────── */
+.rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.rv-badge { font: 600 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.rv-badge.get { color: var(--get); background: rgba(31,157,85,.12); }
+.rv-badge.post { color: var(--post); background: rgba(194,105,26,.12); }
+
+.rv-replay {
+  position: absolute; right: 10px; bottom: 10px; z-index: 40;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 5px 11px; font-size: 11px; cursor: pointer;
+}
+.rv-replay:hover { color: var(--text); border-color: var(--border-3); }
+
+/* ── responsive: stack chat under the viewport ────────────────────────── */
+@media (max-width: 860px) {
+  body { padding: 10px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rv-chat { max-height: 340px; }
+  .rv-tbtn.opt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-cursor, .rv-flash { display: none !important; }
+}
+</style>
+
+<!-- ============================================================================
+     BLOCK-SPECIFIC (slug: repeater-send). Namespaced .rs-* — appended after the
+     shell so it inherits every token. Two-pane Repeater (request/response) with
+     an edit + resend + diff loop living inside .rv-view. Cards are plain
+     --surface on --border: no accent strip. Colour only on method/status
+     badges, the diff +/- text, and the action flashes.
+     ========================================================================= */
+<style>
+.rs-view { padding: 14px; height: 100%; display: flex; flex-direction: column; gap: 10px; }
+.rs-panes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-height: 0;
+}
+.rs-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  display: flex; flex-direction: column; min-width: 0; overflow: hidden; position: relative;
+}
+.rs-phead {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.rs-ptitle {
+  font: 600 9.5px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.rs-tag {
+  margin-left: auto; font: 9.5px/1 var(--mono); letter-spacing: .04em;
+  padding: 3px 7px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+  white-space: nowrap;
+}
+.rs-tag.ok { border-color: var(--chip-ok-border); background: var(--chip-ok-bg); color: var(--chip-ok-text); }
+.rs-tag.busy { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); }
+
+/* progress sweep on the response header */
+.rs-bar {
+  position: absolute; left: 0; top: 0; height: 2px; width: 100%; z-index: 4;
+  background: var(--accent); transform: scaleX(0); transform-origin: left center; opacity: 0;
+}
+
+.rs-code {
+  font: 11px/1.7 var(--mono); color: var(--text-2);
+  padding: 9px 11px; overflow: hidden; flex: 1 1 auto; word-break: break-word;
+}
+.rs-ln { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rs-ind { padding-left: 1.4em; } .rs-ind2 { padding-left: 2.6em; }
+.rs-mth {
+  font: 700 9px/1 var(--mono); letter-spacing: .06em; color: var(--post);
+  background: rgba(194,105,26,.12); border-radius: 4px; padding: 2px 5px;
+  margin-right: 6px; vertical-align: 1px;
+}
+.rs-url { color: var(--text); }
+.rs-hk { color: var(--text-dim); } .rs-hv { color: var(--text-2); }
+.rs-k { color: var(--accent); } .rs-s { color: var(--get); }
+.rs-n { color: var(--post); } .rs-b { color: var(--act-navigate); }
+.rs-p { color: var(--text-dim); }
+.rs-rule { height: 1px; margin: 8px 0; border: 0; background: var(--border); }
+
+/* the edited body line */
+.rs-editline { border-radius: 5px; margin: 0 -3px; padding: 0 3px; }
+.rs-val { position: relative; white-space: nowrap; }
+.rs-old { position: relative; color: var(--n, var(--post)); }
+.rs-strike {
+  position: absolute; left: -1px; right: -1px; top: 52%; height: 1.5px;
+  background: var(--act-click); border-radius: 2px;
+  transform: scaleX(0); transform-origin: left center; display: block;
+}
+.rs-new { color: var(--act-type); font-weight: 600; }
+.rs-caret {
+  display: inline-block; width: 1.5px; height: 1em; background: var(--act-type);
+  vertical-align: -2px; opacity: 0;
+}
+
+/* request footer / send */
+.rs-foot {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 8px 10px; border-top: 1px solid var(--border); background: var(--surface-2);
+}
+.rs-send {
+  font: 600 11.5px/1 var(--sans); color: var(--accent); cursor: default;
+  border: 1px solid var(--accent-border); background: var(--accent-soft);
+  border-radius: 7px; padding: 6px 12px; display: inline-flex; align-items: center; gap: 7px;
+}
+.rs-send kbd {
+  font: 9.5px/1 var(--mono); opacity: .75;
+  border: 1px solid var(--accent-border); border-radius: 3px; padding: 1px 3px;
+}
+.rs-hint { font: 10px/1.3 var(--mono); color: var(--text-dim); }
+
+/* response status readout — neutral, tabular */
+.rs-statusline {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  padding: 8px 11px; border-bottom: 1px solid var(--border);
+  font: 12px/1 var(--mono); font-variant-numeric: tabular-nums;
+}
+.rs-200 { color: var(--get); font-weight: 700; }
+.rs-sep { color: var(--border-3); }
+.rs-metric { color: var(--text-2); }
+.rs-more { color: var(--text-dim); font-style: normal; }
+
+/* diff strip — neutral rows, colour only on the +/- text */
+.rs-diff {
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  padding: 8px 9px; display: flex; flex-direction: column; gap: 3px; flex: none;
+}
+.rs-difft {
+  font: 9px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-dim); margin-bottom: 2px;
+}
+.rs-dl {
+  font: 10.5px/1.5 var(--mono); padding: 2px 6px; border-radius: 4px;
+  background: var(--surface-2); color: var(--text-2); overflow-wrap: anywhere;
+}
+.rs-dl.hd { background: transparent; color: var(--text-dim); padding-left: 2px; }
+.rs-dl.rm { color: var(--chip-danger-text); }
+.rs-dl.ad { color: var(--get); }
+.rs-dl b { font-weight: 700; }
+
+@media (max-width: 560px) {
+  .rs-panes { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== COPY FROM HERE ===================================================== -->
+<div class="rv-app">
+  <div class="rv-titlebar">
+    <div class="rv-lights"><i></i><i></i><i></i></div>
+    <div class="rv-tab"><span class="fav"></span><span>Aero — Search · shop.example.com</span></div>
+    <div class="rv-newtab">+</div>
+    <div class="rv-themebtn">☀</div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-navbtn">‹</div>
+    <div class="rv-navbtn">›</div>
+    <div class="rv-navbtn">⟳</div>
+    <div class="rv-navbtn">&lt;/&gt;</div>
+    <div class="rv-url" id="sh-url">https://shop.example.com/search?q=earbuds</div>
+    <div class="rv-tbtn">Go</div>
+    <div class="rv-tbtn opt">Auto</div>
+    <div class="rv-tbtn opt is-on">Proxy</div>
+    <div class="rv-tbtn opt">Desktop</div>
+    <div class="rv-tbtn opt">Embedded</div>
+  </div>
+
+  <div class="rv-body">
+    <!-- LEFT: the Repeater surface -->
+    <div class="rv-view" id="sh-view">
+      <div class="rs-view">
+        <div class="rs-panes">
+
+          <!-- request -->
+          <div class="rs-panel">
+            <div class="rs-phead">
+              <span class="rs-ptitle">Request</span>
+              <span class="rs-tag">editable</span>
+            </div>
+            <div class="rs-code">
+              <span class="rs-ln"><span class="rs-mth">POST</span><span class="rs-url">/api/v2/search</span> <span class="rs-p">HTTP/1.1</span></span>
+              <span class="rs-ln"><span class="rs-hk">host:</span> <span class="rs-hv">shop.example.com</span></span>
+              <span class="rs-ln"><span class="rs-hk">authorization:</span> <span class="rs-hv">Bearer eyJhbGciOiJIUzI1…</span></span>
+              <span class="rs-ln"><span class="rs-hk">content-type:</span> <span class="rs-hv">application/json</span></span>
+              <hr class="rs-rule" />
+              <span class="rs-ln"><span class="rs-p">{</span></span>
+              <span class="rs-ln rs-ind"><span class="rs-k">"q"</span><span class="rs-p">:</span> <span class="rs-s">"earbuds"</span><span class="rs-p">,</span></span>
+              <span class="rs-ln rs-ind"><span class="rs-k">"page"</span><span class="rs-p">:</span> <span class="rs-n">1</span><span class="rs-p">,</span></span>
+              <span class="rs-ln rs-ind rs-editline" id="rs-editline"><span class="rs-k">"limit"</span><span class="rs-p">:</span> <span class="rs-val"><span class="rs-old" id="rs-old">20<i class="rs-strike" id="rs-strike"></i></span><span class="rs-new" id="rs-new"></span><span class="rs-caret" id="rs-caret"></span></span></span>
+              <span class="rs-ln"><span class="rs-p">}</span></span>
+            </div>
+            <div class="rs-foot">
+              <span class="rs-send" id="rs-send">Send <kbd>⌘↵</kbd></span>
+              <span class="rs-hint">replays with session cookies</span>
+            </div>
+          </div>
+
+          <!-- response -->
+          <div class="rs-panel">
+            <div class="rs-bar" id="rs-bar"></div>
+            <div class="rs-phead">
+              <span class="rs-ptitle">Response</span>
+              <span class="rs-tag ok" id="rs-pill">cached</span>
+            </div>
+            <div class="rs-statusline">
+              <span class="rs-200">200 OK</span>
+              <span class="rs-sep">·</span>
+              <span class="rs-metric" id="rs-ms">84ms</span>
+              <span class="rs-sep">·</span>
+              <span class="rs-metric" id="rs-kb">12.4 KB</span>
+            </div>
+            <div class="rs-code" id="rs-resbody">
+              <span class="rs-ln"><span class="rs-p">{</span></span>
+              <span class="rs-ln rs-ind"><span class="rs-k">"ok"</span><span class="rs-p">:</span> <span class="rs-b">true</span><span class="rs-p">,</span></span>
+              <span class="rs-ln rs-ind"><span class="rs-k">"count"</span><span class="rs-p">:</span> <span class="rs-n" id="rs-count">20</span><span class="rs-p">,</span></span>
+              <span class="rs-ln rs-ind"><span class="rs-k">"items"</span><span class="rs-p">: [</span></span>
+              <span class="rs-ln rs-ind2"><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_8841"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2"><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_8842"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2"><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_9013"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2" data-extra><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_9114"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2" data-extra><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_9210"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2" data-extra><span class="rs-p">{</span> <span class="rs-k">"id"</span><span class="rs-p">:</span><span class="rs-s">"sku_9311"</span> <span class="rs-p">},</span></span>
+              <span class="rs-ln rs-ind2 rs-more" id="rs-more">… 17 more</span>
+              <span class="rs-ln rs-ind"><span class="rs-p">]</span></span>
+              <span class="rs-ln"><span class="rs-p">}</span></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- diff strip -->
+        <div class="rs-diff" id="rs-diff">
+          <div class="rs-difft">Diff vs send #07</div>
+          <div class="rs-dl hd" data-dl>@@ request body</div>
+          <div class="rs-dl rm" data-dl>− "limit": <b>20</b></div>
+          <div class="rs-dl ad" data-dl>+ "limit": <b>500</b></div>
+          <div class="rs-dl hd" data-dl>@@ response</div>
+          <div class="rs-dl rm" data-dl>− <b>20</b> items · 84ms · 12.4 KB</div>
+          <div class="rs-dl ad" data-dl>+ <b>500</b> items · 341ms · 210 KB</div>
+        </div>
+      </div>
+
+      <div class="rv-flash" id="sh-flash"><span class="tag" id="sh-flashtag">AI type</span></div>
+      <svg class="rv-cursor" id="sh-cursor" viewBox="0 0 24 24">
+        <path d="M5 3l14 8-6 1.5L10 20 5 3z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      <button class="rv-replay" id="sh-replay">↻ Replay</button>
+    </div>
+
+    <!-- RIGHT: chat panel -->
+    <div class="rv-chat">
+      <div class="rv-chathead">
+        <span class="rv-agent"><span class="av">C</span> Claude Code <span class="on"></span> ▾</span>
+        <span class="rv-models">no models yet ▾</span>
+        <span class="rv-ready">ready</span>
+      </div>
+      <div class="rv-chipbar">
+        <span class="rv-chip ok">Auto-approve</span>
+        <span class="rv-chip">History (2)</span>
+        <span class="rv-chip">+ New</span>
+      </div>
+      <div class="rv-msgs" id="sh-msgs"></div>
+      <div class="rv-compose">
+        <div class="rv-input">Type a message…</div>
+        <div class="rv-send">Send</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rv-status" id="sh-status">
+    <span><b>Traffic</b> <span class="n" id="sh-traffic">44</span></span>
+    <span><b>Console</b></span>
+    <span><b>Exceptions</b></span>
+    <span><b>WebSocket</b></span>
+    <span><b>Repeater</b> <span class="n is-on" id="sh-rep">8</span></span>
+    <span><b>Storage</b></span>
+    <span><b>History</b> <span class="n">281</span></span>
+    <span><b>Workflows</b> <span class="n">1</span></span>
+  </div>
+</div>
+<!-- ===== COPY TO HERE ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* Shell helper API. Copy this IIFE too and rename `RV` to your slug if you like.
+   RV.cursorTo(el, dur)      glide the ghost cursor to an element's centre
+   RV.flash(el, kind, label) action flash box (click|hover|type|navigate|extract)
+   RV.press()                cursor press dip
+   RV.type(el, str, cps)     per-character typing into an element (returns timeline)
+   RV.role(txt) / RV.text()  append a chat role label / a text node
+   RV.group(tools)           append a WorkGroup disclosure + its tool rows
+   RV.setTool(i, state, res) drive one tool row: 'run' | 'done'
+   RV.collapse(g)            fold the group back to "tools N · thoughts N · show more"
+   All positions are measured against .rv-view, so the cursor never escapes it. */
+(function () {
+  var view = document.getElementById('sh-view');
+  var cursor = document.getElementById('sh-cursor');
+  var flash = document.getElementById('sh-flash');
+  var flashtag = document.getElementById('sh-flashtag');
+  var msgs = document.getElementById('sh-msgs');
+  if (!view || !cursor || !flash || !msgs) return;
+
+  function rect(el) {
+    var v = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height };
+  }
+  var RV = {
+    cursorTo: function (el, dur) {
+      var r = rect(el);
+      return gsap.to(cursor, { opacity: 1, left: r.x + r.w / 2 - 3, top: r.y + r.h / 2 - 2,
+        duration: dur || 0.85, ease: 'power2.inOut' });
+    },
+    press: function () {
+      return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
+    },
+    flash: function (el, kind, label) {
+      var r = rect(el);
+      flash.className = 'rv-flash ' + (kind || 'click');
+      flashtag.textContent = label || 'AI click';
+      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
+      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
+                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+    },
+    type: function (el, str, cps) {
+      var tl = gsap.timeline(), per = 1 / (cps || 22);
+      tl.call(function () { el.textContent = ''; });
+      for (var i = 0; i < str.length; i++) {
+        (function (c) { tl.call(function () { el.textContent += c; }, null, '+=' + per); })(str[i]);
+      }
+      return tl;
+    },
+    role: function (txt) {
+      var d = document.createElement('div'); d.className = 'rv-role'; d.textContent = txt;
+      msgs.appendChild(d); return d;
+    },
+    text: function (html) {
+      var d = document.createElement('div'); d.className = 'rv-text'; if (html) d.innerHTML = html;
+      msgs.appendChild(d); return d;
+    },
+    group: function (tools) {
+      var wrap = document.createElement('div');
+      var head = document.createElement('span');
+      head.className = 'rv-group';
+      head.innerHTML = '<span>▾</span><span class="sum">work</span><span class="dim">· hide</span>';
+      var body = document.createElement('div');
+      body.className = 'rv-groupbody';
+      tools.forEach(function (t) {
+        var row = document.createElement('div');
+        row.className = 'rv-tool';
+        row.innerHTML = '<span class="nm">' + t + '</span><span class="st">·</span>';
+        body.appendChild(row);
+      });
+      wrap.appendChild(head); wrap.appendChild(body); msgs.appendChild(wrap);
+      wrap._head = head; wrap._body = body;
+      return wrap;
+    },
+    setTool: function (g, i, state, result) {
+      var row = g._body.children[i]; if (!row) return;
+      row.className = 'rv-tool is-' + state;
+      row.querySelector('.st').textContent = state === 'done' ? (result || '✓') : '…';
+    },
+    collapse: function (g, tools, thoughts) {
+      var sum = [tools ? 'tools ' + tools : null, thoughts ? 'thoughts ' + thoughts : null]
+        .filter(Boolean).join(' · ') || 'work';
+      return gsap.timeline()
+        .to(g._body, { height: 0, opacity: 0, marginTop: 0, duration: .35, ease: 'power2.inOut',
+          onComplete: function () { g._body.style.display = 'none'; } })
+        .call(function () {
+          g._head.innerHTML = '<span>▸</span><span class="sum">' + sum + '</span><span class="dim">· show more</span>';
+        });
+    },
+    reset: function () {
+      msgs.innerHTML = '';
+      gsap.set(cursor, { opacity: 0, left: 30, top: 320, scale: 1 });
+      gsap.set(flash, { opacity: 0 });
+    }
+  };
+  window.RV = RV;
+
+  /* ======================================================================
+     BLOCK TIMELINE (slug: repeater-send)
+     Re-skin of landing-kit/repeater-send.html. Same creative idea + beats:
+       edit the limit → resend → watch the response + diff move.
+     Beats: cursor to the JSON body line → type flash, strike 20, type 500 →
+       cursor to Send → click flash + press → response sweep, metrics climb,
+       payload grows → diff strip staggers in → history/status roll forward.
+     ChatPanel narrates the same tool run in parallel.
+     ====================================================================== */
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var $ = function (id) { return document.getElementById(id); };
+  var editline = $('rs-editline'), oldVal = $('rs-old'), strike = $('rs-strike'),
+      newVal = $('rs-new'), caret = $('rs-caret'), sendBtn = $('rs-send'),
+      bar = $('rs-bar'), pill = $('rs-pill'), msEl = $('rs-ms'), kbEl = $('rs-kb'),
+      countEl = $('rs-count'), moreEl = $('rs-more'), resBody = $('rs-resbody'),
+      diffBox = $('rs-diff'), repN = $('sh-rep');
+  var extraRows = resBody ? resBody.querySelectorAll('[data-extra]') : [];
+  var diffLines = diffBox ? diffBox.querySelectorAll('[data-dl]') : [];
+
+  var BEFORE = { ms: 84, kb: 12.4, count: 20, more: 17 };
+  var AFTER  = { ms: 341, kb: 210, count: 500, more: 494 };
+  var nums = { ms: BEFORE.ms, kb: BEFORE.kb };
+  function paintNums() {
+    msEl.textContent = Math.round(nums.ms) + 'ms';
+    kbEl.textContent = (nums.kb >= 100 ? Math.round(nums.kb) : nums.kb.toFixed(1)) + ' KB';
+  }
+
+  function viewReset() {
+    nums.ms = BEFORE.ms; nums.kb = BEFORE.kb; paintNums();
+    countEl.textContent = String(BEFORE.count);
+    moreEl.textContent = '… ' + BEFORE.more + ' more';
+    newVal.textContent = '';
+    pill.textContent = 'cached'; pill.className = 'rs-tag ok';
+    if (repN) repN.textContent = '8';
+    gsap.set(strike, { scaleX: 0 });
+    gsap.set(oldVal, { opacity: 1 });
+    gsap.set(newVal, { opacity: 0 });
+    gsap.set(caret, { opacity: 0 });
+    gsap.set(editline, { backgroundColor: 'rgba(0,0,0,0)' });
+    gsap.set(sendBtn, { scale: 1 });
+    gsap.set(bar, { scaleX: 0, opacity: 0 });
+    gsap.set(resBody, { opacity: 1 });
+    gsap.set(msEl, { color: '' }); gsap.set(kbEl, { color: '' });
+    gsap.set(extraRows, { height: 0, opacity: 0, overflow: 'hidden' });
+    gsap.set(diffLines, { opacity: 0, x: -8 });
+  }
+
+  function build() {
+    RV.reset();
+    viewReset();
+    var tl = gsap.timeline({ repeat: -1, repeatDelay: 1.4, onRepeat: function () { RV.reset(); viewReset(); } });
+
+    /* chat: the ask */
+    RV.role('user');
+    var u = RV.text('');
+    tl.add(RV.type(u, 'Bump the limit to 500 and resend that search.', 30));
+
+    /* chat: assistant opens a work group */
+    var g;
+    tl.call(function () {
+      RV.role('assistant');
+      g = RV.group(['get_request #07', 'edit body · limit', 'repeater_send', 'list_requests']);
+      RV.setTool(g, 0, 'done', '1.2 KB');
+      RV.setTool(g, 1, 'run');
+    });
+
+    /* 1 — cursor to the JSON body line, type flash, strike 20, type 500 */
+    tl.add(RV.cursorTo(editline, 0.85), '+=0.1');
+    tl.add(RV.flash(editline, 'type', 'AI type'), '-=0.1');
+    tl.to(editline, { backgroundColor: 'var(--accent-soft)', duration: 0.2 }, '<')
+      .to(caret, { opacity: 1, duration: 0.12 }, '<')
+      .to(strike, { scaleX: 1, duration: 0.3, ease: 'power2.out' }, '<+0.15')
+      .to(oldVal, { opacity: 0.5, duration: 0.3 }, '<+0.1')
+      .set(newVal, { opacity: 1 });
+    ['5', '50', '500'].forEach(function (frag, k) {
+      tl.call(function () { newVal.textContent = ' ' + frag; }, null, k === 0 ? '+=0.05' : '+=0.14');
+    });
+    tl.to(caret, { opacity: 0, duration: 0.15 }, '+=0.1')
+      .to(editline, { backgroundColor: 'rgba(0,0,0,0)', duration: 0.35 }, '<');
+    tl.call(function () { RV.setTool(g, 1, 'done', 'ok'); RV.setTool(g, 2, 'run'); });
+
+    /* 2 — cursor to Send, click flash + press */
+    tl.add(RV.cursorTo(sendBtn, 0.7));
+    tl.add(RV.flash(sendBtn, 'click', 'AI click'), '-=0.05');
+    tl.add(RV.press(), '<');
+    tl.to(sendBtn, { scale: 0.95, duration: 0.09, ease: 'power2.in' }, '<')
+      .to(sendBtn, { scale: 1, duration: 0.28, ease: 'back.out(3)' });
+
+    /* 3 — response goes busy: sweep bar, dim body */
+    tl.call(function () { pill.textContent = 'sending…'; pill.className = 'rs-tag busy'; })
+      .to(resBody, { opacity: 0.3, duration: 0.22 }, '<')
+      .fromTo(bar, { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.85, ease: 'power1.inOut' }, '<')
+      .to(bar, { opacity: 0, duration: 0.3 });
+
+    /* 4 — metrics climb, payload grows, count updates */
+    tl.call(function () { pill.textContent = 'live · replayed'; pill.className = 'rs-tag ok'; })
+      .to(resBody, { opacity: 1, duration: 0.3 }, '<')
+      .to(nums, { ms: AFTER.ms, kb: AFTER.kb, duration: 1.0, ease: 'power2.out', onUpdate: paintNums }, '<')
+      .call(function () { countEl.textContent = String(AFTER.count); }, null, '<+0.1')
+      .fromTo(countEl, { opacity: 0.25 }, { opacity: 1, duration: 0.3 }, '<')
+      .to(extraRows, { height: 'auto', opacity: 1, duration: 0.32, ease: 'power2.out', stagger: 0.09 }, '<+0.05')
+      .call(function () { moreEl.textContent = '… ' + AFTER.more + ' more'; })
+      .call(function () { RV.setTool(g, 2, 'done', '200'); RV.setTool(g, 3, 'run'); });
+
+    /* 5 — diff strip staggers in, list refreshes */
+    tl.to(diffLines, { opacity: 1, x: 0, duration: 0.3, ease: 'power2.out', stagger: 0.07 }, '+=0.1')
+      .call(function () { if (repN) repN.textContent = '9'; }, null, '<+0.2')
+      .call(function () { RV.setTool(g, 3, 'done', '9'); });
+
+    /* 6 — fold the work, print the answer */
+    tl.call(function () { RV.collapse(g, 4, 1); }, null, '+=0.3');
+    tl.call(function () {
+      RV.text('Done — <code>limit: 500</code> returned <code>500</code> items in 341ms (was 20 · 84ms). Diff saved to Repeater #08.');
+    }, null, '+=0.5');
+
+    /* 7 — settle */
+    tl.to(cursor, { opacity: 0, duration: 0.5 }, '+=0.8');
+    return tl;
+  }
+
+  function paintStatic() {
+    RV.reset();
+    viewReset();
+    /* freeze on the resolved end-state */
+    nums.ms = AFTER.ms; nums.kb = AFTER.kb; paintNums();
+    countEl.textContent = String(AFTER.count);
+    moreEl.textContent = '… ' + AFTER.more + ' more';
+    newVal.textContent = ' 500';
+    pill.textContent = 'live · replayed'; pill.className = 'rs-tag ok';
+    if (repN) repN.textContent = '9';
+    gsap.set(strike, { scaleX: 1 });
+    gsap.set(oldVal, { opacity: 0.5 });
+    gsap.set(newVal, { opacity: 1 });
+    gsap.set(extraRows, { height: 'auto', opacity: 1, overflow: 'visible' });
+    gsap.set(diffLines, { opacity: 1, x: 0 });
+    RV.role('user'); RV.text('Bump the limit to 500 and resend that search.');
+    RV.role('assistant');
+    var g = RV.group(['get_request #07', 'edit body · limit', 'repeater_send', 'list_requests']);
+    g._body.style.display = 'none';
+    g._head.innerHTML = '<span>▸</span><span class="sum">tools 4 · thoughts 1</span><span class="dim">· show more</span>';
+    RV.text('Done — <code>limit: 500</code> returned <code>500</code> items in 341ms (was 20 · 84ms). Diff saved to Repeater #08.');
+  }
+
+  var tl = null;
+  window.addEventListener('load', function () {
+    if (reduced || !window.gsap) { paintStatic(); return; }
+    setTimeout(function () { tl = build(); }, 120);
+  });
+  var rp = document.getElementById('sh-replay');
+  if (rp) rp.addEventListener('click', function () {
+    if (reduced || !window.gsap) { paintStatic(); return; }
+    if (tl) { tl.kill(); }
+    tl = build();
+  });
+})();
+</script>
+</body>
+</html>

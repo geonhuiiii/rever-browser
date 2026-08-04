@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Crypto chain — transform pipeline — rever-browser</title>
+<style>
+/* ============================================================================
+   CANONICAL APP SHELL — copy this whole <style> + the .rv-app markup verbatim.
+   Tokens are lifted from src/renderer/src/styles.css. Light is the default
+   (matches the real app screenshot); [data-theme='dark'] is the override.
+   RULE: never put a colored accent strip / left-border on a card. Cards are
+   plain --surface on --border. Color appears only in action flashes, method
+   badges, status dots and severity text.
+   ========================================================================= */
+:root, :root[data-theme='light'] {
+  --bg: #fbfbfc; --bg-bar: #eef0f2; --surface: #ffffff; --surface-2: #f0f1f3;
+  --surface-3: #e6e8ea; --border: #e2e4e8; --border-2: #d3d6db; --border-3: #bcc0c6;
+  --text: #1b1d21; --text-2: #3f444b; --text-dim: #6a7078; --viewport-bg: #ffffff;
+  --code-bg: #f3f4f6; --inline-code-bg: #eceef1; --link: #2f6fed; --accent: #2f6fed;
+  --accent-soft: rgba(47,111,237,0.14); --accent-border: rgba(47,111,237,0.35);
+  --shadow: rgba(0,0,0,0.16);
+  --chip-ok-bg:#e7f6e9; --chip-ok-border:#bfe3c4; --chip-ok-text:#1f7a34;
+  --chip-warn-bg:#fbf3e2; --chip-warn-border:#e6d5a8; --chip-warn-text:#8a6a1f;
+  --chip-info-bg:#e8f0fb; --chip-info-border:#c3d6ef; --chip-info-text:#2f5fa8;
+  --chip-danger-bg:#fbeaea; --chip-danger-border:#eabcbc; --chip-danger-text:#a52f2f;
+  /* agent action colours (main/ai-events.ts kinds) */
+  --act-click:#e5484d; --act-hover:#d9a300; --act-type:#2f6fed; --act-navigate:#8b5cf6;
+  --act-scroll:#1f9d55; --act-evaluate:#c2691a; --act-extract:#0f9b8e;
+  --get:#1f9d55; --post:#c2691a;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc;
+  --text-dim:#999; --viewport-bg:#000; --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d;
+  --link:#7ab7ff; --accent:#4a8fff; --accent-soft:rgba(80,140,255,0.18);
+  --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.4);
+  --chip-ok-bg:#1f2a1f; --chip-ok-border:#2a4a2a; --chip-ok-text:#aea;
+  --chip-warn-bg:#2a261f; --chip-warn-border:#4a402a; --chip-warn-text:#eca;
+  --chip-info-bg:#1f242a; --chip-info-border:#2a3a4a; --chip-info-text:#ace;
+  --chip-danger-bg:#3a1f1f; --chip-danger-border:#5a2a2a; --chip-danger-text:#eaa;
+  --act-click:#ff3b30; --act-hover:#ffd60a; --act-type:#0a84ff; --act-navigate:#a855f7;
+  --act-scroll:#30d158; --act-evaluate:#ff9f0a; --act-extract:#2dd4bf;
+  --get:#30d158; --post:#ff9f0a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: 18px; overflow-x: hidden;
+}
+
+/* ── window frame ─────────────────────────────────────────────────────── */
+.rv-app {
+  max-width: 1180px; margin: 0 auto; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 50px var(--shadow); display: flex; flex-direction: column;
+}
+/* ── titlebar: traffic lights + tab strip ─────────────────────────────── */
+.rv-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-lights { display: flex; gap: 6px; flex: none; }
+.rv-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.rv-lights i:nth-child(1){background:#ff5f57} .rv-lights i:nth-child(2){background:#febc2e}
+.rv-lights i:nth-child(3){background:#28c840}
+.rv-tab {
+  display: flex; align-items: center; gap: 7px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tab .fav { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-3); flex: none; }
+.rv-newtab {
+  width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: default; flex: none;
+}
+.rv-themebtn {
+  margin-left: auto; width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-border);
+}
+/* ── toolbar ──────────────────────────────────────────────────────────── */
+.rv-toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-navbtn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); font-size: 12px;
+  display: grid; place-items: center; flex: none;
+}
+.rv-url {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; font: 12px/1.3 var(--sans); color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 11.5px; font-weight: 500; flex: none;
+}
+.rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* ── body split: viewport | chat ──────────────────────────────────────── */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+.rv-view {
+  position: relative; background: var(--viewport-bg); overflow: hidden;
+  height: 470px; border-right: 1px solid var(--border);
+}
+/* ── chat panel ───────────────────────────────────────────────────────── */
+.rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+.rv-chathead {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px;
+}
+.rv-agent {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2);
+}
+.rv-agent .av {
+  width: 15px; height: 15px; border-radius: 4px; background: var(--accent-soft);
+  color: var(--accent); font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.rv-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); }
+.rv-models {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text-dim); font-size: 11px;
+}
+.rv-ready { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.rv-chipbar { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.rv-chip {
+  font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+}
+.rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
+
+.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-role { font-size: 10.5px; color: var(--text-dim); }
+.rv-text { font-size: 12px; color: var(--text); }
+.rv-text code {
+  font: 11px var(--mono); background: var(--inline-code-bg);
+  padding: 1px 4px; border-radius: 4px;
+}
+/* the real WorkGroup disclosure — 11px, transparent, 1px border, radius 12 */
+.rv-group {
+  display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; font-size: 11px;
+  background: transparent; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-dim); align-self: flex-start; white-space: nowrap;
+}
+.rv-group .dim { opacity: .5; }
+.rv-groupbody { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 5px; }
+.rv-tool { font: 10.5px/1.45 var(--mono); color: var(--text-dim); display: flex; gap: 6px; align-items: baseline; }
+.rv-tool .nm { color: var(--text-2); }
+.rv-tool .st { margin-left: auto; flex: none; }
+.rv-tool.is-run .st { color: var(--chip-warn-text); }
+.rv-tool.is-done .st { color: var(--chip-ok-text); }
+.rv-caret { display: inline-block; width: 1.5px; height: 12px; background: var(--accent); vertical-align: -2px; }
+.rv-compose { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--border); }
+.rv-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); padding: 6px 10px; font-size: 11.5px; color: var(--text-dim);
+}
+.rv-send {
+  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 13px; font-size: 11.5px; font-weight: 600; flex: none;
+}
+/* ── status bar ───────────────────────────────────────────────────────── */
+.rv-status {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px; overflow-x: auto;
+  background: var(--bg-bar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); scrollbar-width: none;
+}
+.rv-status::-webkit-scrollbar { display: none; }
+.rv-status b { font-weight: 600; color: var(--text-2); }
+.rv-status .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rv-status .is-on { color: var(--accent); }
+
+/* ── in-viewport overlay: ghost cursor + action flash ─────────────────── */
+.rv-cursor { position: absolute; width: 20px; height: 20px; z-index: 30; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); opacity: 0; }
+.rv-flash { position: absolute; z-index: 25; pointer-events: none; opacity: 0; border-radius: 6px;
+  border: 2px solid var(--act-click); box-shadow: 0 0 0 4px rgba(229,72,77,.16); }
+.rv-flash .tag { position: absolute; top: -20px; left: -2px; font: 600 10px/1 var(--sans);
+  color: #fff; background: var(--act-click); padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.rv-flash.hover { border-color: var(--act-hover); box-shadow: 0 0 0 4px rgba(217,163,0,.16); }
+.rv-flash.hover .tag { background: var(--act-hover); color: #221c00; }
+.rv-flash.type { border-color: var(--act-type); box-shadow: 0 0 0 4px rgba(47,111,237,.16); }
+.rv-flash.type .tag { background: var(--act-type); }
+.rv-flash.navigate { border-color: var(--act-navigate); box-shadow: 0 0 0 4px rgba(139,92,246,.16); }
+.rv-flash.navigate .tag { background: var(--act-navigate); }
+.rv-flash.extract { border-color: var(--act-extract); box-shadow: 0 0 0 4px rgba(15,155,142,.16); }
+.rv-flash.extract .tag { background: var(--act-extract); }
+
+/* ── generic page furniture for the fake site inside .rv-view ─────────── */
+.rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.rv-badge { font: 600 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.rv-badge.get { color: var(--get); background: rgba(31,157,85,.12); }
+.rv-badge.post { color: var(--post); background: rgba(194,105,26,.12); }
+
+.rv-replay {
+  position: absolute; right: 10px; bottom: 10px; z-index: 40;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 5px 11px; font-size: 11px; cursor: pointer;
+}
+.rv-replay:hover { color: var(--text); border-color: var(--border-3); }
+
+/* ── responsive: stack chat under the viewport ────────────────────────── */
+@media (max-width: 860px) {
+  body { padding: 10px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rv-chat { max-height: 340px; }
+  .rv-tbtn.opt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-cursor, .rv-flash { display: none !important; }
+}
+</style>
+
+<!-- ===== block-namespaced styles (slug: crypto-chain) ===================== -->
+<style>
+/* The crypto transform pipeline, rendered as the page inside .rv-view.
+   Re-skinned to the light app tokens: stage boxes are plain --surface on
+   --border (NO colored stage strips). Colour appears only on: the arrow
+   pulse (--act-extract) as a value passes a hop, the receiving box's brief
+   flash, and the final MATCH stamp (chip-ok). Everything else is neutral mono. */
+.cc-page {
+  position: absolute; inset: 0; overflow: hidden;
+  padding: clamp(12px, 2.4vw, 18px);
+  display: flex; flex-direction: column; gap: 12px;
+  background: var(--viewport-bg);
+}
+.cc-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cc-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 500 11px/1 var(--mono); letter-spacing: .04em;
+  color: var(--text-2);
+}
+.cc-eyebrow i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--act-extract);
+  box-shadow: 0 0 0 3px rgba(15,155,142,.14); font-style: normal;
+}
+.cc-eyebrow b { color: var(--text); font-weight: 600; }
+.cc-tag {
+  margin-left: auto; font: 500 10px/1 var(--mono); color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px; padding: 4px 9px;
+  white-space: nowrap;
+}
+
+/* wide pipeline scrolls inside its own container — the body never scrolls */
+.cc-scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; padding-bottom: 2px; }
+.cc-scroll::-webkit-scrollbar { height: 6px; }
+.cc-scroll::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+.cc-pipe { display: flex; align-items: stretch; gap: 0; }
+.cc-stage { flex: 1 0 96px; min-width: 0; display: flex; }
+.cc-box {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: 9px;
+  background: var(--surface); will-change: transform;
+}
+.cc-op {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font: 500 10.5px/1 var(--mono); letter-spacing: .02em;
+  color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cc-op i {
+  flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--border-3); font-style: normal;
+}
+.cc-val {
+  flex: 1 1 auto; padding: 9px 8px; min-height: 3.4em;
+  font: 11px/1.5 var(--mono); color: var(--text); word-break: break-all;
+}
+.cc-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 5px 8px; border-top: 1px solid var(--border);
+  font: 8.6px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-dim); white-space: nowrap; overflow: hidden;
+}
+.cc-meta u {
+  text-decoration: none; flex: 0 0 auto; border-radius: 3px; padding: 1px 4px;
+  border: 1px solid var(--border); color: var(--text-dim);
+}
+.cc-meta u.one { color: var(--text-2); }
+
+/* arrows: neutral --border-3 lines; the travelling dot is the only colour */
+.cc-arrow { flex: 0 0 auto; width: clamp(30px, 4vw, 46px); display: flex; align-items: center; justify-content: center; }
+.cc-arrow svg { width: 100%; height: 24px; overflow: visible; display: block; }
+.cc-line { stroke: var(--border-3); stroke-width: 1.6; fill: none; stroke-linecap: round; }
+.cc-headF, .cc-headB { stroke: var(--text-dim); stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.cc-dot { fill: var(--act-extract); }
+
+/* chain spec — plain card, neutral tokens (no colour) */
+.cc-chainRow {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+  padding: 8px 11px;
+}
+.cc-prompt { flex: 0 0 auto; font: 500 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim); }
+.cc-chain { font: 12px/1.6 var(--mono); color: var(--text-dim); word-break: break-word; min-width: 0; }
+.cc-chain b { font-weight: 600; color: var(--text); }
+.cc-tok {
+  display: inline-block; border-radius: 4px; padding: 1px 3px;
+  color: var(--text-dim); background: transparent; box-shadow: inset 0 0 0 1px transparent;
+}
+.cc-tok.is-lit {
+  color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-2);
+}
+.cc-revline { font: 11px/1.6 var(--mono); color: var(--text-dim); word-break: break-word; }
+.cc-revline em { font-style: normal; color: var(--text-2); }
+.cc-revline s { text-decoration: line-through; color: var(--text-dim); opacity: .8; }
+
+.cc-conn { width: 1px; height: 16px; margin: 0 auto; background: var(--border-2); transform-origin: 50% 0%; }
+
+/* verify — plain card; the MATCH stamp is the one status colour (chip-ok) */
+.cc-verify {
+  display: flex; align-items: center; gap: clamp(10px, 2.2vw, 16px); flex-wrap: wrap;
+  border: 1px solid var(--border); border-radius: 9px; background: var(--surface); padding: 10px 12px;
+}
+.cc-vlabel {
+  flex: 0 0 auto; font: 500 10px/1 var(--mono); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--text-dim); border-right: 1px solid var(--border); padding-right: clamp(10px, 2.2vw, 16px);
+}
+.cc-vrows { flex: 1 1 180px; min-width: 0; display: grid; gap: 4px; }
+.cc-vrow { display: flex; align-items: baseline; gap: 10px; font: 11.5px/1.3 var(--mono); min-width: 0; }
+.cc-vk { flex: 0 0 auto; width: 62px; color: var(--text-dim); font-size: .86em; letter-spacing: .03em; }
+.cc-vv { color: var(--text); word-break: break-all; min-width: 0; min-height: 1.2em; }
+.cc-stamp {
+  flex: 0 0 auto; margin-left: auto;
+  font: 600 13px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--chip-ok-text); background: var(--chip-ok-bg);
+  border: 1px solid var(--chip-ok-border); border-radius: 6px; padding: 5px 11px;
+  will-change: transform;
+}
+
+@media (max-width: 460px) {
+  .cc-vlabel { border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 8px; width: 100%; }
+  .cc-vk { width: 56px; }
+  .cc-stamp { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== COPY FROM HERE ===================================================== -->
+<div class="rv-app">
+  <div class="rv-titlebar">
+    <div class="rv-lights"><i></i><i></i><i></i></div>
+    <div class="rv-tab"><span class="fav"></span><span>Checkout · Acme Store</span></div>
+    <div class="rv-newtab">+</div>
+    <div class="rv-themebtn">☀</div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-navbtn">‹</div>
+    <div class="rv-navbtn">›</div>
+    <div class="rv-navbtn">⟳</div>
+    <div class="rv-navbtn">&lt;/&gt;</div>
+    <div class="rv-url" id="sh-url">https://shop.acme.dev/checkout</div>
+    <div class="rv-tbtn">Go</div>
+    <div class="rv-tbtn opt">Auto</div>
+    <div class="rv-tbtn opt is-on">Proxy</div>
+    <div class="rv-tbtn opt">Desktop</div>
+    <div class="rv-tbtn opt">Embedded</div>
+  </div>
+
+  <div class="rv-body">
+    <!-- LEFT: the driven page — a crypto transform pipeline -->
+    <div class="rv-view" id="sh-view">
+
+      <div class="cc-page">
+        <div class="cc-hd">
+          <span class="cc-eyebrow"><i></i> <b>crypto_chain</b> · transform pipeline</span>
+          <span class="cc-tag">4 stages · 1 call</span>
+        </div>
+
+        <div class="cc-scroll">
+          <div class="cc-pipe" id="cc-pipe">
+
+            <div class="cc-stage">
+              <div class="cc-box">
+                <div class="cc-op"><i></i> input</div>
+                <div class="cc-val"></div>
+                <div class="cc-meta"><span>raw credential</span></div>
+              </div>
+            </div>
+
+            <div class="cc-arrow">
+              <svg viewBox="0 0 48 24" aria-hidden="true">
+                <path class="cc-line" d="M4 12 H40" />
+                <path class="cc-headF" d="M34 6.5 L40 12 L34 17.5" />
+                <path class="cc-headB" d="M14 6.5 L8 12 L14 17.5" />
+                <circle class="cc-dot" cx="4" cy="12" r="2.6" />
+              </svg>
+            </div>
+
+            <div class="cc-stage">
+              <div class="cc-box">
+                <div class="cc-op"><i></i> base64</div>
+                <div class="cc-val"></div>
+                <div class="cc-meta"><span>+33% size</span><u>invertible</u></div>
+              </div>
+            </div>
+
+            <div class="cc-arrow">
+              <svg viewBox="0 0 48 24" aria-hidden="true">
+                <path class="cc-line" d="M4 12 H40" />
+                <path class="cc-headF" d="M34 6.5 L40 12 L34 17.5" />
+                <path class="cc-headB" d="M14 6.5 L8 12 L14 17.5" />
+                <circle class="cc-dot" cx="4" cy="12" r="2.6" />
+              </svg>
+            </div>
+
+            <div class="cc-stage">
+              <div class="cc-box">
+                <div class="cc-op"><i></i> url-encode</div>
+                <div class="cc-val"></div>
+                <div class="cc-meta"><span>query-safe</span><u>invertible</u></div>
+              </div>
+            </div>
+
+            <div class="cc-arrow">
+              <svg viewBox="0 0 48 24" aria-hidden="true">
+                <path class="cc-line" d="M4 12 H40" />
+                <path class="cc-headF" d="M34 6.5 L40 12 L34 17.5" />
+                <path class="cc-headB" d="M14 6.5 L8 12 L14 17.5" />
+                <circle class="cc-dot" cx="4" cy="12" r="2.6" />
+              </svg>
+            </div>
+
+            <div class="cc-stage">
+              <div class="cc-box">
+                <div class="cc-op"><i></i> hmac-sha256</div>
+                <div class="cc-val"></div>
+                <div class="cc-meta"><span>key=$SIGN_KEY</span><u class="one">one-way</u></div>
+              </div>
+            </div>
+
+            <div class="cc-arrow">
+              <svg viewBox="0 0 48 24" aria-hidden="true">
+                <path class="cc-line" d="M4 12 H40" />
+                <path class="cc-headF" d="M34 6.5 L40 12 L34 17.5" />
+                <path class="cc-headB" d="M14 6.5 L8 12 L14 17.5" />
+                <circle class="cc-dot" cx="4" cy="12" r="2.6" />
+              </svg>
+            </div>
+
+            <div class="cc-stage">
+              <div class="cc-box">
+                <div class="cc-op"><i></i> hex[0:16]</div>
+                <div class="cc-val"></div>
+                <div class="cc-meta"><span>16 chars</span><u class="one">one-way</u></div>
+              </div>
+            </div>
+
+          </div><!-- /pipe -->
+        </div><!-- /scroll -->
+
+        <div class="cc-chainRow">
+          <span class="cc-prompt">chain</span>
+          <code class="cc-chain"><b>crypto_chain</b>([<span class="cc-tok">"b64"</span>,&#8203;<span class="cc-tok">"urlenc"</span>,&#8203;<span class="cc-tok">"hmac:sha256"</span>,&#8203;<span class="cc-tok">"hex[0:16]"</span>])</code>
+        </div>
+
+        <p class="cc-revline" id="cc-revline">
+          invert &larr; <em>urldecode</em> &larr; <em>b64decode</em> &nbsp;·&nbsp; <s>hmac</s> and <s>slice</s> stop the walk back
+        </p>
+
+        <div class="cc-conn" id="cc-conn"></div>
+
+        <div class="cc-verify" id="cc-verify">
+          <div class="cc-vlabel">verify</div>
+          <div class="cc-vrows">
+            <div class="cc-vrow"><span class="cc-vk">target</span><span class="cc-vv">9f2c4ae17b3d5c81</span></div>
+            <div class="cc-vrow"><span class="cc-vk">computed</span><span class="cc-vv" id="cc-computed"></span></div>
+          </div>
+          <div class="cc-stamp" id="cc-stamp">match</div>
+        </div>
+      </div>
+
+      <div class="rv-flash" id="sh-flash"><span class="tag" id="sh-flashtag">AI click</span></div>
+      <svg class="rv-cursor" id="sh-cursor" viewBox="0 0 24 24">
+        <path d="M5 3l14 8-6 1.5L10 20 5 3z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      <button class="rv-replay" id="sh-replay">↻ Replay</button>
+    </div>
+
+    <!-- RIGHT: chat panel -->
+    <div class="rv-chat">
+      <div class="rv-chathead">
+        <span class="rv-agent"><span class="av">C</span> Claude Code <span class="on"></span> ▾</span>
+        <span class="rv-models">sonnet-4.5 ▾</span>
+        <span class="rv-ready">ready</span>
+      </div>
+      <div class="rv-chipbar">
+        <span class="rv-chip ok">Auto-approve</span>
+        <span class="rv-chip">History (2)</span>
+        <span class="rv-chip">+ New</span>
+      </div>
+      <div class="rv-msgs" id="sh-msgs"></div>
+      <div class="rv-compose">
+        <div class="rv-input">Type a message…</div>
+        <div class="rv-send">Send</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rv-status" id="sh-status">
+    <span><b>Traffic</b> <span class="n" id="sh-traffic">63</span></span>
+    <span><b>Console</b></span>
+    <span><b>Exceptions</b></span>
+    <span><b>WebSocket</b></span>
+    <span><b>Repeater</b></span>
+    <span><b>Storage</b></span>
+    <span><b>History</b> <span class="n">128</span></span>
+    <span><b>Workflows</b> <span class="n">1</span></span>
+  </div>
+</div>
+<!-- ===== COPY TO HERE ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* Shell helper API (copied verbatim from _shell.html). Drives the chat panel.
+   RV.role/text/group/setTool/collapse/reset + cursor/flash helpers. */
+(function () {
+  var view = document.getElementById('sh-view');
+  var cursor = document.getElementById('sh-cursor');
+  var flash = document.getElementById('sh-flash');
+  var flashtag = document.getElementById('sh-flashtag');
+  var msgs = document.getElementById('sh-msgs');
+  if (!view || !cursor || !flash || !msgs) return;
+
+  function rect(el) {
+    var v = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height };
+  }
+  var RV = {
+    cursorTo: function (el, dur) {
+      var r = rect(el);
+      return gsap.to(cursor, { opacity: 1, left: r.x + r.w / 2 - 3, top: r.y + r.h / 2 - 2,
+        duration: dur || 0.85, ease: 'power2.inOut' });
+    },
+    press: function () {
+      return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
+    },
+    flash: function (el, kind, label) {
+      var r = rect(el);
+      flash.className = 'rv-flash ' + (kind || 'click');
+      flashtag.textContent = label || 'AI click';
+      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
+      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
+                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+    },
+    type: function (el, str, cps) {
+      var tl = gsap.timeline(), per = 1 / (cps || 22);
+      tl.call(function () { el.textContent = ''; });
+      for (var i = 0; i < str.length; i++) {
+        (function (c) { tl.call(function () { el.textContent += c; }, null, '+=' + per); })(str[i]);
+      }
+      return tl;
+    },
+    role: function (txt) {
+      var d = document.createElement('div'); d.className = 'rv-role'; d.textContent = txt;
+      msgs.appendChild(d); return d;
+    },
+    text: function (html) {
+      var d = document.createElement('div'); d.className = 'rv-text'; if (html) d.innerHTML = html;
+      msgs.appendChild(d); return d;
+    },
+    group: function (tools) {
+      var wrap = document.createElement('div');
+      var head = document.createElement('span');
+      head.className = 'rv-group';
+      head.innerHTML = '<span>▾</span><span class="sum">work</span><span class="dim">· hide</span>';
+      var body = document.createElement('div');
+      body.className = 'rv-groupbody';
+      tools.forEach(function (t) {
+        var row = document.createElement('div');
+        row.className = 'rv-tool';
+        row.innerHTML = '<span class="nm">' + t + '</span><span class="st">·</span>';
+        body.appendChild(row);
+      });
+      wrap.appendChild(head); wrap.appendChild(body); msgs.appendChild(wrap);
+      wrap._head = head; wrap._body = body;
+      return wrap;
+    },
+    setTool: function (g, i, state, result) {
+      var row = g._body.children[i]; if (!row) return;
+      row.className = 'rv-tool is-' + state;
+      row.querySelector('.st').textContent = state === 'done' ? (result || '✓') : '…';
+    },
+    collapse: function (g, tools, thoughts) {
+      var sum = [tools ? 'tools ' + tools : null, thoughts ? 'thoughts ' + thoughts : null]
+        .filter(Boolean).join(' · ') || 'work';
+      return gsap.timeline()
+        .to(g._body, { height: 0, opacity: 0, marginTop: 0, duration: .35, ease: 'power2.inOut',
+          onComplete: function () { g._body.style.display = 'none'; } })
+        .call(function () {
+          g._head.innerHTML = '<span>▸</span><span class="sum">' + sum + '</span><span class="dim">· show more</span>';
+        });
+    },
+    reset: function () {
+      msgs.innerHTML = '';
+      gsap.set(cursor, { opacity: 0, left: 30, top: 320, scale: 1 });
+      gsap.set(flash, { opacity: 0 });
+    }
+  };
+  window.RV = RV;
+})();
+
+/* ---- crypto-chain block driver (pipeline + coordinated chat) ------------- */
+(function () {
+  'use strict';
+  var view = document.getElementById('sh-view');
+  if (!view || typeof window.gsap === 'undefined') return;
+  var gsap = window.gsap, RV = window.RV;
+
+  function all(sel) { return Array.prototype.slice.call(view.querySelectorAll(sel)); }
+
+  var boxes = all('.cc-box');
+  var vals  = all('.cc-val');
+  var arrows = all('.cc-arrow');
+  var lines = all('.cc-line');
+  var headsF = all('.cc-headF');
+  var headsB = all('.cc-headB');
+  var dots  = all('.cc-dot');
+  var toks  = all('.cc-tok');
+  var conn  = document.getElementById('cc-conn');
+  var computed = document.getElementById('cc-computed');
+  var stamp = document.getElementById('cc-stamp');
+  var revline = document.getElementById('cc-revline');
+  var replay = document.getElementById('sh-replay');
+
+  if (boxes.length !== 5 || vals.length !== 5 || arrows.length !== 4) return;
+  if (!conn || !computed || !stamp || !revline) return;
+
+  /* theme tokens (read once — shell theme is fixed by data-theme at load) */
+  var cs = getComputedStyle(document.documentElement);
+  function T(n) { return cs.getPropertyValue(n).trim(); }
+  function rgba(hex, a) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(function (c) { return c + c; }).join('');
+    var n = parseInt(hex, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  var C_BORDER  = T('--border');
+  var C_ARROW   = T('--border-3');
+  var C_DIM     = T('--text-dim');
+  var C_EXTRACT = T('--act-extract');
+  var C_OK      = T('--chip-ok-text');
+  var GLOW   = '0 0 0 1px ' + rgba(C_EXTRACT, 0.18) + ', 0 8px 22px -12px ' + rgba(C_EXTRACT, 0.55);
+  var NOGLOW = '0 0 0 0 ' + rgba(C_EXTRACT, 0) + ', 0 0 0 0 ' + rgba(C_EXTRACT, 0);
+  var CHARS  = 'ABCDEF0123456789abcdef%=:/+*&^!$';
+
+  var V = [
+    'admin:s3cr3t!',
+    'YWRtaW46czNjcjN0IQ==',
+    'YWRtaW46czNjcjN0IQ%3D%3D',
+    '9f2c4ae17b3d5c81a97e…4b2e17b',
+    '9f2c4ae17b3d5c81'
+  ];
+
+  /* dash setup for the connector arrows */
+  var LEN = [];
+  lines.forEach(function (ln, i) {
+    var l = 36;
+    try { if (ln.getTotalLength) l = ln.getTotalLength() || 36; } catch (e) { l = 36; }
+    LEN[i] = l;
+    ln.style.strokeDasharray = l + ' ' + l;
+  });
+
+  function pipeReset() {
+    vals.forEach(function (el) { el.textContent = ''; });
+    boxes.forEach(function (b) { gsap.set(b, { borderColor: C_BORDER, boxShadow: NOGLOW, opacity: 1, scale: 1 }); });
+    arrows.forEach(function (a) { gsap.set(a, { opacity: 1 }); });
+    lines.forEach(function (ln, i) { gsap.set(ln, { strokeDashoffset: LEN[i], stroke: C_ARROW, opacity: 1 }); });
+    headsF.forEach(function (h) { gsap.set(h, { opacity: 0, stroke: C_DIM }); });
+    headsB.forEach(function (h) { gsap.set(h, { opacity: 0, stroke: C_DIM }); });
+    dots.forEach(function (d) { gsap.set(d, { opacity: 0, attr: { cx: 4 } }); });
+    toks.forEach(function (t) { t.classList.remove('is-lit'); });
+    gsap.set(conn, { scaleY: 0, opacity: 1 });
+    computed.textContent = '';
+    gsap.set(stamp, { opacity: 0, scale: 1.5, rotate: -12 });
+    gsap.set(revline, { opacity: 0.35 });
+  }
+  function fullReset() { pipeReset(); if (RV) RV.reset(); }
+
+  /* per-character scramble morph: settled prefix + 5 rolling random chars */
+  function scrambleAt(tl, el, text, dur, at) {
+    var o = { p: 0 }, len = text.length;
+    tl.to(o, {
+      p: 1, duration: dur, ease: 'none',
+      onUpdate: function () {
+        var settled = Math.floor(o.p * len), s = text.slice(0, settled);
+        var win = Math.min(5, len - settled);
+        for (var k = 0; k < win; k++) s += CHARS.charAt((Math.random() * CHARS.length) | 0);
+        el.textContent = s;
+      },
+      onComplete: function () { el.textContent = text; }
+    }, at);
+  }
+  function flashAt(tl, i, at, hold) {
+    var b = boxes[i];
+    tl.to(b, { borderColor: C_EXTRACT, boxShadow: GLOW, duration: 0.16, ease: 'power2.out' }, at);
+    tl.to(b, { scale: 1.018, duration: 0.13, ease: 'power2.out' }, at);
+    tl.to(b, { scale: 1, duration: 0.34, ease: 'power2.out' }, at + 0.13);
+    if (!hold) tl.to(b, { borderColor: C_BORDER, boxShadow: NOGLOW, duration: 0.75, ease: 'power2.out' }, at + 0.55);
+  }
+  function drawAt(tl, i, at) {
+    tl.to(lines[i], { strokeDashoffset: 0, duration: 0.30, ease: 'power2.inOut' }, at);
+    tl.to(headsF[i], { opacity: 1, duration: 0.16, ease: 'power2.out' }, at + 0.22);
+  }
+  function pulseAt(tl, i, back, at) {
+    tl.set(dots[i], { attr: { cx: back ? 40 : 4 }, opacity: 0 }, at);
+    tl.to(dots[i], { opacity: 1, duration: 0.10 }, at);
+    tl.to(dots[i], { attr: { cx: back ? 4 : 40 }, duration: 0.42, ease: 'power2.inOut' }, at);
+    tl.to(lines[i], { stroke: C_EXTRACT, duration: 0.14 }, at);
+    tl.to(dots[i], { opacity: 0, duration: 0.14 }, at + 0.40);
+    tl.to(lines[i], { stroke: C_ARROW, duration: 0.45 }, at + 0.34);
+  }
+  function tokenAt(tl, i, at) {
+    tl.call(function () { if (toks[i]) toks[i].classList.add('is-lit'); }, null, at);
+  }
+
+  /* ---------- reduced motion: static end state ---------- */
+  function renderStatic() {
+    pipeReset();
+    vals.forEach(function (el, i) { el.textContent = V[i]; });
+    gsap.set(boxes[4], { borderColor: C_EXTRACT, boxShadow: GLOW });
+    lines.forEach(function (ln) { gsap.set(ln, { strokeDashoffset: 0, stroke: C_ARROW }); });
+    headsF.forEach(function (h) { gsap.set(h, { opacity: 1 }); });
+    headsB.forEach(function (h, i) { gsap.set(h, { opacity: i < 2 ? 0.5 : 0.12 }); });
+    toks.forEach(function (t) { t.classList.add('is-lit'); });
+    gsap.set(conn, { scaleY: 1 });
+    computed.textContent = V[4];
+    gsap.set(stamp, { opacity: 1, scale: 1, rotate: -5 });
+    gsap.set(revline, { opacity: 1 });
+    if (!RV) return;
+    RV.reset();
+    RV.role('user'); RV.text('Reverse the signed token on this checkout.');
+    RV.role('assistant');
+    var g = RV.group(['grep_scripts "hmac"', 'extract_context', 'crypto_chain']);
+    g._body.style.display = 'none';
+    g._head.innerHTML = '<span>▸</span><span class="sum">tools 3 · thoughts 1</span><span class="dim">· show more</span>';
+    RV.text('Signed by <code>crypto_chain([...])</code>. Reversed the two invertible steps; <code>hmac</code> + slice are one-way.');
+  }
+
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- master looping timeline (pipeline + chat) ---------- */
+  var HOP = 1.05;
+  function build() {
+    fullReset();
+    var tl = gsap.timeline({ repeat: -1, repeatDelay: 1.4, onRepeat: fullReset });
+    var chat = {};
+
+    /* chat lead-in */
+    tl.call(function () { RV.role('user'); chat.u = RV.text(''); });
+    tl.add(RV.type(chat.u, 'Reverse the signed token on this checkout.', 30), 0.15);
+    tl.call(function () {
+      RV.role('assistant');
+      chat.g = RV.group(['grep_scripts "hmac"', 'extract_context', 'crypto_chain']);
+      RV.setTool(chat.g, 0, 'run');
+    });
+
+    /* stage 0: raw credential lands */
+    var START = 2.0;
+    flashAt(tl, 0, START);
+    scrambleAt(tl, vals[0], V[0], 0.40, START + 0.06);
+    tl.call(function () { RV.setTool(chat.g, 0, 'done', '3 hits'); RV.setTool(chat.g, 1, 'run'); }, null, START + 0.5);
+
+    /* four forward hops */
+    var t = START + 0.78;
+    for (var i = 0; i < 4; i++) {
+      drawAt(tl, i, t);
+      pulseAt(tl, i, false, t + 0.22);
+      flashAt(tl, i + 1, t + 0.60, i === 3);
+      scrambleAt(tl, vals[i + 1], V[i + 1], 0.42 + i * 0.04, t + 0.64);
+      tokenAt(tl, i, t + 0.64);
+      if (i === 0) tl.call(function () { RV.setTool(chat.g, 1, 'done', 'sign.js'); RV.setTool(chat.g, 2, 'run'); }, null, t + 0.64);
+      t += HOP;
+    }
+
+    /* verify */
+    t += 0.10;
+    tl.to(conn, { scaleY: 1, duration: 0.32, ease: 'power2.inOut' }, t);
+    tl.fromTo(computed, { y: -14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.30, ease: 'power2.out' }, t + 0.24);
+    scrambleAt(tl, computed, V[4], 0.42, t + 0.34);
+    tl.to(boxes[4], { borderColor: C_EXTRACT, boxShadow: GLOW, duration: 0.20 }, t + 0.34);
+    tl.fromTo(stamp,
+      { opacity: 0, scale: 1.5, rotate: -12 },
+      { opacity: 1, scale: 1, rotate: -5, duration: 0.44, ease: 'back.out(2.2)' }, t + 0.90);
+    tl.fromTo(stamp,
+      { boxShadow: '0 0 0 0 ' + rgba(C_OK, 0.5) },
+      { boxShadow: '0 0 0 12px ' + rgba(C_OK, 0), duration: 0.7, ease: 'power2.out' }, t + 0.98);
+    tl.call(function () { RV.setTool(chat.g, 2, 'done', 'reversed'); RV.collapse(chat.g, 3, 1); }, null, t + 1.15);
+    tl.call(function () {
+      RV.text('Signed by <code>crypto_chain([...])</code>. Reversed the two invertible steps; <code>hmac</code> + slice are one-way.');
+    }, null, t + 1.75);
+
+    /* reverse pass: invertible steps only */
+    t += 1.85;
+    tl.to(revline, { opacity: 1, duration: 0.30 }, t);
+    tl.to([boxes[3], boxes[4], arrows[2], arrows[3]], { opacity: 0.30, duration: 0.34, ease: 'power2.out' }, t);
+    tl.to([headsB[0], headsB[1]], { opacity: 0.9, stroke: C_EXTRACT, duration: 0.22 }, t + 0.18);
+    tl.to([headsF[0], headsF[1]], { opacity: 0.20, duration: 0.22 }, t + 0.18);
+    pulseAt(tl, 1, true, t + 0.40);
+    flashAt(tl, 1, t + 0.78);
+    pulseAt(tl, 0, true, t + 0.98);
+    flashAt(tl, 0, t + 1.36);
+
+    t += 2.05;
+    tl.to([boxes[3], boxes[4], arrows[2], arrows[3]], { opacity: 1, duration: 0.45, ease: 'power2.out' }, t);
+    tl.to([headsB[0], headsB[1]], { opacity: 0, duration: 0.35 }, t);
+    tl.to([headsF[0], headsF[1]], { opacity: 1, duration: 0.35 }, t);
+    tl.to(revline, { opacity: 0.5, duration: 0.4 }, t);
+    tl.to(boxes[4], { borderColor: C_BORDER, boxShadow: NOGLOW, duration: 0.5 }, t + 0.2);
+
+    return tl;
+  }
+
+  var tl = null;
+  window.addEventListener('load', function () {
+    if (reduced || !window.gsap) { renderStatic(); return; }
+    setTimeout(function () { tl = build(); }, 120);
+  });
+  if (replay) replay.addEventListener('click', function () {
+    if (reduced) { renderStatic(); return; }
+    if (tl) tl.kill();
+    tl = build();
+  });
+})();
+</script>
+</body>
+</html>

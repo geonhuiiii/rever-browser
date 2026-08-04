@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rever-browser — logo intro (v3)</title>
+<style>
+/* ============================================================================
+   CANONICAL APP SHELL — copy this whole <style> + the .rv-app markup verbatim.
+   Tokens are lifted from src/renderer/src/styles.css. Light is the default
+   (matches the real app screenshot); [data-theme='dark'] is the override.
+   RULE: never put a colored accent strip / left-border on a card. Cards are
+   plain --surface on --border. Color appears only in action flashes, method
+   badges, status dots and severity text.
+   ========================================================================= */
+:root, :root[data-theme='light'] {
+  --bg: #fbfbfc; --bg-bar: #eef0f2; --surface: #ffffff; --surface-2: #f0f1f3;
+  --surface-3: #e6e8ea; --border: #e2e4e8; --border-2: #d3d6db; --border-3: #bcc0c6;
+  --text: #1b1d21; --text-2: #3f444b; --text-dim: #6a7078; --viewport-bg: #ffffff;
+  --code-bg: #f3f4f6; --inline-code-bg: #eceef1; --link: #2f6fed; --accent: #2f6fed;
+  --accent-soft: rgba(47,111,237,0.14); --accent-border: rgba(47,111,237,0.35);
+  --shadow: rgba(0,0,0,0.16);
+  --chip-ok-bg:#e7f6e9; --chip-ok-border:#bfe3c4; --chip-ok-text:#1f7a34;
+  --chip-warn-bg:#fbf3e2; --chip-warn-border:#e6d5a8; --chip-warn-text:#8a6a1f;
+  --chip-info-bg:#e8f0fb; --chip-info-border:#c3d6ef; --chip-info-text:#2f5fa8;
+  --chip-danger-bg:#fbeaea; --chip-danger-border:#eabcbc; --chip-danger-text:#a52f2f;
+  /* agent action colours (main/ai-events.ts kinds) */
+  --act-click:#e5484d; --act-hover:#d9a300; --act-type:#2f6fed; --act-navigate:#8b5cf6;
+  --act-scroll:#1f9d55; --act-evaluate:#c2691a; --act-extract:#0f9b8e;
+  --get:#1f9d55; --post:#c2691a;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+:root[data-theme='dark'] {
+  --bg:#0e0e0e; --bg-bar:#161616; --surface:#1a1a1a; --surface-2:#222; --surface-3:#2a2a2a;
+  --border:#2a2a2a; --border-2:#333; --border-3:#444; --text:#e6e6e6; --text-2:#ccc;
+  --text-dim:#999; --viewport-bg:#000; --code-bg:#0c0c0c; --inline-code-bg:#1d1d1d;
+  --link:#7ab7ff; --accent:#4a8fff; --accent-soft:rgba(80,140,255,0.18);
+  --accent-border:rgba(120,170,255,0.35); --shadow:rgba(0,0,0,0.4);
+  --chip-ok-bg:#1f2a1f; --chip-ok-border:#2a4a2a; --chip-ok-text:#aea;
+  --chip-warn-bg:#2a261f; --chip-warn-border:#4a402a; --chip-warn-text:#eca;
+  --chip-info-bg:#1f242a; --chip-info-border:#2a3a4a; --chip-info-text:#ace;
+  --chip-danger-bg:#3a1f1f; --chip-danger-border:#5a2a2a; --chip-danger-text:#eaa;
+  --act-click:#ff3b30; --act-hover:#ffd60a; --act-type:#0a84ff; --act-navigate:#a855f7;
+  --act-scroll:#30d158; --act-evaluate:#ff9f0a; --act-extract:#2dd4bf;
+  --get:#30d158; --post:#ff9f0a;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding: 18px; overflow-x: hidden;
+}
+
+/* ── window frame ─────────────────────────────────────────────────────── */
+.rv-app {
+  max-width: 1180px; margin: 0 auto; background: var(--bg);
+  border: 1px solid var(--border-2); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 50px var(--shadow); display: flex; flex-direction: column;
+}
+/* ── titlebar: traffic lights + tab strip ─────────────────────────────── */
+.rv-titlebar {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-lights { display: flex; gap: 6px; flex: none; }
+.rv-lights i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+.rv-lights i:nth-child(1){background:#ff5f57} .rv-lights i:nth-child(2){background:#febc2e}
+.rv-lights i:nth-child(3){background:#28c840}
+.rv-tab {
+  display: flex; align-items: center; gap: 7px; max-width: 260px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 4px 10px; font-size: 11.5px; color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tab .fav { width: 12px; height: 12px; border-radius: 3px; background: var(--surface-3); flex: none; }
+.rv-newtab {
+  width: 20px; height: 20px; border-radius: 5px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-dim); font-size: 13px; line-height: 1;
+  display: grid; place-items: center; cursor: default; flex: none;
+}
+.rv-themebtn {
+  margin-left: auto; width: 22px; height: 22px; border-radius: 6px; flex: none;
+  display: grid; place-items: center; font-size: 12px;
+  background: var(--chip-warn-bg); border: 1px solid var(--chip-warn-border);
+}
+/* ── toolbar ──────────────────────────────────────────────────────────── */
+.rv-toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 7px 10px;
+  background: var(--bg-bar); border-bottom: 1px solid var(--border);
+}
+.rv-navbtn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-dim); font-size: 12px;
+  display: grid; place-items: center; flex: none;
+}
+.rv-url {
+  flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; padding: 5px 11px; font: 12px/1.3 var(--sans); color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-tbtn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; padding: 5px 11px; font-size: 11.5px; font-weight: 500; flex: none;
+}
+.rv-tbtn.is-on { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
+/* ── body split: viewport | chat ──────────────────────────────────────── */
+.rv-body { display: grid; grid-template-columns: 1fr 352px; min-height: 0; }
+.rv-view {
+  position: relative; background: var(--viewport-bg); overflow: hidden;
+  height: 470px; border-right: 1px solid var(--border);
+}
+/* ── chat panel ───────────────────────────────────────────────────────── */
+.rv-chat { display: flex; flex-direction: column; background: var(--bg); min-width: 0; }
+.rv-chathead {
+  display: flex; align-items: center; gap: 7px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px;
+}
+.rv-agent {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text-2);
+}
+.rv-agent .av {
+  width: 15px; height: 15px; border-radius: 4px; background: var(--accent-soft);
+  color: var(--accent); font-size: 10px; font-weight: 700; display: grid; place-items: center;
+}
+.rv-agent .on { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); }
+.rv-models {
+  padding: 3px 9px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text-dim); font-size: 11px;
+}
+.rv-ready { margin-left: auto; color: var(--text-dim); font-size: 11px; }
+.rv-chipbar { display: flex; gap: 6px; padding: 7px 10px; border-bottom: 1px solid var(--border); }
+.rv-chip {
+  font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+}
+.rv-chip.ok { background: var(--chip-ok-bg); border-color: var(--chip-ok-border); color: var(--chip-ok-text); }
+
+.rv-msgs { flex: 1; min-height: 0; overflow: hidden; padding: 10px; display: flex; flex-direction: column; gap: 9px; }
+.rv-role { font-size: 10.5px; color: var(--text-dim); }
+.rv-text { font-size: 12px; color: var(--text); }
+.rv-text code {
+  font: 11px var(--mono); background: var(--inline-code-bg);
+  padding: 1px 4px; border-radius: 4px;
+}
+/* the real WorkGroup disclosure — 11px, transparent, 1px border, radius 12 */
+.rv-group {
+  display: inline-flex; gap: 6px; align-items: center; padding: 2px 10px; font-size: 11px;
+  background: transparent; border: 1px solid var(--border); border-radius: 12px;
+  color: var(--text-dim); align-self: flex-start; white-space: nowrap;
+}
+.rv-group .dim { opacity: .5; }
+.rv-groupbody { margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--border); display: grid; gap: 5px; }
+.rv-tool { font: 10.5px/1.45 var(--mono); color: var(--text-dim); display: flex; gap: 6px; align-items: baseline; }
+.rv-tool .nm { color: var(--text-2); }
+.rv-tool .st { margin-left: auto; flex: none; }
+.rv-tool.is-run .st { color: var(--chip-warn-text); }
+.rv-tool.is-done .st { color: var(--chip-ok-text); }
+.rv-caret { display: inline-block; width: 1.5px; height: 12px; background: var(--accent); vertical-align: -2px; }
+.rv-compose { display: flex; gap: 7px; padding: 9px 10px; border-top: 1px solid var(--border); }
+.rv-input {
+  flex: 1; min-width: 0; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); padding: 6px 10px; font-size: 11.5px; color: var(--text-dim);
+}
+.rv-send {
+  border: 1px solid var(--accent-border); background: var(--accent-soft); color: var(--accent);
+  border-radius: 7px; padding: 6px 13px; font-size: 11.5px; font-weight: 600; flex: none;
+}
+/* ── status bar ───────────────────────────────────────────────────────── */
+.rv-status {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px; overflow-x: auto;
+  background: var(--bg-bar); border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-dim); scrollbar-width: none;
+}
+.rv-status::-webkit-scrollbar { display: none; }
+.rv-status b { font-weight: 600; color: var(--text-2); }
+.rv-status .n { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.rv-status .is-on { color: var(--accent); }
+
+/* ── in-viewport overlay: ghost cursor + action flash ─────────────────── */
+.rv-cursor { position: absolute; width: 20px; height: 20px; z-index: 30; pointer-events: none;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); opacity: 0; }
+.rv-flash { position: absolute; z-index: 25; pointer-events: none; opacity: 0; border-radius: 6px;
+  border: 2px solid var(--act-click); box-shadow: 0 0 0 4px rgba(229,72,77,.16); }
+.rv-flash .tag { position: absolute; top: -20px; left: -2px; font: 600 10px/1 var(--sans);
+  color: #fff; background: var(--act-click); padding: 3px 6px; border-radius: 4px; white-space: nowrap; }
+.rv-flash.hover { border-color: var(--act-hover); box-shadow: 0 0 0 4px rgba(217,163,0,.16); }
+.rv-flash.hover .tag { background: var(--act-hover); color: #221c00; }
+.rv-flash.type { border-color: var(--act-type); box-shadow: 0 0 0 4px rgba(47,111,237,.16); }
+.rv-flash.type .tag { background: var(--act-type); }
+.rv-flash.navigate { border-color: var(--act-navigate); box-shadow: 0 0 0 4px rgba(139,92,246,.16); }
+.rv-flash.navigate .tag { background: var(--act-navigate); }
+.rv-flash.extract { border-color: var(--act-extract); box-shadow: 0 0 0 4px rgba(15,155,142,.16); }
+.rv-flash.extract .tag { background: var(--act-extract); }
+
+/* ── generic page furniture for the fake site inside .rv-view ─────────── */
+.rv-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.rv-badge { font: 600 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 4px; }
+.rv-badge.get { color: var(--get); background: rgba(31,157,85,.12); }
+.rv-badge.post { color: var(--post); background: rgba(194,105,26,.12); }
+
+.rv-replay {
+  position: absolute; right: 10px; bottom: 10px; z-index: 40;
+  border: 1px solid var(--border-2); background: var(--surface); color: var(--text-dim);
+  border-radius: 7px; padding: 5px 11px; font-size: 11px; cursor: pointer;
+}
+.rv-replay:hover { color: var(--text); border-color: var(--border-3); }
+
+/* ── responsive: stack chat under the viewport ────────────────────────── */
+@media (max-width: 860px) {
+  body { padding: 10px; }
+  .rv-body { grid-template-columns: 1fr; }
+  .rv-view { height: auto; min-height: 340px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rv-chat { max-height: 340px; }
+  .rv-tbtn.opt { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv-cursor, .rv-flash { display: none !important; }
+}
+
+/* ============================================================================
+   BLOCK: logo-intro (slug prefix .lgi-) — appended after the shell, verbatim
+   shell tokens untouched. Re-skin of the dark "logo assembly" hero onto the
+   light app viewport: shards converge → orb settles → wordmark wipes in → the
+   whole lockup docks into the site header inside the viewport. The R orb keeps
+   its accent gradient (brand mark); everything else is neutral on light.
+   ========================================================================= */
+.lgi-stage {
+  position: absolute; inset: 0; overflow: hidden;
+  background: radial-gradient(120% 92% at 50% 40%, #ffffff 0%, var(--viewport-bg) 58%, #f4f5f7 100%);
+  isolation: isolate;
+}
+.lgi-grid {
+  position: absolute; inset: -10%; pointer-events: none; z-index: 0;
+  background-image:
+    linear-gradient(to right, rgba(27,29,33,0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(27,29,33,0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(56% 54% at 50% 44%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(56% 54% at 50% 44%, #000 0%, transparent 78%);
+}
+:root[data-theme='dark'] .lgi-grid {
+  background-image:
+    linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+}
+
+/* in-viewport site header the lockup docks into */
+.lgi-nav {
+  position: absolute; top: 0; left: 0; right: 0; height: 46px; z-index: 2;
+  display: flex; align-items: center; justify-content: flex-end; gap: 16px;
+  padding: 0 14px; box-sizing: border-box; opacity: 0;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.lgi-navItem { font: 10.5px/1 var(--mono); letter-spacing: 0.07em; color: var(--text-dim); }
+.lgi-navPill {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  font: 10.5px/1 var(--mono); letter-spacing: 0.06em; color: var(--text-2);
+  border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 999px; padding: 4px 9px;
+}
+.lgi-navPill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--chip-ok-text); flex: none; }
+
+/* lockup — placed with GSAP transforms only (never re-centred by tracking) */
+.lgi-dock { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.lgi-js .lgi-lockup { opacity: 0; }
+.lgi-lockup {
+  position: absolute; left: 0; top: 0;
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: 12px; transform-origin: left top; will-change: transform;
+}
+.lgi-row { display: flex; align-items: center; gap: 18px; }
+
+.lgi-orbWrap {
+  position: relative; flex: 0 0 auto;
+  width: clamp(52px, 8.6vw, 68px); height: clamp(52px, 8.6vw, 68px);
+}
+.lgi-orb {
+  position: absolute; inset: 0; border-radius: 18%;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: linear-gradient(135deg, #2f6fed 0%, #6a9bf5 100%);
+  box-shadow: 0 0 0 1px rgba(47,111,237,0.28), 0 14px 34px -14px rgba(47,111,237,0.55);
+  will-change: transform, opacity;
+}
+.lgi-sheen {
+  position: absolute; top: -60%; left: -150%; width: 60%; height: 220%;
+  transform: rotate(14deg); pointer-events: none;
+  background: linear-gradient(100deg,
+    rgba(255,255,255,0) 0%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0) 100%);
+}
+.lgi-letter {
+  position: relative; z-index: 1; font-weight: 800; line-height: 1;
+  font-size: clamp(30px, 5.2vw, 40px); letter-spacing: -0.045em; color: #fff;
+  will-change: transform, opacity;
+}
+.lgi-ring {
+  position: absolute; inset: 0; border-radius: 20%;
+  border: 2px solid var(--accent); opacity: 0; pointer-events: none;
+  will-change: transform, opacity;
+}
+.lgi-shards { position: absolute; inset: 0; pointer-events: none; }
+.lgi-shard {
+  position: absolute; border-radius: 3px; opacity: 0;
+  background: linear-gradient(135deg, #2f6fed 0%, #6a9bf5 100%);
+  will-change: transform, opacity;
+}
+
+.lgi-wordWrap {
+  position: relative; font-size: clamp(24px, 4.4vw, 30px);
+  padding: 0.34em 0.06em; margin: -0.34em -0.06em;
+}
+.lgi-word {
+  display: block; white-space: nowrap; font-size: inherit;
+  font-weight: 650; line-height: 1.06; letter-spacing: -0.018em; color: var(--text);
+}
+.lgi-ch { display: inline-block; white-space: pre; will-change: transform, opacity; }
+.lgi-dash { color: var(--accent); }
+.lgi-tail { color: var(--text-dim); }
+
+.lgi-tag {
+  display: flex; align-items: center; gap: 9px; white-space: nowrap;
+  font: 12px/1 var(--mono); letter-spacing: 0.03em; color: var(--text-dim);
+  will-change: transform, opacity;
+}
+.lgi-tagDot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: 0 0 auto; }
+
+/* static fallback placement (no GSAP / reduced motion) */
+.lgi-lockup--static { left: 14px; top: 6px; transform: scale(0.52); opacity: 1; }
+
+@media (max-width: 520px) {
+  .lgi-navItem { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lgi-shards, .lgi-sheen, .lgi-ring { display: none; }
+  .lgi-nav { opacity: 1; }
+  .lgi-lockup { left: 14px; top: 6px; transform: scale(0.52); opacity: 1; }
+}
+</style>
+<script>document.documentElement.classList.add('lgi-js');</script>
+</head>
+<body>
+
+<!-- ===== COPY FROM HERE ===================================================== -->
+<div class="rv-app">
+  <div class="rv-titlebar">
+    <div class="rv-lights"><i></i><i></i><i></i></div>
+    <div class="rv-tab"><span class="fav"></span><span>rever-browser — reverse-engineer any web API</span></div>
+    <div class="rv-newtab">+</div>
+    <div class="rv-themebtn">☀</div>
+  </div>
+
+  <div class="rv-toolbar">
+    <div class="rv-navbtn">‹</div>
+    <div class="rv-navbtn">›</div>
+    <div class="rv-navbtn">⟳</div>
+    <div class="rv-navbtn">&lt;/&gt;</div>
+    <div class="rv-url" id="sh-url">https://rever-browser.dev</div>
+    <div class="rv-tbtn">Go</div>
+    <div class="rv-tbtn opt">Auto</div>
+    <div class="rv-tbtn opt">Proxy</div>
+    <div class="rv-tbtn opt">Desktop</div>
+    <div class="rv-tbtn opt">Embedded</div>
+  </div>
+
+  <div class="rv-body">
+    <!-- LEFT: the driven page — logo-intro stage -->
+    <div class="rv-view" id="sh-view">
+      <div class="lgi-stage" id="lgi-stage">
+        <div class="lgi-grid" aria-hidden="true"></div>
+
+        <div class="lgi-nav" id="lgi-nav" aria-hidden="true">
+          <span class="lgi-navItem">TRAFFIC</span>
+          <span class="lgi-navItem">AGENT</span>
+          <span class="lgi-navItem">SCRIPTS</span>
+          <span class="lgi-navPill"><span class="dot"></span>CDP ATTACHED</span>
+        </div>
+
+        <div class="lgi-dock">
+          <div class="lgi-lockup" id="lgi-lockup">
+            <div class="lgi-row">
+              <div class="lgi-orbWrap" id="lgi-orbWrap">
+                <span class="lgi-ring" id="lgi-ring" aria-hidden="true"></span>
+                <div class="lgi-orb" id="lgi-orb">
+                  <span class="lgi-letter" id="lgi-letter">R</span>
+                  <span class="lgi-sheen" id="lgi-sheen" aria-hidden="true"></span>
+                </div>
+                <div class="lgi-shards" id="lgi-shards" aria-hidden="true"></div>
+              </div>
+              <div class="lgi-wordWrap" id="lgi-wordWrap">
+                <span class="lgi-word" id="lgi-word">rever<span class="lgi-dash">-</span><span class="lgi-tail">browser</span></span>
+              </div>
+            </div>
+            <div class="lgi-tag" id="lgi-tag">
+              <span class="lgi-tagDot" aria-hidden="true"></span>
+              <span>reverse-engineer any web API</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rv-flash" id="sh-flash"><span class="tag" id="sh-flashtag">AI click</span></div>
+      <svg class="rv-cursor" id="sh-cursor" viewBox="0 0 24 24">
+        <path d="M5 3l14 8-6 1.5L10 20 5 3z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      <button class="rv-replay" id="sh-replay">↻ Replay</button>
+    </div>
+
+    <!-- RIGHT: chat panel -->
+    <div class="rv-chat">
+      <div class="rv-chathead">
+        <span class="rv-agent"><span class="av">C</span> Claude Code <span class="on"></span> ▾</span>
+        <span class="rv-models">no models yet ▾</span>
+        <span class="rv-ready">ready</span>
+      </div>
+      <div class="rv-chipbar">
+        <span class="rv-chip ok">Auto-approve</span>
+        <span class="rv-chip">History (2)</span>
+        <span class="rv-chip">+ New</span>
+      </div>
+      <div class="rv-msgs" id="sh-msgs"></div>
+      <div class="rv-compose">
+        <div class="rv-input">Type a message…</div>
+        <div class="rv-send">Send</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rv-status" id="sh-status">
+    <span><b>Traffic</b> <span class="n" id="sh-traffic">44</span></span>
+    <span><b>Console</b></span>
+    <span><b>Exceptions</b></span>
+    <span><b>WebSocket</b></span>
+    <span><b>Repeater</b></span>
+    <span><b>Storage</b></span>
+    <span><b>History</b> <span class="n">128</span></span>
+    <span><b>Workflows</b> <span class="n">1</span></span>
+  </div>
+</div>
+<!-- ===== COPY TO HERE ======================================================= -->
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+/* Shell helper API (RV) — copied verbatim from _shell.html, demo tail removed so
+   the logo-intro script below owns the timeline and the #sh-replay button. */
+(function () {
+  var view = document.getElementById('sh-view');
+  var cursor = document.getElementById('sh-cursor');
+  var flash = document.getElementById('sh-flash');
+  var flashtag = document.getElementById('sh-flashtag');
+  var msgs = document.getElementById('sh-msgs');
+  if (!view || !cursor || !flash || !msgs) return;
+
+  function rect(el) {
+    var v = view.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { x: r.left - v.left, y: r.top - v.top, w: r.width, h: r.height };
+  }
+  var RV = {
+    cursorTo: function (el, dur) {
+      var r = rect(el);
+      return gsap.to(cursor, { opacity: 1, left: r.x + r.w / 2 - 3, top: r.y + r.h / 2 - 2,
+        duration: dur || 0.85, ease: 'power2.inOut' });
+    },
+    press: function () {
+      return gsap.timeline().to(cursor, { scale: .84, duration: .08 }).to(cursor, { scale: 1, duration: .12 });
+    },
+    flash: function (el, kind, label) {
+      var r = rect(el);
+      flash.className = 'rv-flash ' + (kind || 'click');
+      flashtag.textContent = label || 'AI click';
+      gsap.set(flash, { left: r.x - 4, top: r.y - 4, width: r.w + 8, height: r.h + 8, opacity: 0 });
+      return gsap.timeline().to(flash, { opacity: 1, duration: .16 })
+                            .to(flash, { opacity: 0, duration: .45, delay: .85 });
+    },
+    type: function (el, str, cps) {
+      var tl = gsap.timeline(), per = 1 / (cps || 22);
+      tl.call(function () { el.textContent = ''; });
+      for (var i = 0; i < str.length; i++) {
+        (function (c) { tl.call(function () { el.textContent += c; }, null, '+=' + per); })(str[i]);
+      }
+      return tl;
+    },
+    role: function (txt) {
+      var d = document.createElement('div'); d.className = 'rv-role'; d.textContent = txt;
+      msgs.appendChild(d); return d;
+    },
+    text: function (html) {
+      var d = document.createElement('div'); d.className = 'rv-text'; if (html) d.innerHTML = html;
+      msgs.appendChild(d); return d;
+    },
+    group: function (tools) {
+      var wrap = document.createElement('div');
+      var head = document.createElement('span');
+      head.className = 'rv-group';
+      head.innerHTML = '<span>▾</span><span class="sum">work</span><span class="dim">· hide</span>';
+      var body = document.createElement('div');
+      body.className = 'rv-groupbody';
+      tools.forEach(function (t) {
+        var row = document.createElement('div');
+        row.className = 'rv-tool';
+        row.innerHTML = '<span class="nm">' + t + '</span><span class="st">·</span>';
+        body.appendChild(row);
+      });
+      wrap.appendChild(head); wrap.appendChild(body); msgs.appendChild(wrap);
+      wrap._head = head; wrap._body = body;
+      return wrap;
+    },
+    setTool: function (g, i, state, result) {
+      var row = g._body.children[i]; if (!row) return;
+      row.className = 'rv-tool is-' + state;
+      row.querySelector('.st').textContent = state === 'done' ? (result || '✓') : '…';
+    },
+    collapse: function (g, tools, thoughts) {
+      var sum = [tools ? 'tools ' + tools : null, thoughts ? 'thoughts ' + thoughts : null]
+        .filter(Boolean).join(' · ') || 'work';
+      return gsap.timeline()
+        .to(g._body, { height: 0, opacity: 0, marginTop: 0, duration: .35, ease: 'power2.inOut',
+          onComplete: function () { g._body.style.display = 'none'; } })
+        .call(function () {
+          g._head.innerHTML = '<span>▸</span><span class="sum">' + sum + '</span><span class="dim">· show more</span>';
+        });
+    },
+    reset: function () {
+      msgs.innerHTML = '';
+      gsap.set(cursor, { opacity: 0, left: 30, top: 320, scale: 1 });
+      gsap.set(flash, { opacity: 0 });
+    }
+  };
+  window.RV = RV;
+})();
+</script>
+
+<script>
+/*
+  logo-intro — re-skin of the dark hero onto the light app shell. Same beats:
+  0.00-0.68 SHARDS : 14 accent fragments streak in and converge on the orb face
+  0.62-1.10 SETTLE : orb lands on one elastic beat, "R" snaps up, one ring pulse
+  0.96-1.72 WORD   : clip wipe L->R + per-char rise, letter-spacing settles
+  1.44-1.84 TAG    : tagline settles beneath the lockup
+  1.70-2.40 DOCK   : the site header fades in and the lockup docks top-left
+  Alongside, the chat panel narrates the intro with the real role labels + the
+  "▸ tools N · thoughts N" disclosure. DOM is cleared each cycle (onRepeat), so
+  nothing grows across the loop.
+*/
+(function () {
+  'use strict';
+
+  var RV = window.RV;
+  var stage    = document.getElementById('lgi-stage');
+  var lockup   = document.getElementById('lgi-lockup');
+  var orbWrap  = document.getElementById('lgi-orbWrap');
+  var orb      = document.getElementById('lgi-orb');
+  var letter   = document.getElementById('lgi-letter');
+  var ring     = document.getElementById('lgi-ring');
+  var sheen    = document.getElementById('lgi-sheen');
+  var shardBox = document.getElementById('lgi-shards');
+  var wordWrap = document.getElementById('lgi-wordWrap');
+  var word     = document.getElementById('lgi-word');
+  var tag      = document.getElementById('lgi-tag');
+  var nav      = document.getElementById('lgi-nav');
+  var replay   = document.getElementById('sh-replay');
+  var gsap     = window.gsap;
+
+  if (!RV || !stage || !lockup || !orbWrap || !orb || !letter || !ring || !sheen ||
+      !shardBox || !wordWrap || !word || !tag || !nav) {
+    document.documentElement.classList.remove('lgi-js');
+    return;
+  }
+
+  var reduced = !!(window.matchMedia &&
+                   window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+  var TOOLS = ['browser_navigate', 'browser_snapshot', 'list_requests'];
+  var PROMPT = 'Introduce rever-browser.';
+  var ANSWER = '<code>rever-browser</code> — an AI agent that drives a real Chromium tab and reverse-engineers any web API straight from the captured traffic.';
+
+  /* ---------- split the wordmark into per-character spans ---------- */
+  var chars = [];
+  (function splitWord() {
+    var leaves = [];
+    (function walk(node) {
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) leaves.push(n);
+        else if (n.nodeType === 1) walk(n);
+      }
+    })(word);
+    for (var j = 0; j < leaves.length; j++) {
+      var textNode = leaves[j], parent = textNode.parentNode;
+      if (!parent) continue;
+      var frag = document.createDocumentFragment();
+      var text = textNode.nodeValue || '';
+      for (var k = 0; k < text.length; k++) {
+        var s = document.createElement('span');
+        s.className = 'lgi-ch';
+        s.textContent = text.charAt(k);
+        frag.appendChild(s);
+        chars.push(s);
+      }
+      parent.replaceChild(frag, textNode);
+    }
+  })();
+
+  function paintChatStatic() {
+    RV.reset();
+    RV.role('user'); RV.text(PROMPT);
+    RV.role('assistant');
+    var g = RV.group(TOOLS);
+    g._body.style.display = 'none';
+    g._head.innerHTML = '<span>▸</span><span class="sum">tools 3 · thoughts 1</span><span class="dim">· show more</span>';
+    RV.text(ANSWER);
+  }
+
+  function showStatic() {
+    document.documentElement.classList.remove('lgi-js');
+    lockup.classList.add('lgi-lockup--static');
+    nav.style.opacity = '1';
+    shardBox.style.display = 'none';
+    sheen.style.display = 'none';
+    ring.style.display = 'none';
+    if (replay) replay.style.display = 'none';
+    paintChatStatic();
+  }
+
+  if (!gsap || reduced) { showStatic(); return; }
+
+  var SCALE_DOCKED = 0.52;
+  var lsStart = '0px', lsEnd = '0px';
+
+  /* ---------- build shards (deterministic, identical every replay) ---------- */
+  var SHARD_COUNT = 14, shards = [], shardFrom = [];
+  (function buildShards() {
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < SHARD_COUNT; i++) {
+      var w = 22 + ((i * 37) % 34);
+      var h = 20 + ((i * 53) % 32);
+      var el = document.createElement('span');
+      el.className = 'lgi-shard';
+      el.style.width = w + '%';
+      el.style.height = h + '%';
+      el.style.left = ((i * 29) % (100 - w)) + '%';
+      el.style.top = ((i * 43) % (100 - h)) + '%';
+      frag.appendChild(el);
+      shards.push(el);
+      var angle = (i / SHARD_COUNT) * Math.PI * 2 + 0.42;
+      var dist = 190 + ((i * 61) % 160);
+      shardFrom.push({
+        x: Math.cos(angle) * dist,
+        y: Math.sin(angle) * dist * 0.7,
+        r: (i % 2 === 0 ? 1 : -1) * (55 + ((i * 31) % 120))
+      });
+    }
+    shardBox.appendChild(frag);
+  })();
+
+  /* ---------- geometry ---------- */
+  var home = { x: 0, y: 0 }, docked = { x: 0, y: 0 };
+  function measure() {
+    var W = stage.clientWidth, H = stage.clientHeight;
+    var pad = Math.max(12, Math.min(28, W * 0.035));
+    var navH = 46;
+    var fontPx = parseFloat(window.getComputedStyle(word).fontSize) || 30;
+    lsStart = (fontPx * 0.25).toFixed(2) + 'px';
+    lsEnd = (fontPx * -0.018).toFixed(2) + 'px';
+    gsap.set(word, { letterSpacing: lsEnd });
+    var w = lockup.offsetWidth, h = lockup.offsetHeight, rowH = orbWrap.offsetHeight;
+    home.x = Math.max(pad, Math.round((W - w) / 2));
+    home.y = Math.max(navH + 14, Math.round((H - h) / 2));
+    docked.x = pad;
+    docked.y = Math.round(navH / 2 - (rowH * SCALE_DOCKED) / 2);
+  }
+
+  /* ---------- chat state (recreated each cycle) ---------- */
+  var typer = { n: 0 }, u = null, g = null;
+  function chatReset() {
+    RV.reset();
+    typer.n = 0;
+    RV.role('user');
+    u = RV.text('');
+  }
+
+  /* ---------- frame zero ---------- */
+  function frameZero() {
+    gsap.set(lockup, { x: home.x, y: home.y, scale: 1, opacity: 1 });
+    gsap.set(nav, { opacity: 0 });
+    gsap.set(orb, { opacity: 0, scale: 0.24, rotate: -12 });
+    gsap.set(letter, { opacity: 0, y: 14, scale: 0.82 });
+    gsap.set(ring, { opacity: 0, scale: 0.94 });
+    gsap.set(sheen, { xPercent: 0 });
+    gsap.set(wordWrap, { clipPath: 'inset(0% 100% 0% 0%)' });
+    gsap.set(word, { letterSpacing: lsStart });
+    gsap.set(chars, { opacity: 0, yPercent: 20 });
+    gsap.set(tag, { opacity: 0, y: 14 });
+    for (var i = 0; i < shards.length; i++) {
+      gsap.set(shards[i], {
+        opacity: 0, x: shardFrom[i].x, y: shardFrom[i].y,
+        rotate: shardFrom[i].r, scale: 0.5
+      });
+    }
+  }
+
+  function startCycle() { frameZero(); chatReset(); }
+
+  /* ---------- timeline ---------- */
+  var tl = null;
+  function build() {
+    if (tl) { tl.kill(); tl = null; }
+    measure();
+    startCycle();
+
+    tl = gsap.timeline({
+      repeat: -1, repeatDelay: 1.6,
+      defaults: { ease: 'power3.out' },
+      onRepeat: startCycle
+    });
+
+    // SHARDS — fragments streak in and lock onto the orb face
+    tl.to(shards, { opacity: 1, duration: 0.13, stagger: { each: 0.026, from: 'random' } }, 0)
+      .to(shards, { x: 0, y: 0, rotate: 0, scale: 1, duration: 0.62, ease: 'power4.out',
+        stagger: { each: 0.026, from: 'random' } }, 0)
+      .to(shards, { opacity: 0, duration: 0.18, ease: 'power1.out' }, 0.62)
+
+      // SETTLE — solid orb takes over with one elastic beat
+      .to(orb, { opacity: 1, scale: 1, rotate: 0, duration: 0.94, ease: 'elastic.out(0.85, 0.42)' }, 0.62)
+      .to(letter, { opacity: 1, y: 0, scale: 1, duration: 0.44, ease: 'back.out(2.4)' }, 0.74)
+
+      // RING — one expanding accent pulse
+      .fromTo(ring, { opacity: 0.8, scale: 0.94 },
+        { opacity: 0, scale: 2.1, duration: 0.88, ease: 'power2.out' }, 0.66)
+
+      // SHEEN — one specular sweep
+      .to(sheen, { xPercent: 470, duration: 0.66, ease: 'power2.inOut' }, 0.96)
+
+      // WORD — wipe left to right, chars rise, tracking tightens
+      .to(wordWrap, { clipPath: 'inset(0% 0% 0% 0%)', duration: 0.6, ease: 'power3.inOut' }, 0.98)
+      .to(chars, { opacity: 1, yPercent: 0, duration: 0.42, ease: 'power3.out', stagger: 0.024 }, 1.02)
+      .to(word, { letterSpacing: lsEnd, duration: 0.74, ease: 'power3.out' }, 0.98)
+
+      // TAG — tagline settles beneath the lockup
+      .to(tag, { opacity: 1, y: 0, duration: 0.4 }, 1.44)
+
+      // DOCK — site header resolves, tagline clears, lockup docks top-left
+      .to(nav, { opacity: 1, duration: 0.42, ease: 'power2.out' }, 1.7)
+      .to(tag, { opacity: 0, y: -6, duration: 0.32, ease: 'power2.in' }, 1.74)
+      .to(lockup, { x: docked.x, y: docked.y, scale: SCALE_DOCKED, duration: 0.7, ease: 'power3.inOut' }, 1.7);
+
+    // CHAT — user prompt types out, assistant work folds into the disclosure
+    tl.to(typer, { n: PROMPT.length, duration: PROMPT.length / 40, ease: 'none',
+      onUpdate: function () { if (u) u.textContent = PROMPT.slice(0, Math.round(typer.n)); } }, 0.05);
+    tl.call(function () { RV.role('assistant'); }, null, 0.98);
+    tl.call(function () { g = RV.group(TOOLS); RV.setTool(g, 0, 'run'); }, null, 1.08);
+    tl.call(function () { if (g) { RV.setTool(g, 0, 'done', '200'); RV.setTool(g, 1, 'run'); } }, null, 1.45);
+    tl.call(function () { if (g) { RV.setTool(g, 1, 'done', '48 refs'); RV.setTool(g, 2, 'run'); } }, null, 1.78);
+    tl.call(function () { if (g) { RV.setTool(g, 2, 'done', '44 reqs'); } }, null, 2.08);
+    tl.call(function () { if (g) { RV.collapse(g, 3, 1); } }, null, 2.22);
+    tl.call(function () { RV.text(ANSWER); }, null, 2.58);
+
+    return tl;
+  }
+
+  build();
+
+  if (replay) {
+    replay.addEventListener('click', function () { build(); tl.play(0); });
+  }
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () { build(); tl.play(0); }, 200);
+  });
+})();
+</script>
+
+</body>
+</html>
