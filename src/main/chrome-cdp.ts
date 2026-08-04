@@ -472,10 +472,12 @@ export function attachCdpCapture(targetId: number, sink: WebContents): boolean {
     return false
   }
 
-  // Intercept window.open / target=_blank on this webview and ask the
-  // renderer to open a new tab inside the app instead of a new OS window.
-  target.setWindowOpenHandler(({ url }) => {
-    sink.send('webview:new-window', { url, sourceWebContentsId: targetId })
+  // Intercept window.open / target=_blank / Ctrl-Cmd-middle-click on this
+  // webview and ask the renderer to open a new tab inside the app instead of a
+  // new OS window. `disposition` distinguishes background-tab (Ctrl/Cmd/wheel
+  // click) from foreground so we can mirror Chrome's open-in-background.
+  target.setWindowOpenHandler(({ url, disposition }) => {
+    sink.send('webview:new-window', { url, disposition, sourceWebContentsId: targetId })
     return { action: 'deny' }
   })
 

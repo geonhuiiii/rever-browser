@@ -80,10 +80,12 @@ function App() {
     ? themeByOrigin[activeOrigin] ?? 'auto'
     : 'auto'
 
-  // window.open / target=_blank from any webview → new tab inside the app.
+  // window.open / target=_blank / Ctrl-Cmd-middle-click from any webview → new
+  // tab inside the app. Ctrl/Cmd/wheel click yields 'background-tab', so open it
+  // without stealing focus, matching Chrome; everything else opens foreground.
   useEffect(() => {
-    return window.rev.cdp.onNewWindow(({ url }) => {
-      if (url) addTab(url)
+    return window.rev.cdp.onNewWindow(({ url, disposition }) => {
+      if (url) addTab(url, { activate: disposition !== 'background-tab' })
     })
   }, [addTab])
 

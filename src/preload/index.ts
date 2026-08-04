@@ -176,11 +176,11 @@ const api = {
     detach: (webContentsId: number) => ipcRenderer.invoke('cdp:detach', webContentsId),
     setActive: (webContentsId: number) => ipcRenderer.invoke('cdp:set-active', webContentsId),
     onNewWindow: (
-      handler: (payload: { url: string; sourceWebContentsId: number }) => void
+      handler: (payload: { url: string; disposition: string; sourceWebContentsId: number }) => void
     ): (() => void) => {
       const listener = (
         _e: unknown,
-        payload: { url: string; sourceWebContentsId: number }
+        payload: { url: string; disposition: string; sourceWebContentsId: number }
       ) => handler(payload)
       ipcRenderer.on('webview:new-window', listener)
       return () => ipcRenderer.removeListener('webview:new-window', listener)
