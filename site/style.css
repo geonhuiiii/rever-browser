@@ -263,7 +263,9 @@ footer a:hover { color: var(--accent-text); }
 :root { --sans-ko: 'IBM Plex Sans KR', 'IBM Plex Sans', -apple-system, BlinkMacSystemFont,
         'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; }
 body.ko { font-family: var(--sans-ko); word-break: keep-all; line-height: 1.68; }
-body.ko h1 { letter-spacing: -.045em; line-height: 1.18; max-width: 16ch; font-weight: 700; }
+/* 줄바꿈이 .ln 로 고정돼 있으니 한 줄이 절대 넘치지 않을 크기로 잡는다 */
+body.ko h1 { font-size: clamp(29px, 4.3vw, 50px); letter-spacing: -.04em;
+  line-height: 1.22; max-width: none; font-weight: 700; }
 body.ko h2 { letter-spacing: -.035em; line-height: 1.34; font-weight: 700; max-width: 22ch; }
 body.ko .lede { font-size: 16px; }
 body.ko .row-item h3, body.ko .node h4, body.ko .step h4 { letter-spacing: -.02em; }

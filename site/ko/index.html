@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>rever-browser — 웹 API를 리버싱하는 에이전트</title>
-<meta name="description" content="리버싱 에이전트를 품은 데스크톱 브라우저. CDP로 모든 요청을 잡고, 그게 무슨 뜻인지 에이전트에게 묻고, 앱을 벗어나지 않고 그대로 재현합니다." />
+<meta name="description" content="브라우저가 주고받는 요청을 전부 캡처하고, 무슨 뜻인지 에이전트에게 묻고, 그대로 재현합니다. MIT 라이선스 오픈소스." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><text x='16' y='23' font-size='19' font-family='monospace' font-weight='700' fill='white' text-anchor='middle'>R</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -39,18 +39,18 @@
     <div class="grid">
       <div>
         <div class="eyebrow" data-reveal="fade">
-          <span>일렉트론 데스크톱 앱</span><span class="sep"></span><span>MIT 라이선스</span>
+          <span>오픈소스</span><span class="sep"></span><span>MIT 라이선스</span>
         </div>
-        <h1 id="headline"><span class="ln">요청을 전부 본다.</span><span class="ln">무슨 뜻인지 묻는다.</span><span class="ln">그대로 재현한다.</span></h1>
+        <h1 id="headline"><span class="ln">브라우저가 주고받는 요청,</span><span class="ln">에이전트가 읽고</span><span class="ln">그대로 재현합니다.</span></h1>
         <p class="lede" data-reveal="fade">
-          <b>rever-browser</b>는 진짜 크로미움 탭 옆에 리버싱 에이전트를 붙여 놓은 데스크톱 브라우저입니다.
-          사용자가 대상 사이트를 돌아다니면 앱이 <span class="u">CDP</span>로 모든 요청을 기록하고,
+          <b>rever-browser</b>는 실제 크로미움 탭 옆에 리버싱 에이전트를 붙인 데스크톱 브라우저입니다.
+          평소처럼 사이트를 돌아다니면 앱이 <span class="u">CDP</span>로 모든 요청을 기록하고,
           에이전트가 그 트래픽을 읽고 자바스크립트 번들을 열어보고 탭을 직접 조작합니다.
+          같은 도구가 <b>MCP</b>로 열려 있어서 외부 에이전트나 스크립트에서도 그대로 호출할 수 있습니다.
         </p>
         <div class="cta" data-reveal="fade">
           <a class="btn primary" href="#quickstart">시작하기</a>
           <a class="btn" href="https://github.com/greekr4/rever-browser" target="_blank" rel="noopener">소스 보기</a>
-          <a class="btn ghost" href="../demos/" target="_blank" rel="noopener">데모 30개</a>
         </div>
       </div>
 
@@ -67,10 +67,16 @@
     </div>
   </div>
 
-  <div class="wrap stage" data-reveal="fade">
+  <div class="wrap stage" data-reveal="stage">
+    <div class="frame">
+      <div class="scaler" id="scaler">
+        <iframe id="demo" title="rever-browser 시나리오 재생" src="../demos/v2-find-search-api.html"></iframe>
+        <div class="ph" id="ph">데모 불러오는 중…</div>
+      </div>
+    </div>
     <p class="stage-cap">
-      <span class="n">데모</span>
-      <span>움직이는 화면은 <a href="../" style="color:var(--accent-text)">영문 페이지</a>에서 시나리오 7개를 눌러 볼 수 있습니다. 이 페이지는 문구만 옮긴 번역본입니다.</span>
+      <span class="n" id="capnum">01</span>
+      <span id="capture">실제 화면을 그대로 녹화한 장면입니다. 에이전트가 페이지를 스냅샷으로 뜨고, 검색 버튼을 누르고, 잡힌 트래픽을 읽어 엔드포인트를 찾아냅니다.</span>
     </p>
   </div>
 </section>
@@ -81,23 +87,19 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>01</b> 시나리오</div>
       <div>
-        <h2>열 마디 던지면, 동작하는 요청 하나가 나옵니다.</h2>
-        <p class="sub">아래 항목은 전부 실제 앱을 그대로 녹화한 흐름입니다. 문장을 고르면 위쪽 화면이 그 장면을 재생합니다.</p>
+        <h2>한 줄로 물어보면, 재현 가능한 요청이 나옵니다.</h2>
+        <p class="sub">아래는 전부 실제 앱에서 그대로 녹화한 흐름입니다. 문장을 고르면 위쪽 화면이 그 장면을 다시 재생합니다.</p>
       </div>
     </div>
-    <div class="tabs" data-reveal="stagger">
-      <span class="tab">검색 API 찾아줘</span>
-      <span class="tab">로그인해서 내 주문 가져와</span>
-      <span class="tab">난독화 풀고 인증 흐름 찾아줘</span>
-      <span class="tab">웹소켓 해독해줘</span>
-      <span class="tab">limit=500으로 다시 보내줘</span>
-      <span class="tab">IDOR 있는지 확인해줘</span>
-      <span class="tab">이 과정 반복 가능하게 만들어줘</span>
+    <div class="tabs" id="tabs" data-reveal="stagger">
+      <button class="tab is-on" data-src="v2-find-search-api" data-cap="에이전트가 페이지를 스냅샷으로 뜨고, 검색 버튼을 누르고, 잡힌 트래픽을 읽어 엔드포인트와 요청 본문을 알려줍니다.">검색 API 찾아줘</button>
+      <button class="tab" data-src="v2-login-orders" data-cap="테스트 계정으로 로그인한 뒤 주문 페이지까지 이동해서, 주문 목록을 내려주는 요청을 집어냅니다.">로그인해서 내 주문 가져와</button>
+      <button class="tab" data-src="v2-deob-auth" data-cap="캡처된 번들을 webcrack으로 풀어 원본에 가깝게 되돌린 다음, 그 코드에서 인증 흐름을 읽어냅니다.">난독화 풀고 인증 흐름 찾아줘</button>
+      <button class="tab" data-src="v2-websocket-decode" data-cap="웹소켓 프레임을 훑어 핑퐁을 걸러내고, 상태를 바꾸는 프레임과 메시지 구조를 설명합니다.">웹소켓 해독해줘</button>
+      <button class="tab" data-src="v2-repeater-tamper" data-cap="리피터로 같은 요청을 파라미터만 바꿔 다시 보내고, 응답이 어떻게 달라지는지 비교합니다.">limit=500으로 다시 보내줘</button>
+      <button class="tab" data-src="v2-idor-fuzz" data-cap="인트루더로 객체 id 구간을 훑어, 남의 데이터가 그대로 내려오는 id를 찾아 표시합니다.">IDOR 있는지 확인해줘</button>
+      <button class="tab" data-src="v2-build-macro" data-cap="방금 확인한 순서를 매크로로 저장합니다. 다음부터는 모델 호출 없이 같은 절차가 그대로 재생됩니다.">이 과정 반복 가능하게 만들어줘</button>
     </div>
-    <p class="stage-cap" style="margin-top:18px">
-      <span class="n">설명</span>
-      <span>예를 들어 “검색 API 찾아줘”라고 하면, 에이전트가 페이지를 스냅샷으로 뜨고 검색 버튼을 누른 뒤 잡힌 트래픽을 읽고 엔드포인트를 알려줍니다.</span>
-    </p>
   </div>
 </section>
 
@@ -107,7 +109,7 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>02</b> 무엇이 들어 있나</div>
       <div>
-        <h2>브라우저와 패킷 캡처, 그리고 둘 다 읽는 에이전트.</h2>
+        <h2>브라우저 조작, 패킷 캡처, 그 둘을 함께 읽는 에이전트.</h2>
         <p class="sub">따로 붙일 게 없습니다. 캡처 버퍼도, 번들 분석기도, 도구 서버도 지금 조작 중인 탭과 같은 창 안에 있습니다.</p>
       </div>
     </div>
@@ -126,7 +128,8 @@
         <h3>사용자가 보는 화면을 그대로 보는 에이전트</h3>
         <div class="body">
           <p>기본은 Claude Code, 대안으로 Codex를 쓸 수 있고 둘 다 stdio 위의 ACP로 붙습니다. 에이전트가 읽는 트래픽 저장소는 화면에 뜨는 것과 같은 저장소라, “방금 보낸 요청 설명해줘”에 복붙이 필요 없습니다.</p>
-          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">streaming</span></div>
+          <p style="margin-top:8px">다른 모델이나 다른 에이전트를 붙이고 싶다면 저장소를 포크해서 추가하고 풀 리퀘스트를 보내주세요. 에이전트 목록은 파일 한 곳에서 관리합니다.</p>
+          <div class="tags"><span class="tagchip">acp</span><span class="tagchip">claude-agent-acp</span><span class="tagchip">codex-acp</span><span class="tagchip">기여 환영</span></div>
         </div>
       </div>
       <div class="row-item">
@@ -147,6 +150,23 @@
       </div>
       <div class="row-item">
         <div class="num">05</div>
+        <h3>매크로 — 한 번 확인한 절차를 그대로 재생</h3>
+        <div class="body">
+          <p>로그인부터 목록 조회까지 방금 검증한 순서를 매크로로 저장해 두면, 다음부터는 모델을 거치지 않고 같은 절차가 그대로 실행됩니다. 아이디·비밀번호 같은 값은 변수로 빼두고 실행할 때 채웁니다.</p>
+          <p style="margin-top:8px">결과는 매번 같습니다. 회귀 확인이나 데이터 수집처럼 반복이 필요한 작업에 씁니다.</p>
+          <div class="tags"><span class="tagchip">macro_record</span><span class="tagchip">macro_run</span><span class="tagchip">변수 치환</span><span class="tagchip">모델 호출 0</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">06</div>
+        <h3>워크플로 — 여러 단계를 하나로 묶기</h3>
+        <div class="body">
+          <p>매크로 여러 개와 도구 호출을 순서대로 엮어 하나의 워크플로로 만듭니다. 상태 표시줄에서 실행 상황을 보고, 중간 결과는 발견 목록에 쌓입니다.</p>
+          <div class="tags"><span class="tagchip">workflows</span><span class="tagchip">findings</span><span class="tagchip">har export</span></div>
+        </div>
+      </div>
+      <div class="row-item">
+        <div class="num">07</div>
         <h3>깊게 파는 API 도구</h3>
         <div class="body">
           <p>리피터, 인트루더, 헤더 덮어쓰기, 요청 가로채기, 암호화·인코딩 해석 도우미, 웹소켓과 서비스 워커 점검, GraphQL·프로토버프 리더까지 들어 있습니다.</p>
@@ -154,19 +174,11 @@
         </div>
       </div>
       <div class="row-item">
-        <div class="num">06</div>
+        <div class="num">08</div>
         <h3>기본값이 로컬</h3>
         <div class="body">
           <p>MCP 서버는 앱 안에서 돌고 <code class="i">127.0.0.1</code>의 임의 포트에 붙습니다. 에이전트를 처음 띄울 때만 시작되고, 캡처한 트래픽은 사용자 컴퓨터의 앱 메모리에 머뭅니다.</p>
           <div class="tags"><span class="tagchip">127.0.0.1</span><span class="tagchip">in-process</span><span class="tagchip">수집 서버 없음</span></div>
-        </div>
-      </div>
-      <div class="row-item">
-        <div class="num">07</div>
-        <h3>알아낸 것을 반복 가능하게</h3>
-        <div class="body">
-          <p>엔드포인트를 파악했으면 매크로나 워크플로로 저장해 다시 실행하고, 세션 전체를 HAR로 내보내고, 앱 밖에서 돌릴 클라이언트 코드까지 받아볼 수 있습니다.</p>
-          <div class="tags"><span class="tagchip">macros</span><span class="tagchip">workflows</span><span class="tagchip">findings</span></div>
         </div>
       </div>
     </div>
@@ -179,7 +191,7 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>03</b> 구조</div>
       <div>
-        <h2>프로세스 셋, 경계는 하나.</h2>
+        <h2>프로세스는 셋으로 나누고, 경계는 하나만 둡니다.</h2>
         <p class="sub">Node API와 CDP 디버거는 페이지 쪽으로 새어 나가지 않습니다. 모든 통신은 preload IPC를 거치고, 이 경계가 화면에 노출되는 API의 유일한 기준입니다.</p>
       </div>
     </div>
@@ -237,7 +249,7 @@
     <div class="sec-head" data-reveal="fade">
       <div class="idx"><b>04</b> 도구 목록</div>
       <div>
-        <h2>도구 134개, 알아내려는 것 기준으로 묶었습니다.</h2>
+        <h2>MCP 도구 134개+, 영역별로 나눠 담았습니다.</h2>
         <p class="sub">한 영역이 <code class="i">src/main/mcp/tools/</code> 아래 파일 하나입니다. 영역을 늘리려면 파일 하나 추가하고 서버 팩토리에 한 줄 넣으면 됩니다.</p>
       </div>
     </div>
@@ -281,10 +293,10 @@
     </div>
 
     <div class="note" data-reveal="fade">
-      <div class="cap">어디에 겨눌지 정하기 전에</div>
+      <div class="cap">쓰기 전에 한 가지</div>
       <div>
-        <p>rever-browser는 실제 브라우저로 실제 서버를 두드립니다. 본인이 운영하는 서비스, 서면으로 테스트 허가를 받은 시스템, 또는 테스트를 허용한 대상에만 쓰고, 해당 사이트의 약관과 거주 국가의 법을 따르세요.</p>
-        <p>이미 들여다볼 권한이 있는 사람을 위한 디버깅 도구입니다.</p>
+        <p>rever-browser는 오픈소스 보안 점검 도구입니다. 내가 만든 서비스의 API가 무엇을 흘리는지 확인하고, 인증이 제대로 걸려 있는지 스스로 점검하는 용도로 만들었습니다.</p>
+        <p>실제 브라우저로 실제 서버를 두드리기 때문에, 본인이 운영하는 서비스나 서면으로 테스트 허가를 받은 대상에만 쓰고 해당 사이트의 약관과 거주 국가의 법을 따르세요.</p>
       </div>
     </div>
   </div>
@@ -295,7 +307,7 @@
   <div class="wrap">
     <div class="inner" data-reveal="fade">
       <div>
-        <h2>캡처를 읽고, 그다음 코드를 읽으세요.</h2>
+        <h2>동작이 궁금하면 코드도 열려 있습니다.</h2>
         <p>MIT 라이선스이고 의존성 트리 어디에도 카피레프트가 없습니다. 이슈와 풀 리퀘스트 환영합니다.</p>
       </div>
       <div class="cta" style="margin:0">
@@ -311,7 +323,6 @@
         <a href="https://github.com/greekr4/rever-browser">소스</a>
         <a href="https://github.com/greekr4/rever-browser/blob/main/README.md">readme</a>
         <a href="https://github.com/greekr4/rever-browser/issues">이슈</a>
-        <a href="../demos/">데모</a>
       </span>
     </div>
   </footer>
@@ -326,6 +337,12 @@
   if (hasGsap && window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
   var root = document.documentElement;
 
+  /* ── 테마: 안에 띄운 데모까지 같이 전환 ──────────────────────────── */
+  function syncDemoTheme() {
+    var f = document.getElementById('demo');
+    try { if (f && f.contentDocument) f.contentDocument.documentElement.setAttribute('data-theme', root.getAttribute('data-theme')); }
+    catch (e) { /* file:// 에서는 막힘 */ }
+  }
   var themeBtn = document.getElementById('theme');
   function paintThemeBtn() { themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'; }
   paintThemeBtn();
@@ -333,13 +350,42 @@
     var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
     try { localStorage.setItem('rv-theme', next); } catch (e) {}
-    paintThemeBtn();
+    paintThemeBtn(); syncDemoTheme();
   });
 
   addEventListener('scroll', function () {
     document.getElementById('nav').classList.toggle('is-stuck', scrollY > 8);
   }, { passive: true });
 
+  /* ── 데모 프레임: 1216px 레이아웃을 유지한 채 폭에 맞춰 축소 ────── */
+  var scaler = document.getElementById('scaler');
+  var demo = document.getElementById('demo');
+  var ph = document.getElementById('ph');
+  var BASE_W = 1216, BASE_H = 862;
+  function fit() {
+    var raw = Math.min(1, scaler.clientWidth / BASE_W), s = Math.max(0.42, raw);
+    scaler.style.overflowX = raw < 0.42 ? 'auto' : 'hidden';
+    demo.style.transform = 'scale(' + s + ')';
+    scaler.style.height = Math.round(BASE_H * s) + 'px';
+  }
+  addEventListener('resize', fit); fit();
+  demo.addEventListener('load', function () { ph.classList.add('gone'); syncDemoTheme(); fit(); });
+
+  /* ── 시나리오 탭 ─────────────────────────────────────────────────── */
+  var tabs = document.getElementById('tabs');
+  var capNum = document.getElementById('capnum'), capText = document.getElementById('capture');
+  tabs.addEventListener('click', function (e) {
+    var btn = e.target.closest('.tab'); if (!btn) return;
+    var all = [].slice.call(this.querySelectorAll('.tab'));
+    all.forEach(function (t) { t.classList.toggle('is-on', t === btn); });
+    ph.classList.remove('gone');
+    demo.src = '../demos/' + btn.dataset.src + '.html';
+    capNum.textContent = ('0' + (all.indexOf(btn) + 1)).slice(-2);
+    capText.textContent = btn.dataset.cap;
+    scrollTo({ top: scaler.getBoundingClientRect().top + scrollY - 92, behavior: reduced ? 'auto' : 'smooth' });
+  });
+
+  /* ── 도구 목록: src/main/mcp/tools/ 기준 ─────────────────────────── */
   var TOOLS = [
     ['browser', 24], ['debugger', 9], ['intercept', 8], ['storage', 7], ['macros', 7], ['scripts', 6],
     ['console', 5], ['inject', 5], ['websocket', 5], ['crypto', 4], ['headers', 4], ['dialog', 4],
@@ -367,15 +413,15 @@
     });
   });
 
+  /* ── 모션 ────────────────────────────────────────────────────────── */
   if (!hasGsap || reduced) {
     [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) { el.style.opacity = 1; });
     [].forEach.call(document.querySelectorAll('[data-count]'), function (el) { el.textContent = el.dataset.count; });
     return;
   }
 
-  /* headline: 어절 단위로 올라오게 */
+  /* 헤드라인: 줄바꿈은 문장 단위로 고정하고, 그 안에서 어절이 올라온다 */
   var h1 = document.getElementById('headline');
-  /* 문장(.ln)은 줄바꿈 위치를 고정하고, 그 안에서 어절 단위로 올린다 */
   [].forEach.call(h1.querySelectorAll('.ln'), function (ln) {
     ln.innerHTML = ln.textContent.trim().split(/\s+/).map(function (w) {
       return '<span class="w">' + w + '</span>';
@@ -389,10 +435,12 @@
   gsap.timeline({ delay: 0.1 })
     .to(words, { yPercent: 0, opacity: 1, duration: 0.9, ease: 'power3.out', stagger: 0.04 })
     .fromTo('.eyebrow', { y: -8, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power2.out' }, 0)
-    .fromTo('.lede, .hero .cta, .stage', { y: 12, opacity: 0 },
+    .fromTo('.lede, .hero .cta', { y: 12, opacity: 0 },
       { y: 0, opacity: 1, duration: 0.6, ease: 'power2.out', stagger: 0.08 }, 0.4)
     .fromTo('.spec', { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.5)
     .fromTo('.spec .row', { opacity: 0, x: 10 }, { opacity: 1, x: 0, duration: 0.45, ease: 'power2.out', stagger: 0.06 }, 0.6);
+
+  gsap.fromTo('.stage', { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.95, ease: 'power3.out', delay: 0.55 });
 
   var OWNED = ['stage', 'eyebrow', 'lede', 'spec'];
   [].forEach.call(document.querySelectorAll('[data-reveal]'), function (el) {
