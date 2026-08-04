@@ -131,7 +131,7 @@ h1 .w { display: inline-block; }
   position: relative; border: 1px solid var(--border-2); border-radius: 12px; overflow: hidden;
   background: var(--bg-bar); box-shadow: 0 24px 60px var(--shadow);
 }
-.frame .scaler { position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }
+.frame .scaler { position: relative; width: 100%; overflow: hidden; -webkit-overflow-scrolling: touch; }
 .frame iframe { width: 1216px; height: 700px; border: 0; display: block; transform-origin: top left; background: var(--bg); }
 .frame .ph {
   position: absolute; inset: 0; display: grid; place-items: center; background: var(--bg);
@@ -621,7 +621,9 @@ footer a:hover { color: var(--accent); }
     var h = Math.min(860, Math.max(520, contentHeight()));
     if (Math.abs(parseFloat(demo.style.height || 0) - h) > 3) demo.style.height = h + 'px';
     /* below ~510px the app would be unreadable; keep a floor and let the frame scroll */
-    var s = Math.max(0.42, Math.min(1, scaler.clientWidth / BASE_W));
+    var raw = Math.min(1, scaler.clientWidth / BASE_W), s = Math.max(0.42, raw);
+    /* only let the frame scroll sideways when that floor actually kicked in (phones) */
+    scaler.style.overflowX = raw < 0.42 ? 'auto' : 'hidden';
     demo.style.transform = 'scale(' + s + ')';
     scaler.style.height = Math.round(h * s) + 'px';
   }
