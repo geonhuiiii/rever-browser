@@ -83,12 +83,19 @@ Bun.serve({
         headers: { 'content-type': 'text/html; charset=utf-8' }
       })
     }
+    if (p === '/login') {
+      return new Response(Bun.file(`${import.meta.dir}/public/login.html`), {
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      })
+    }
 
     // ── auth ────────────────────────────────────────────────────────────
     if (p === '/api/login' && method === 'POST') {
-      const b = (await req.json().catch(() => ({}))) as { user?: string }
-      const name = b.user || 'u42'
-      return json({ token: makeToken('u_42', name), user: { id: 'u_42', name } })
+      const b = (await req.json().catch(() => ({}))) as { user?: string; pass?: string }
+      if (b.user !== 'rever' || b.pass !== '123123') {
+        return json({ error: 'invalid_credentials' }, 401)
+      }
+      return json({ token: makeToken('u_rever', 'rever'), user: { id: 'u_rever', name: 'rever' } })
     }
 
     // ── posts ───────────────────────────────────────────────────────────

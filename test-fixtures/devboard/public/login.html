@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — DevBoard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><path d='M9 11h14M9 16h14M9 21h9' stroke='white' stroke-width='2.4' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f9;--surface:#fff;--surface-2:#eef0f4;--border:#e3e6ec;--border-2:#d2d7e0;
+  --text:#141824;--text-2:#3d4453;--dim:#6b7280;--accent:#2f6fed;--accent-2:#7c3aed;
+  --accent-soft:rgba(47,111,237,.1);--danger:#d1495b;--shadow:rgba(20,24,40,.12);
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:
+   radial-gradient(600px 400px at 20% -10%,rgba(124,58,237,.12),transparent 70%),
+   radial-gradient(600px 400px at 90% 110%,rgba(47,111,237,.12),transparent 70%),var(--bg);
+  color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;
+  display:grid;place-items:center;padding:24px}
+.card{width:100%;max-width:380px;border:1px solid var(--border);border-radius:16px;background:var(--surface);
+  box-shadow:0 30px 70px var(--shadow);padding:30px 28px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-size:16px}
+.logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+.logo::after{content:'';width:13px;height:10px;border-top:2.6px solid #fff;border-bottom:2.6px solid #fff}
+h1{font-size:21px;letter-spacing:-.02em;margin:22px 0 3px}
+.sub{color:var(--dim);font-size:13.5px;margin:0 0 22px}
+label{display:block;font:600 12px var(--sans);color:var(--text-2);margin:0 0 6px}
+.field{margin-bottom:15px}
+input{width:100%;border:1px solid var(--border-2);border-radius:10px;background:var(--surface);color:var(--text);
+  font:15px var(--sans);padding:11px 13px;transition:.15s}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.btn{width:100%;margin-top:4px;border:1px solid var(--accent);background:var(--accent);color:#fff;
+  font:600 15px var(--sans);border-radius:10px;padding:12px;cursor:pointer;transition:.15s}
+.btn:hover{filter:brightness(1.06)}
+.err{display:none;margin-top:12px;font:500 13px var(--sans);color:var(--danger);
+  background:rgba(209,73,91,.08);border:1px solid rgba(209,73,91,.25);border-radius:9px;padding:9px 12px}
+.err.on{display:block}
+.hint{margin-top:18px;padding-top:16px;border-top:1px solid var(--border);
+  font:500 12px var(--mono);color:var(--dim);text-align:center}
+.hint b{color:var(--text-2)}
+.back{display:block;text-align:center;margin-top:14px;font-size:13px;color:var(--dim);text-decoration:none}
+.back:hover{color:var(--accent)}
+</style>
+</head>
+<body>
+<form class="card" id="form" autocomplete="off">
+  <div class="brand"><span class="logo"></span> DevBoard</div>
+  <h1>Sign in</h1>
+  <p class="sub">Welcome back. Sign in to post to the community.</p>
+
+  <div class="field">
+    <label for="username">Username</label>
+    <input id="username" name="username" type="text" placeholder="your username" autocomplete="username">
+  </div>
+  <div class="field">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="current-password">
+  </div>
+  <button class="btn" type="submit" id="btn-signin">Sign in</button>
+  <div class="err" id="err">Invalid username or password.</div>
+
+  <div class="hint">demo account · <b>rever</b> / <b>123123</b></div>
+  <a class="back" href="/">← back to board</a>
+</form>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    $('err').classList.remove('on');
+    var user = $('username').value.trim(), pass = $('password').value;
+    fetch('/api/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user: user, pass: pass })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('bad');
+      return r.json();
+    }).then(function (d) {
+      localStorage.setItem('auth.token', d.token);
+      localStorage.setItem('auth.name', d.user.name);
+      location.href = '/';
+    }).catch(function () { $('err').classList.add('on'); });
+  });
+})();
+</script>
+</body>
+</html>

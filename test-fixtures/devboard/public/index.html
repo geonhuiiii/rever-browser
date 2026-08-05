@@ -73,7 +73,7 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-we
   <a class="brand" href="/"><span class="logo"></span> DevBoard</a>
   <div class="sp">
     <button class="icobtn" id="theme" title="Theme">☾</button>
-    <button class="btn primary" id="btn-login">Sign in</button>
+    <a class="btn primary" id="btn-login" href="/login">Sign in</a>
     <span class="acct" id="acct"><span class="av" id="acct-av">u4</span> <span id="acct-name">u42</span></span>
   </div>
 </div></div>
@@ -140,21 +140,19 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-we
     fetch(API + '/posts').then(function (r) { return r.json(); }).then(function (d) { render(d.posts || []); });
   }
 
-  $('btn-login').addEventListener('click', function () {
-    fetch(API + '/login', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ user: 'u42', pass: 'hunter2' })
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      token = d.token; me = d.user.name;
-      localStorage.setItem('auth.token', token);
-      $('btn-login').style.display = 'none';
-      $('acct').style.display = 'inline-flex';
-      $('acct-name').textContent = me; $('acct-av').textContent = avatar(me);
-      $('as-name').textContent = me;
-      $('signedout').style.display = 'none';
-      $('composer').classList.add('on');
-    });
-  });
+  /* session comes from the /login page (it stores the token, then redirects) */
+  function hydrate() {
+    token = localStorage.getItem('auth.token') || '';
+    if (!token) return;
+    me = localStorage.getItem('auth.name') || 'rever';
+    $('btn-login').style.display = 'none';
+    $('acct').style.display = 'inline-flex';
+    $('acct-name').textContent = me; $('acct-av').textContent = avatar(me);
+    $('as-name').textContent = me;
+    $('signedout').style.display = 'none';
+    $('composer').classList.add('on');
+  }
+  hydrate();
 
   $('composer').addEventListener('submit', function (e) {
     e.preventDefault();
