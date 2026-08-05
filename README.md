@@ -8,6 +8,8 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
+**[🌐 Website](https://greekr4.github.io/rever-browser/)**
+
 [Demo](#demo) · [What is it?](#what-is-rever-browser) · [Features](#features) · [Getting started](#getting-started) · [Architecture](#architecture)
 
 </div>
@@ -22,7 +24,7 @@
 
 **Ask in plain English — the agent drives a real browser, finds API flaws, proves them live, and turns it into a one-click macro.**
 
-[▶ Watch the full 52-second demo](https://greekr4.github.io/rever-browser/demo.mp4)
+[▶ Watch the full demo](https://greekr4.github.io/rever-browser/demo.mp4)
 
 </div>
 
