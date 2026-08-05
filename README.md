@@ -1,12 +1,36 @@
+<div align="center">
+
+<img src="./site/icon.png" alt="rever-browser" width="120" />
+
 # rever-browser
 
-An AI-agent-driven desktop browser for reverse-engineering web APIs.
+### The AI browser for API reverse engineering.
+
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Electron](https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Bun](https://img.shields.io/badge/Bun-package_manager-fbf0df?logo=bun&logoColor=black)](https://bun.sh/)
+[![Agent Client Protocol](https://img.shields.io/badge/ACP-agent-7B61FF)](https://agentclientprotocol.com/)
+
+[Demo](#demo) · [What is it?](#what-is-rever-browser) · [Features](#features) · [Getting started](#getting-started) · [Architecture](#architecture)
+
+</div>
+
+---
 
 ## Demo
 
-![rever-browser demo](https://greekr4.github.io/rever-browser/demo.gif)
+<div align="center">
 
-Ask in plain English — the agent drives a real browser, finds API flaws, proves them live, and turns the whole thing into a one-click macro. [▶ Watch the full 52-second demo](https://greekr4.github.io/rever-browser/demo.mp4)
+[![rever-browser demo](https://greekr4.github.io/rever-browser/demo.gif)](https://greekr4.github.io/rever-browser/demo.mp4)
+
+**Ask in plain English — the agent drives a real browser, finds API flaws, proves them live, and turns it into a one-click macro.**
+
+[▶ Watch the full 52-second demo](https://greekr4.github.io/rever-browser/demo.mp4)
+
+</div>
+
+## What is rever-browser?
 
 `rever-browser` is an Electron app that pairs a real Chromium tab with an ACP-based coding agent. You browse a target site in an embedded `<webview>`; the app captures every network request via the Chrome DevTools Protocol, and the agent can read that traffic, analyze the site's JavaScript bundles, and drive the tab itself through an in-process MCP tool server. The goal is to go from "what requests does this site make?" to "here is how to reproduce its API" without leaving the app.
 
