@@ -4,9 +4,9 @@ An AI-agent-driven desktop browser for reverse-engineering web APIs.
 
 ## Demo
 
-<video src="https://greekr4.github.io/rever-browser/demo.mp4" poster="https://greekr4.github.io/rever-browser/demo-poster.png" controls muted playsinline width="100%"></video>
+![rever-browser demo](https://greekr4.github.io/rever-browser/demo.gif)
 
-[▶ Watch the demo](https://greekr4.github.io/rever-browser/demo.mp4) — ask in plain English, and the agent drives a real browser, finds API flaws, proves them live, and turns the whole thing into a one-click macro.
+Ask in plain English — the agent drives a real browser, finds API flaws, proves them live, and turns the whole thing into a one-click macro. [▶ Watch the full 52-second demo](https://greekr4.github.io/rever-browser/demo.mp4)
 
 `rever-browser` is an Electron app that pairs a real Chromium tab with an ACP-based coding agent. You browse a target site in an embedded `<webview>`; the app captures every network request via the Chrome DevTools Protocol, and the agent can read that traffic, analyze the site's JavaScript bundles, and drive the tab itself through an in-process MCP tool server. The goal is to go from "what requests does this site make?" to "here is how to reproduce its API" without leaving the app.
 
