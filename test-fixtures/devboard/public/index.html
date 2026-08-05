@@ -64,6 +64,21 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-we
 .post .foot{display:flex;gap:16px;margin-top:10px;color:var(--dim);font:500 12px var(--mono)}
 .post.admin{border-color:rgba(209,73,91,.35);box-shadow:0 0 0 1px rgba(209,73,91,.12)}
 
+/* account menu */
+.acctwrap{position:relative;display:none}
+.acctwrap.on{display:inline-flex}
+.acct{cursor:pointer}
+.acct .caret{margin-left:2px;color:var(--dim);font-size:11px}
+.menu{position:absolute;right:0;top:calc(100% + 8px);min-width:160px;background:var(--surface);
+  border:1px solid var(--border-2);border-radius:11px;box-shadow:0 16px 40px var(--shadow);padding:6px;display:none;z-index:30}
+.menu.on{display:block}
+.menu .mi{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;
+  color:var(--text-2);font:500 13px var(--sans);padding:9px 10px;border-radius:8px;cursor:pointer}
+.menu .mi:hover{background:var(--surface-2);color:var(--text)}
+.menu .mi.danger{color:var(--danger)}
+.menu .sep{height:1px;background:var(--border);margin:5px 2px}
+.menu .who{padding:8px 10px 4px;font:600 12px var(--mono);color:var(--dim)}
+
 :root[data-theme='dark']{--bg:#0d1117;--surface:#161b22;--surface-2:#1d2432;--border:#242c39;--border-2:#30394a;--text:#e6edf3;--text-2:#c2cad6;--dim:#8b95a5;--shadow:rgba(0,0,0,.5)}
 </style>
 </head>
@@ -74,7 +89,15 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-we
   <div class="sp">
     <button class="icobtn" id="theme" title="Theme">☾</button>
     <a class="btn primary" id="btn-login" href="/login">Sign in</a>
-    <span class="acct" id="acct"><span class="av" id="acct-av">u4</span> <span id="acct-name">u42</span></span>
+    <span class="acctwrap" id="acctwrap">
+      <span class="acct" id="acct"><span class="av" id="acct-av">u4</span> <span id="acct-name">u42</span><span class="caret">▾</span></span>
+      <div class="menu" id="menu">
+        <div class="who" id="menu-who">signed in as u42</div>
+        <button class="mi" id="mi-new">New post</button>
+        <div class="sep"></div>
+        <button class="mi danger" id="btn-logout">Sign out</button>
+      </div>
+    </span>
   </div>
 </div></div>
 
@@ -146,13 +169,24 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-we
     if (!token) return;
     me = localStorage.getItem('auth.name') || 'rever';
     $('btn-login').style.display = 'none';
-    $('acct').style.display = 'inline-flex';
+    $('acctwrap').classList.add('on');
     $('acct-name').textContent = me; $('acct-av').textContent = avatar(me);
+    $('menu-who').textContent = 'signed in as ' + me;
     $('as-name').textContent = me;
     $('signedout').style.display = 'none';
     $('composer').classList.add('on');
   }
   hydrate();
+
+  /* account menu + sign out */
+  $('acct').addEventListener('click', function (e) { e.stopPropagation(); $('menu').classList.toggle('on'); });
+  document.addEventListener('click', function () { $('menu').classList.remove('on'); });
+  $('mi-new').addEventListener('click', function () { $('post-title').focus(); });
+  $('btn-logout').addEventListener('click', function () {
+    localStorage.removeItem('auth.token');
+    localStorage.removeItem('auth.name');
+    location.href = '/';
+  });
 
   $('composer').addEventListener('submit', function (e) {
     e.preventDefault();
