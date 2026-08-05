@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DevBoard — community</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232f6fed'/><path d='M9 11h14M9 16h14M9 21h9' stroke='white' stroke-width='2.4' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f9;--surface:#fff;--surface-2:#eef0f4;--border:#e3e6ec;--border-2:#d2d7e0;
+  --text:#141824;--text-2:#3d4453;--dim:#6b7280;--accent:#2f6fed;--accent-2:#7c3aed;
+  --accent-soft:rgba(47,111,237,.1);--ok:#1f9d55;--danger:#d1495b;--shadow:rgba(20,24,40,.09);
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px}
+.nav{position:sticky;top:0;z-index:20;background:rgba(246,247,249,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--border)}
+.nav .in{display:flex;align-items:center;gap:14px;height:60px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.02em}
+.logo{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:grid;place-items:center}
+.logo::after{content:'';width:12px;height:9px;border-top:2.4px solid #fff;border-bottom:2.4px solid #fff}
+.nav .sp{margin-left:auto;display:flex;align-items:center;gap:10px}
+.icobtn{width:36px;height:36px;border-radius:9px;border:1px solid var(--border-2);background:var(--surface);color:var(--text-2);display:grid;place-items:center;cursor:pointer;font-size:15px}
+.btn{display:inline-flex;align-items:center;gap:8px;font:600 13.5px var(--sans);border-radius:9px;padding:9px 15px;border:1px solid var(--border-2);background:var(--surface);color:var(--text-2);cursor:pointer;transition:.15s}
+.btn:hover{color:var(--text);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.06);color:#fff}
+.acct{display:none;align-items:center;gap:8px;border:1px solid var(--border-2);background:var(--surface);border-radius:999px;padding:4px 12px 4px 4px;font-size:13px;font-weight:600}
+.acct .av{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:grid;place-items:center;font:700 11px var(--mono)}
+
+.head{padding:26px 0 10px}
+.head h1{font-size:24px;letter-spacing:-.03em;margin:0}
+.head p{color:var(--dim);font-size:14px;margin:5px 0 0}
+
+/* composer */
+.composer{display:none;border:1px solid var(--border);border-radius:14px;background:var(--surface);box-shadow:0 8px 26px var(--shadow);padding:14px;margin:14px 0 18px}
+.composer.on{display:block}
+.composer input,.composer textarea{width:100%;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:14px var(--sans);padding:10px 12px}
+.composer input{font-weight:600;font-size:15px}
+.composer textarea{margin-top:9px;min-height:74px;resize:vertical}
+.composer .row{display:flex;align-items:center;gap:10px;margin-top:10px}
+.composer .row .as{font:500 12px var(--mono);color:var(--dim)}
+.composer .row .as b{color:var(--text-2)}
+.composer .row .btn{margin-left:auto}
+.signedout{border:1px dashed var(--border-2);border-radius:14px;padding:18px;text-align:center;color:var(--dim);font-size:14px;margin:14px 0 18px}
+
+/* board */
+.board{display:flex;flex-direction:column;gap:12px;padding-bottom:60px}
+.post{border:1px solid var(--border);border-radius:14px;background:var(--surface);padding:14px 16px;animation:pop .28s ease}
+@keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.post .top{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.post .av{width:28px;height:28px;border-radius:50%;background:var(--surface-2);color:var(--text-2);display:grid;place-items:center;font:700 12px var(--mono)}
+.post .who{font-weight:600;font-size:13.5px}
+.post .badge{font:700 9.5px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 6px;border-radius:5px;background:var(--surface-2);color:var(--dim)}
+.post .badge.admin{background:rgba(209,73,91,.12);color:var(--danger);border:1px solid rgba(209,73,91,.3)}
+.post .time{margin-left:auto;font:500 11.5px var(--mono);color:var(--dim)}
+.post h3{margin:0 0 4px;font-size:16px;letter-spacing:-.01em}
+.post p{margin:0;color:var(--text-2);font-size:14px;line-height:1.55}
+.post .foot{display:flex;gap:16px;margin-top:10px;color:var(--dim);font:500 12px var(--mono)}
+.post.admin{border-color:rgba(209,73,91,.35);box-shadow:0 0 0 1px rgba(209,73,91,.12)}
+
+:root[data-theme='dark']{--bg:#0d1117;--surface:#161b22;--surface-2:#1d2432;--border:#242c39;--border-2:#30394a;--text:#e6edf3;--text-2:#c2cad6;--dim:#8b95a5;--shadow:rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+
+<div class="nav"><div class="wrap in">
+  <a class="brand" href="/"><span class="logo"></span> DevBoard</a>
+  <div class="sp">
+    <button class="icobtn" id="theme" title="Theme">☾</button>
+    <button class="btn primary" id="btn-login">Sign in</button>
+    <span class="acct" id="acct"><span class="av" id="acct-av">u4</span> <span id="acct-name">u42</span></span>
+  </div>
+</div></div>
+
+<div class="wrap">
+  <div class="head">
+    <h1>Community</h1>
+    <p>What developers are talking about today.</p>
+  </div>
+
+  <div class="signedout" id="signedout">Sign in to start a thread.</div>
+
+  <form class="composer" id="composer" autocomplete="off">
+    <input id="post-title" placeholder="Title" maxlength="140">
+    <textarea id="post-body" placeholder="Share something…" maxlength="2000"></textarea>
+    <div class="row">
+      <span class="as">posting as <b id="as-name">u42</b></span>
+      <button type="submit" class="btn primary" id="btn-post">Post</button>
+    </div>
+  </form>
+
+  <div class="board" id="board"></div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var API = '/api';
+  var token = '', me = 'u42';
+  var root = document.documentElement;
+
+  $('theme').onclick = function () {
+    var d = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', d ? 'light' : 'dark');
+    $('theme').textContent = d ? '☾' : '☀';
+  };
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function ago(ts) {
+    var m = Math.max(0, Math.round((Date.now() - ts) / 60000));
+    if (m < 1) return 'just now'; if (m < 60) return m + 'm'; var h = Math.round(m/60);
+    if (h < 24) return h + 'h'; return Math.round(h/24) + 'd';
+  }
+  function avatar(name) { return String(name).replace(/[^a-z0-9]/gi,'').slice(0,2).toLowerCase() || '??'; }
+
+  function render(posts) {
+    var b = $('board'); b.innerHTML = '';
+    posts.forEach(function (p) {
+      var admin = p.role === 'admin';
+      var el = document.createElement('div');
+      el.className = 'post' + (admin ? ' admin' : '');
+      el.innerHTML =
+        '<div class="top"><span class="av">' + esc(avatar(p.author)) + '</span>' +
+        '<span class="who">' + esc(p.author) + '</span>' +
+        '<span class="badge' + (admin ? ' admin' : '') + '">' + (admin ? 'admin' : 'member') + '</span>' +
+        '<span class="time">' + ago(p.ts) + '</span></div>' +
+        '<h3>' + esc(p.title) + '</h3><p>' + esc(p.body) + '</p>' +
+        '<div class="foot"><span>♥ ' + (p.likes||0) + '</span><span>reply</span><span>share</span></div>';
+      b.appendChild(el);
+    });
+  }
+
+  function loadPosts() {
+    fetch(API + '/posts').then(function (r) { return r.json(); }).then(function (d) { render(d.posts || []); });
+  }
+
+  $('btn-login').addEventListener('click', function () {
+    fetch(API + '/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user: 'u42', pass: 'hunter2' })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      token = d.token; me = d.user.name;
+      localStorage.setItem('auth.token', token);
+      $('btn-login').style.display = 'none';
+      $('acct').style.display = 'inline-flex';
+      $('acct-name').textContent = me; $('acct-av').textContent = avatar(me);
+      $('as-name').textContent = me;
+      $('signedout').style.display = 'none';
+      $('composer').classList.add('on');
+    });
+  });
+
+  $('composer').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var title = $('post-title').value.trim(), body = $('post-body').value.trim();
+    if (!title) return;
+    fetch(API + '/posts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + token },
+      body: JSON.stringify({ title: title, body: body })   /* the UI never sends `author` */
+    }).then(function () { $('post-title').value = ''; $('post-body').value = ''; loadPosts(); });
+  });
+
+  loadPosts();
+})();
+</script>
+</body>
+</html>
