@@ -33,11 +33,10 @@ function mk(author: string, role: Post['role'], title: string, body: string, ago
   return { id: nextId++, author, role, title, body, ts: Date.now() - agoMin * 60_000, likes: 0 }
 }
 
+// Newest first — matches the unshift order new posts arrive in.
 const posts: Post[] = [
+  mk('sena', 'member', 'Anyone using bun for prod servers?', 'Loving the DX but curious about long-running stability.', 42),
   mk('admin', 'admin', 'Welcome to DevBoard', 'Be kind, stay on topic. Report abuse to the mods.', 1440),
-  mk('sena', 'member', 'Anyone using bun for prod servers?', 'Loving the DX but curious about long-running stability.', 180),
-  mk('lumen', 'member', 'CSS container queries finally clicked for me', 'Sharing a small demo, feedback welcome.', 92),
-  mk('orbit', 'member', 'Best way to debug an OOPIF?', 'A payment widget iframe is eating my click events…', 33),
 ]
 
 function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
