@@ -601,7 +601,9 @@ export async function scanClickable(): Promise<ClickScan> {
  */
 export async function capturePageLayout(
   viewport: Viewport,
-  clickableRects?: ReadonlySet<string>
+  clickableRects?: ReadonlySet<string>,
+  /** device-px → CSS-px divisor; 1 (default) leaves the capture untouched. */
+  scale = 1
 ): Promise<PageLayout | null> {
   const target = getActiveTarget()
   if (!target) return null
@@ -615,8 +617,29 @@ export async function capturePageLayout(
       // scrollRects/clientRects: the pair that says whether a box really scrolls
       includeDOMRects: true
     })) as CaptureResult
+    if (scale !== 1) normalizeSnapshotScale(snap, scale)
     return buildPageLayout(snap, viewport, clickableRects)
   } catch {
     return null
+  }
+}
+
+/**
+ * DOMSnapshot rects arrive in the layout (device-pixel) space; the rest of the
+ * pipeline works in CSS px. Divide every rect array by the scale factor so the
+ * boxes line up with the CSS viewport regardless of the display's scale.
+ */
+function normalizeSnapshotScale(snap: CaptureResult, scale: number): void {
+  for (const doc of snap.documents ?? []) {
+    const lay = doc.layout
+    if (!lay) continue
+    for (const key of ['bounds', 'scrollRects', 'clientRects'] as const) {
+      const arr = lay[key]
+      if (!arr) continue
+      for (const rect of arr) {
+        if (!rect) continue
+        for (let k = 0; k < rect.length; k++) rect[k] /= scale
+      }
+    }
   }
 }

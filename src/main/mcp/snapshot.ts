@@ -392,6 +392,29 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
     height: meta.innerHeight
   }
 
+  // DOMSnapshot bounds come back in the layout (device-pixel) space, while the
+  // viewport above is CSS px. On a display whose scale factor is not 1 — the
+  // default on Retina, and anything the user picks in "scaled resolution" — the
+  // two spaces disagree and every box lands off-screen, so the viewport filter
+  // drops the whole tree. getLayoutMetrics reports both spaces; their ratio is
+  // the exact factor to divide the snapshot bounds by. Reads 1 (no-op) when the
+  // scale is 1, so the common case is untouched.
+  let layoutScale = 1
+  try {
+    const m = (await target.dbg.sendCommand('Page.getLayoutMetrics')) as {
+      layoutViewport?: { clientWidth?: number }
+      cssLayoutViewport?: { clientWidth?: number }
+    }
+    const dev = m.layoutViewport?.clientWidth ?? 0
+    const css = m.cssLayoutViewport?.clientWidth ?? 0
+    if (dev > 0 && css > 0) {
+      const s = dev / css
+      if (s > 1.02 || s < 0.98) layoutScale = s
+    }
+  } catch {
+    // Older Chromium without cssLayoutViewport — leave scale at 1.
+  }
+
   // The AX tree, the click scan and the layout snapshot are independent reads —
   // issuing them together keeps the added passes off the critical path.
   // The click scan feeds the layout pass, so those two are a chain; the AX tree
@@ -408,7 +431,7 @@ async function captureSnapshot(opts: { full?: boolean }): Promise<SnapshotResult
       .catch(() => null)
       .then((click) => {
         clickScanSkipped = click?.skipped === true
-        return capturePageLayout(viewport, click?.paths).catch(() => null)
+        return capturePageLayout(viewport, click?.paths, layoutScale).catch(() => null)
       }),
     collectFrames().catch(() => ({ frames: [], unreachable: 0, empty: 0 }))
   ])
