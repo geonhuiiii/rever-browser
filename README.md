@@ -7,10 +7,6 @@
 ### The AI browser for API reverse engineering.
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![Electron](https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Bun](https://img.shields.io/badge/Bun-package_manager-fbf0df?logo=bun&logoColor=black)](https://bun.sh/)
-[![Agent Client Protocol](https://img.shields.io/badge/ACP-agent-7B61FF)](https://agentclientprotocol.com/)
 
 [Demo](#demo) · [What is it?](#what-is-rever-browser) · [Features](#features) · [Getting started](#getting-started) · [Architecture](#architecture)
 
