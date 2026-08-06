@@ -23,7 +23,7 @@ export const APP_THEME_STORAGE_KEY = 'rev:app-theme'
 export const useAppThemeStore = create<AppThemeState>()(
   persist(
     (set, get) => ({
-      mode: 'system',
+      mode: 'light',
       setMode: (mode) => set({ mode }),
       cycle: () => {
         const idx = ORDER.indexOf(get().mode)

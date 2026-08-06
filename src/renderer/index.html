@@ -14,8 +14,8 @@
       (function () {
         try {
           var raw = localStorage.getItem('rev:app-theme');
-          var mode = raw ? (JSON.parse(raw).state || {}).mode : 'system';
-          if (mode !== 'light' && mode !== 'dark') mode = 'system';
+          var mode = raw ? (JSON.parse(raw).state || {}).mode : 'light';
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'light';
           var dark =
             mode === 'dark' ||
             (mode === 'system' &&
@@ -25,8 +25,8 @@
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.style.background = dark ? '#0e0e0e' : '#fbfbfc';
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'dark');
-          document.documentElement.style.background = '#0e0e0e';
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.style.background = '#fbfbfc';
         }
       })();
     </script>

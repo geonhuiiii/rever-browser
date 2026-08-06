@@ -36,7 +36,7 @@ function getPathDirs(): string[] {
 }
 
 /** Augment PATH with locations commonly missing from Electron's env. */
-function extraDirs(): string[] {
+export function extraDirs(): string[] {
   const home = homedir()
   if (isWindows) {
     const appData = process.env.APPDATA

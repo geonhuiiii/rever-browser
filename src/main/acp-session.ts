@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { Readable, Writable } from 'node:stream'
+import { delimiter, dirname, isAbsolute } from 'node:path'
 import {
   ClientSideConnection,
   ndJsonStream,
@@ -13,6 +14,7 @@ import {
 import type { WebContents } from 'electron'
 
 import { startMcpServer } from './mcp/server'
+import { extraDirs } from './acp-detect'
 
 export interface AgentDef {
   id: string
@@ -49,7 +51,7 @@ const sessions = new Map<string, SessionEntry>()
 // 보고 "nested session"으로 판단해 기동을 거부한다 (rever-browser 자체를 Claude
 // Code 세션 안에서 실행한 경우). 에이전트 자식 프로세스는 독립 세션이어야 하므로
 // 해당 변수들을 제거한 env를 만들어 넘긴다.
-function agentEnv(): NodeJS.ProcessEnv {
+function agentEnv(command: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env }
   const isClaudeSessionVar = (name: string): boolean =>
     name === 'CLAUDECODE' || name.startsWith('CLAUDE_CODE_')
@@ -64,6 +66,18 @@ function agentEnv(): NodeJS.ProcessEnv {
       if (isClaudeSessionVar(key)) delete env[key]
     }
   }
+
+  // Finder에서 실행된 패키지 앱은 로그인 셸의 PATH를 물려받지 못해
+  // `/usr/bin:/bin`만 남는다. 이러면 에이전트 바이너리(절대경로로 넘어옴)의
+  // `#!/usr/bin/env node` shebang이 node를 못 찾아 spawn이 즉시 죽는다.
+  // node는 보통 에이전트 바이너리와 같은 bin/에 있으므로(nvm/volta) 그 디렉터리와
+  // 흔한 설치 위치들을 PATH 앞에 붙여 shebang이 항상 해석되게 한다.
+  const prepend: string[] = []
+  if (command && isAbsolute(command)) prepend.push(dirname(command))
+  prepend.push(...extraDirs())
+  const existing = (env.PATH ?? '').split(delimiter).filter(Boolean)
+  const seen = new Set<string>()
+  env.PATH = [...prepend, ...existing].filter((d) => d && !seen.has(d) && seen.add(d)).join(delimiter)
   return env
 }
 
@@ -86,7 +100,7 @@ export async function spawnAcpSession(
   const child = spawn(agentDef.command, agentDef.args, {
     cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
-    env: agentEnv(),
+    env: agentEnv(agentDef.command),
     shell: process.platform === 'win32'
   }) as ChildProcessByStdio<Writable, Readable, Readable>
 
