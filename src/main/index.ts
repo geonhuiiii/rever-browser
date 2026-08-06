@@ -104,14 +104,17 @@ app.setAboutPanelOptions({
 // other AutomationControlled blink features.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 
-// Encrypt the persisted cookie store with Chromium's built-in key instead of an
-// OS keychain entry. This app ships unsigned/ad-hoc, so a keychain-backed key is
+// Encrypt the persisted cookie store with a built-in key instead of an OS
+// keychain entry. This app ships unsigned/ad-hoc, so a keychain-backed key is
 // tied to the code signature: every update changes the signature, which re-fires
-// the macOS keychain prompt and makes previously-saved cookies undecryptable —
-// silently logging users out on each release. 'basic' keeps cookie persistence
-// stable across updates with no prompt (weaker at-rest crypto is acceptable for
-// a local reversing tool). Also suppresses the safeStorage keychain prompt used
-// for API keys / sticky cookies.
+// the macOS keychain prompt ("Rever Browser Safe Storage") and makes previously
+// saved cookies undecryptable — silently logging users out on each release.
+// macOS ignores --password-store (Linux-only); the mac lever is
+// --use-mock-keychain, which routes os_crypt/safeStorage through a stable
+// in-process key with no Keychain access and no prompt. Cookies still persist
+// across launches (weaker at-rest crypto is acceptable for a local reversing
+// tool). password-store=basic covers the same case on Linux.
+app.commandLine.appendSwitch('use-mock-keychain')
 app.commandLine.appendSwitch('password-store', 'basic')
 
 // Keep the renderer running at full speed when the window is not the frontmost
