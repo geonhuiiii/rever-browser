@@ -104,6 +104,16 @@ app.setAboutPanelOptions({
 // other AutomationControlled blink features.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 
+// Encrypt the persisted cookie store with Chromium's built-in key instead of an
+// OS keychain entry. This app ships unsigned/ad-hoc, so a keychain-backed key is
+// tied to the code signature: every update changes the signature, which re-fires
+// the macOS keychain prompt and makes previously-saved cookies undecryptable —
+// silently logging users out on each release. 'basic' keeps cookie persistence
+// stable across updates with no prompt (weaker at-rest crypto is acceptable for
+// a local reversing tool). Also suppresses the safeStorage keychain prompt used
+// for API keys / sticky cookies.
+app.commandLine.appendSwitch('password-store', 'basic')
+
 // Keep the renderer running at full speed when the window is not the frontmost
 // one. Chromium stops producing compositor frames for a hidden or occluded
 // window, and CDP input dispatch is acked off that pipeline: with the window
