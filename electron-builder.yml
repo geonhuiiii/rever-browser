@@ -2,7 +2,7 @@ appId: io.greekr4.reverbrowser
 productName: Rever Browser
 directories:
   output: release
-  buildResources: resources
+  buildResources: build
 asar: true
 files:
   - out/**
@@ -18,7 +18,7 @@ mac:
         - arm64
         - x64
   category: public.app-category.developer-tools
-  icon: resources/icon.icns
+  icon: build/icon.icns
   identity: null
   darkModeSupport: true
 dmg:
