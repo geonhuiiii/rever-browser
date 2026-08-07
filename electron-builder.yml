@@ -23,3 +23,14 @@ mac:
   darkModeSupport: true
 dmg:
   title: ${productName}
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: Rever-Browser-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
