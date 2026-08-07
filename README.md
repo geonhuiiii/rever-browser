@@ -9,7 +9,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Download](https://img.shields.io/github/v/release/greekr4/rever-browser?label=Download&color=8b5cf6)](https://github.com/greekr4/rever-browser/releases/latest)
 
-**[⬇ Download for macOS](https://github.com/greekr4/rever-browser/releases/latest)** · **[🌐 Website](https://greekr4.github.io/rever-browser/)**
+**[🌐 Website](https://greekr4.github.io/rever-browser/)** / **[⬇ Download macOS](https://github.com/greekr4/rever-browser/releases/latest)** / **[⬇ Download Windows](https://github.com/greekr4/rever-browser/releases/latest)**
 
 [Demo](#demo) · [What is it?](#what-is-rever-browser) · [Features](#features) · [Getting started](#getting-started) · [Architecture](#architecture)
 
@@ -58,7 +58,10 @@
 
 ## Getting started
 
-**Just want to use it?** Download the packaged macOS app from the [latest release](https://github.com/greekr4/rever-browser/releases/latest) (Apple Silicon and Intel builds available), drag it to Applications, and install an agent binary — see [Requirements](#requirements). The build is unsigned, so on first launch right-click the app → **Open**.
+**Just want to use it?** Grab a build from the [latest release](https://github.com/greekr4/rever-browser/releases/latest) and install an agent binary — see [Requirements](#requirements):
+
+- **macOS** (Apple Silicon or Intel `.dmg`) — drag it to Applications. Unsigned, so on first launch right-click the app → **Open**.
+- **Windows** (`-setup.exe`) — run the installer. Unsigned, so click **More info → Run anyway** if SmartScreen warns.
 
 **Building from source:**
 
