@@ -32,8 +32,10 @@ jobs:
 
       - run: bun run build
 
+      # --publish never: electron-builder auto-publishes when it detects CI and
+      # then fails without GH_TOKEN. We upload the artifact ourselves below.
       - name: Package Windows installer
-        run: bunx electron-builder --win --config electron-builder.yml
+        run: bunx electron-builder --win --publish never --config electron-builder.yml
 
       - name: Attach installer to the release
         uses: softprops/action-gh-release@v2
