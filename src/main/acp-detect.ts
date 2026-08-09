@@ -40,11 +40,22 @@ export function extraDirs(): string[] {
   const home = homedir()
   if (isWindows) {
     const appData = process.env.APPDATA
+    const programFiles = process.env.ProgramFiles
+    const localAppData = process.env.LOCALAPPDATA
     return [
       appData ? join(appData, 'npm') : '',
       join(home, 'AppData', 'Roaming', 'npm'),
       join(home, 'scoop', 'shims'),
-      join(home, '.bun', 'bin')
+      join(home, '.bun', 'bin'),
+      // Node.js itself. The agent CLIs install as `.cmd` shims that invoke
+      // `node`, so node.exe must be on the child's PATH or the shim dies with
+      // "'node' is not recognized" and the ACP connection closes immediately.
+      // Electron launched from Explorer/a packaged build does not always
+      // inherit the user's node dir, so add the common install locations.
+      process.env.NVM_SYMLINK || '', // nvm-windows: active node.exe lives here
+      programFiles ? join(programFiles, 'nodejs') : '', // standard MSI installer
+      localAppData ? join(localAppData, 'Programs', 'nodejs') : '',
+      join(home, 'scoop', 'apps', 'nodejs', 'current')
     ].filter(Boolean)
   }
   return [
