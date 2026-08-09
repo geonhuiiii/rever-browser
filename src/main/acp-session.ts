@@ -14,7 +14,7 @@ import {
 import type { WebContents } from 'electron'
 
 import { startMcpServer } from './mcp/server'
-import { extraDirs } from './acp-detect'
+import { extraDirs, findGitBash } from './acp-detect'
 
 export interface AgentDef {
   id: string
@@ -38,6 +38,10 @@ interface SessionEntry {
     | ((req: RequestPermissionRequest) => Promise<RequestPermissionResponse>)
     | null
   dead: boolean
+  // True once rever explicitly asked to kill this session (reset/New chat/agent
+  // switch/abort). Lets the close handler distinguish an intentional teardown
+  // from a spontaneous agent crash.
+  killRequested: boolean
   availableModels: ModelInfo[]
   currentModelId: string | null
   // Settle-tracking promise for the in-flight prompt (null when idle). Used to
@@ -78,6 +82,20 @@ function agentEnv(command: string): NodeJS.ProcessEnv {
   const existing = (env.PATH ?? '').split(delimiter).filter(Boolean)
   const seen = new Set<string>()
   env.PATH = [...prepend, ...existing].filter((d) => d && !seen.has(d) && seen.add(d)).join(delimiter)
+
+  // On Windows, point the agent's Bash tool at Git Bash rather than letting it
+  // fall back to the WSL launcher (System32\bash.exe) — which runs inside a
+  // Linux distro on a different filesystem, so agent-created files land where
+  // the user can't see them and long commands hang. Also nudge tools toward
+  // UTF-8 so Korean output isn't mojibaked by the CP949 console codepage.
+  if (process.platform === 'win32') {
+    const gitBash = findGitBash()
+    if (gitBash) env.SHELL = gitBash
+    env.LANG = env.LANG || 'C.UTF-8'
+    env.LC_ALL = env.LC_ALL || 'C.UTF-8'
+    // Make Python-based tools default to UTF-8 too.
+    env.PYTHONUTF8 = env.PYTHONUTF8 || '1'
+  }
   return env
 }
 
@@ -104,8 +122,16 @@ export async function spawnAcpSession(
     shell: process.platform === 'win32'
   }) as ChildProcessByStdio<Writable, Readable, Readable>
 
+  // Keep the last few stderr lines so we can explain WHY the child died when it
+  // closes (agents often print the reason to stderr right before exiting).
+  const stderrTail: string[] = []
   child.stderr.on('data', (buf: Buffer) => {
-    console.error(`[ACP ${agentDef.id}]`, buf.toString())
+    const text = buf.toString()
+    console.error(`[ACP ${agentDef.id}]`, text)
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim()) stderrTail.push(line)
+    }
+    while (stderrTail.length > 20) stderrTail.shift()
   })
 
   // PATH에 바이너리가 없거나 실행 권한이 없을 때 ENOENT/EACCES 에러가 발생한다.
@@ -203,6 +229,7 @@ export async function spawnAcpSession(
     onUpdate: null,
     requestPermission: null,
     dead: false,
+    killRequested: false,
     availableModels: modelState?.availableModels ?? [],
     currentModelId: modelState?.currentModelId ?? null,
     activePrompt: null
@@ -213,10 +240,16 @@ export async function spawnAcpSession(
   // child가 닫히면 세션을 dead로 표시한다. 진행 중인 prompt는 connection
   // 레벨에서 끊기므로 promptAcpSession 내의 connection.prompt()가 자연스럽게
   // reject된다 (ndJsonStream이 closed stream에서 에러를 던진다).
-  child.on('close', (code) => {
+  child.on('close', (code, signal) => {
     entry.dead = true
     sessions.delete(result.sessionId)
-    console.warn(`[ACP ${agentDef.id}] child closed with code ${code}`)
+    const killedBy = entry.killRequested ? ' (rever called kill)' : ''
+    console.warn(
+      `[ACP ${agentDef.id}] child closed — code=${code} signal=${signal}${killedBy}`
+    )
+    if (code !== 0 && stderrTail.length) {
+      console.warn(`[ACP ${agentDef.id}] last stderr:\n  ${stderrTail.slice(-8).join('\n  ')}`)
+    }
   })
 
   return { sessionId: result.sessionId }
@@ -272,7 +305,9 @@ export async function cancelAcpSession(sessionId: string): Promise<void> {
 export async function killAcpSession(sessionId: string): Promise<void> {
   const entry = sessions.get(sessionId)
   if (!entry) return
+  console.warn(`[ACP ${entry.agentDef.id}] killAcpSession requested for ${sessionId}`)
   entry.dead = true
+  entry.killRequested = true
   sessions.delete(sessionId)
   entry.child.kill()
 }

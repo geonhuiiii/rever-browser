@@ -55,7 +55,17 @@ export function extraDirs(): string[] {
       process.env.NVM_SYMLINK || '', // nvm-windows: active node.exe lives here
       programFiles ? join(programFiles, 'nodejs') : '', // standard MSI installer
       localAppData ? join(localAppData, 'Programs', 'nodejs') : '',
-      join(home, 'scoop', 'apps', 'nodejs', 'current')
+      join(home, 'scoop', 'apps', 'nodejs', 'current'),
+      // Git Bash. Claude Code's Bash tool needs a POSIX shell. These dirs go
+      // AHEAD of C:\Windows\System32 (added below via the existing PATH), so
+      // `bash` resolves to Git Bash — NOT the WSL launcher at
+      // System32\bash.exe, which runs commands inside a Linux distro on a
+      // different filesystem, so files "vanish" and long commands hang.
+      programFiles ? join(programFiles, 'Git', 'usr', 'bin') : '',
+      programFiles ? join(programFiles, 'Git', 'bin') : '',
+      programFiles ? join(programFiles, 'Git', 'cmd') : '',
+      localAppData ? join(localAppData, 'Programs', 'Git', 'usr', 'bin') : '',
+      localAppData ? join(localAppData, 'Programs', 'Git', 'bin') : ''
     ].filter(Boolean)
   }
   return [
@@ -67,6 +77,25 @@ export function extraDirs(): string[] {
     join(home, '.cargo', 'bin'),
     join(home, '.npm-global', 'bin')
   ]
+}
+
+/**
+ * Absolute path to Git Bash's bash.exe, or null. Prefers the real Git Bash over
+ * the WSL launcher (System32\bash.exe) so the agent's shell runs on Windows
+ * with the expected working directory instead of inside a Linux distro.
+ */
+export function findGitBash(): string | null {
+  if (!isWindows) return null
+  const { existsSync } = require('node:fs') as typeof import('node:fs')
+  const pf = process.env.ProgramFiles
+  const lad = process.env.LOCALAPPDATA
+  const candidates = [
+    pf ? join(pf, 'Git', 'bin', 'bash.exe') : '',
+    pf ? join(pf, 'Git', 'usr', 'bin', 'bash.exe') : '',
+    lad ? join(lad, 'Programs', 'Git', 'bin', 'bash.exe') : '',
+    lad ? join(lad, 'Programs', 'Git', 'usr', 'bin', 'bash.exe') : ''
+  ].filter(Boolean)
+  return candidates.find((p) => existsSync(p)) ?? null
 }
 
 async function isExecutable(p: string): Promise<boolean> {
