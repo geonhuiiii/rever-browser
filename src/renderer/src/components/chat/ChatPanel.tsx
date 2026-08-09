@@ -552,6 +552,22 @@ export function ChatPanel() {
         >
           {autoApprove ? 'Auto-approve' : 'Manual approve'}
         </button>
+        <button
+          type="button"
+          onClick={() => void window.rev.acp.openWorkspace()}
+          title="Open the agent's workspace folder (where created files are saved)"
+          style={{
+            fontSize: 11,
+            padding: '3px 8px',
+            background: 'var(--chip-info-bg)',
+            border: '1px solid var(--chip-info-border)',
+            color: 'var(--chip-info-text)',
+            borderRadius: 4,
+            cursor: 'pointer'
+          }}
+        >
+          📁 Files
+        </button>
         <ChatHistoryMenu currentId={currentId} disabled={busy} onOpen={openConversation} />
         <button
           type="button"

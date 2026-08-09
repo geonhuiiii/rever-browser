@@ -267,7 +267,11 @@ const api = {
       currentModelId: string | null
     } | null> => ipcRenderer.invoke('acp:model-state', sessionId),
     setModel: (sessionId: string, modelId: string): Promise<void> =>
-      ipcRenderer.invoke('acp:set-model', sessionId, modelId)
+      ipcRenderer.invoke('acp:set-model', sessionId, modelId),
+    // Open the agent's workspace folder (where Write/Edit output lands) in the
+    // OS file manager.
+    openWorkspace: (): Promise<{ dir: string; ok: boolean }> =>
+      ipcRenderer.invoke('agent:open-workspace')
   },
   theme: {
     // Keep the native window-controls overlay (Windows/Linux) in sync with the

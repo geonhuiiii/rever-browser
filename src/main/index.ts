@@ -82,6 +82,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // out/main -> project root -> resources/icon.png (Windows/Linux window + dev dock).
 const appIcon = path.join(__dirname, '../../resources/icon.png')
 
+// Where ACP agents (Claude Code, Codex) may create files. A visible folder in
+// the user's Documents — NOT a hidden userData path — so agent output (Write /
+// Edit) is easy to find, while still isolated from the rever-browser source
+// tree so the agent can't mutate it.
+function agentWorkspaceDir(): string {
+  return path.join(app.getPath('documents'), 'Rever Agent')
+}
+
 // Strip "Electron/..." and the app-name token from the default UA so sites
 // with bot/WAF rules don't reject us. The embedded Chrome version is left
 // untouched — Electron 41 ships Chromium 146, which matches the engine's
@@ -893,16 +901,28 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('acp:spawn', async (_event, agentDef: AgentDef, _cwd: string) => {
-    // Always sandbox the agent in a scratch directory under userData so
-    // Edit/Write/Bash tools cannot accidentally mutate the rever-browser
-    // source tree. The renderer's cwd hint is intentionally ignored.
-    const scratch = path.join(app.getPath('userData'), 'agent-scratch')
+    // Sandbox the agent in a dedicated workspace so Edit/Write/Bash tools cannot
+    // touch the rever-browser source tree. The renderer's cwd hint is ignored.
+    // The workspace lives under the user's Documents (visible + findable) rather
+    // than a hidden userData folder, so agent-created files are easy to locate.
+    const scratch = agentWorkspaceDir()
     try {
       mkdirSync(scratch, { recursive: true })
     } catch (e) {
-      console.warn('[acp:spawn] failed to ensure scratch dir', e)
+      console.warn('[acp:spawn] failed to ensure workspace dir', e)
     }
     return spawnSession(agentDef, scratch)
+  })
+
+  // Open the agent workspace in the OS file manager so the user can find files
+  // the agent created (Write/Edit output).
+  ipcMain.handle('agent:open-workspace', async () => {
+    const dir = agentWorkspaceDir()
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {}
+    const err = await shell.openPath(dir)
+    return { dir, ok: err === '' }
   })
 
   ipcMain.handle('settings:get-api-key', (_event, provider: ApiProvider) => getApiKey(provider))
