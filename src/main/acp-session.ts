@@ -1,6 +1,8 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { Readable, Writable } from 'node:stream'
-import { delimiter, dirname, isAbsolute } from 'node:path'
+import { appendFileSync } from 'node:fs'
+import { delimiter, dirname, isAbsolute, join } from 'node:path'
+import { app } from 'electron'
 import {
   ClientSideConnection,
   ndJsonStream,
@@ -50,6 +52,18 @@ interface SessionEntry {
 }
 
 const sessions = new Map<string, SessionEntry>()
+
+// Persistent ACP lifecycle log. Console output is invisible in a packaged
+// build; this file (userData/acp-diagnostic.log) captures spawn / child-death /
+// kill / stderr so a hang can be diagnosed after the fact.
+function acpLog(msg: string): void {
+  try {
+    appendFileSync(
+      join(app.getPath('userData'), 'acp-diagnostic.log'),
+      `[${new Date().toISOString()}] ${msg}\n`
+    )
+  } catch {}
+}
 
 // Claude Code CLI가 부모 프로세스에서 물려받은 CLAUDECODE / CLAUDE_CODE_* 변수를
 // 보고 "nested session"으로 판단해 기동을 거부한다 (rever-browser 자체를 Claude
@@ -124,12 +138,16 @@ export async function spawnAcpSession(
 
   // Keep the last few stderr lines so we can explain WHY the child died when it
   // closes (agents often print the reason to stderr right before exiting).
+  acpLog(`spawn id=${agentDef.id} command=${agentDef.command} cwd=${cwd} shell=${process.platform === 'win32'}`)
   const stderrTail: string[] = []
   child.stderr.on('data', (buf: Buffer) => {
     const text = buf.toString()
     console.error(`[ACP ${agentDef.id}]`, text)
     for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) stderrTail.push(line)
+      if (line.trim()) {
+        stderrTail.push(line)
+        acpLog(`stderr[${agentDef.id}] ${line}`)
+      }
     }
     while (stderrTail.length > 20) stderrTail.shift()
   })
@@ -247,6 +265,9 @@ export async function spawnAcpSession(
     console.warn(
       `[ACP ${agentDef.id}] child closed — code=${code} signal=${signal}${killedBy}`
     )
+    acpLog(
+      `child closed id=${agentDef.id} code=${code} signal=${signal} killRequested=${entry.killRequested} lastStderr="${stderrTail.slice(-5).join(' | ')}"`
+    )
     if (code !== 0 && stderrTail.length) {
       console.warn(`[ACP ${agentDef.id}] last stderr:\n  ${stderrTail.slice(-8).join('\n  ')}`)
     }
@@ -276,8 +297,16 @@ export async function promptAcpSession(
     ])
   }
 
-  entry.onUpdate = onUpdate
+  // Wrap onUpdate to log each tool call + completion, so the diagnostic file
+  // shows the LAST tool before a stall (e.g. a Write that never completes).
+  entry.onUpdate = (n) => {
+    const u = (n as unknown as { update?: { sessionUpdate?: string; title?: string; status?: string } }).update
+    if (u?.sessionUpdate === 'tool_call') acpLog(`tool_call id=${entry.agentDef.id} title=${u.title ?? '?'}`)
+    else if (u?.sessionUpdate === 'tool_call_update') acpLog(`tool_call_update id=${entry.agentDef.id} status=${u.status ?? '?'}`)
+    onUpdate(n)
+  }
   entry.requestPermission = requestPermission ?? null
+  acpLog(`prompt start id=${entry.agentDef.id} textLen=${text.length}`)
   const p = entry.connection.prompt({
     sessionId: entry.sessionId,
     prompt: [{ type: 'text', text }]
@@ -288,7 +317,11 @@ export async function promptAcpSession(
   )
   try {
     const res = await p
+    acpLog(`prompt settled id=${entry.agentDef.id} stopReason=${res.stopReason}`)
     return { stopReason: res.stopReason }
+  } catch (e) {
+    acpLog(`prompt THREW id=${entry.agentDef.id} err=${e instanceof Error ? e.message : String(e)}`)
+    throw e
   } finally {
     entry.activePrompt = null
     entry.onUpdate = null
@@ -306,6 +339,7 @@ export async function killAcpSession(sessionId: string): Promise<void> {
   const entry = sessions.get(sessionId)
   if (!entry) return
   console.warn(`[ACP ${entry.agentDef.id}] killAcpSession requested for ${sessionId}`)
+  acpLog(`killAcpSession requested id=${entry.agentDef.id} sessionId=${sessionId}`)
   entry.dead = true
   entry.killRequested = true
   sessions.delete(sessionId)
