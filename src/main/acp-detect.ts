@@ -1,4 +1,5 @@
 import { access, constants } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 import { homedir, platform } from 'node:os'
 import { execFile } from 'node:child_process'
@@ -86,7 +87,6 @@ export function extraDirs(): string[] {
  */
 export function findGitBash(): string | null {
   if (!isWindows) return null
-  const { existsSync } = require('node:fs') as typeof import('node:fs')
   const pf = process.env.ProgramFiles
   const lad = process.env.LOCALAPPDATA
   const candidates = [
