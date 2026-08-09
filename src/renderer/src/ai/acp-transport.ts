@@ -100,16 +100,23 @@ export class ACPChatTransport implements ChatTransport<UIMessage> {
         let anyContent = false
         const seenToolCallIds = new Set<string>()
 
-        // Watchdog: if 60s pass with NO notification at all, surface as error
-        // so the chat status doesn't get stuck on "streaming" forever.
+        // Watchdog: if the agent sends NOTHING for this long, surface an error
+        // so the chat doesn't get stuck on "streaming" forever. Kept generous:
+        // the agent can legitimately go quiet while generating a large file or
+        // thinking through a hard step, and cancelling then throws away real
+        // work. Only a true hang should trip this.
+        const WATCHDOG_MS = 180_000
         let watchdog: ReturnType<typeof setTimeout> | null = null
         const armWatchdog = () => {
           if (watchdog) clearTimeout(watchdog)
           watchdog = setTimeout(() => {
             if (closed) return
             void window.rev.acp.cancel(sessionId).catch(() => null)
-            finish('error', 'Agent went silent for 60s — cancelled. Try /reset if it persists.')
-          }, 60_000)
+            finish(
+              'error',
+              `Agent sent nothing for ${Math.round(WATCHDOG_MS / 1000)}s — cancelled. This usually means the model stalled (a very large step, or rate-limiting). Try again, or break the task into smaller steps.`
+            )
+          }, WATCHDOG_MS)
         }
         const clearWatchdog = () => {
           if (watchdog) {
