@@ -349,11 +349,11 @@ const api = {
     }
   },
   settings: {
-    getApiKey: (provider: 'anthropic' | 'openai'): Promise<string | null> =>
+    getApiKey: (provider: 'anthropic' | 'openai' | 'gemini'): Promise<string | null> =>
       ipcRenderer.invoke('settings:get-api-key', provider),
-    hasApiKey: (provider: 'anthropic' | 'openai'): Promise<boolean> =>
+    hasApiKey: (provider: 'anthropic' | 'openai' | 'gemini'): Promise<boolean> =>
       ipcRenderer.invoke('settings:has-api-key', provider),
-    setApiKey: (provider: 'anthropic' | 'openai', key: string): Promise<boolean> =>
+    setApiKey: (provider: 'anthropic' | 'openai' | 'gemini', key: string): Promise<boolean> =>
       ipcRenderer.invoke('settings:set-api-key', provider, key)
   },
   viewport: {

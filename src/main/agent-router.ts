@@ -25,6 +25,15 @@ import {
   setOpenAiModel,
   spawnOpenAiSession
 } from './providers/openai-provider'
+import {
+  cancelGeminiSession,
+  getGeminiModelState,
+  isGeminiSession,
+  killGeminiSession,
+  promptGeminiSession,
+  setGeminiModel,
+  spawnGeminiSession
+} from './providers/gemini-provider'
 
 import type {
   RequestPermissionRequest,
@@ -42,6 +51,7 @@ export async function spawnSession(
 ): Promise<{ sessionId: string }> {
   if (agentDef.id === 'anthropic') return spawnAnthropicSession()
   if (agentDef.id === 'openai') return spawnOpenAiSession()
+  if (agentDef.id === 'gemini') return spawnGeminiSession()
   return spawnAcpSession(agentDef, cwd)
 }
 
@@ -53,18 +63,21 @@ export async function promptSession(
 ): Promise<{ stopReason: string }> {
   if (isAnthropicSession(sessionId)) return promptAnthropicSession(sessionId, text, onUpdate)
   if (isOpenAiSession(sessionId)) return promptOpenAiSession(sessionId, text, onUpdate)
+  if (isGeminiSession(sessionId)) return promptGeminiSession(sessionId, text, onUpdate)
   return promptAcpSession(sessionId, text, onUpdate, requestPermission)
 }
 
 export async function cancelSession(sessionId: string): Promise<void> {
   if (isAnthropicSession(sessionId)) return cancelAnthropicSession(sessionId)
   if (isOpenAiSession(sessionId)) return cancelOpenAiSession(sessionId)
+  if (isGeminiSession(sessionId)) return cancelGeminiSession(sessionId)
   return cancelAcpSession(sessionId)
 }
 
 export async function killSession(sessionId: string): Promise<void> {
   if (isAnthropicSession(sessionId)) return killAnthropicSession(sessionId)
   if (isOpenAiSession(sessionId)) return killOpenAiSession(sessionId)
+  if (isGeminiSession(sessionId)) return killGeminiSession(sessionId)
   return killAcpSession(sessionId)
 }
 
@@ -73,12 +86,14 @@ export function sessionModelState(
 ): { availableModels: Array<{ modelId: string; name: string; description?: string | null }>; currentModelId: string | null } | null {
   if (isAnthropicSession(sessionId)) return getAnthropicModelState(sessionId)
   if (isOpenAiSession(sessionId)) return getOpenAiModelState(sessionId)
+  if (isGeminiSession(sessionId)) return getGeminiModelState(sessionId)
   return getSessionModelState(sessionId)
 }
 
 export async function setSessionModelRouted(sessionId: string, modelId: string): Promise<void> {
   if (isAnthropicSession(sessionId)) return setAnthropicModel(sessionId, modelId)
   if (isOpenAiSession(sessionId)) return setOpenAiModel(sessionId, modelId)
+  if (isGeminiSession(sessionId)) return setGeminiModel(sessionId, modelId)
   return setSessionModel(sessionId, modelId)
 }
 

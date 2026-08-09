@@ -1,4 +1,4 @@
-export type ACPAgentID = 'claude-code' | 'codex' | 'anthropic' | 'openai'
+export type ACPAgentID = 'claude-code' | 'codex' | 'anthropic' | 'openai' | 'gemini'
 
 export interface ACPAgentDef {
   id: ACPAgentID
@@ -16,7 +16,7 @@ export interface ACPAgentDef {
    * and 'openai' call their respective APIs directly in-process and are gated on
    * an API key instead of a PATH binary.
    */
-  provider?: 'acp' | 'anthropic' | 'openai'
+  provider?: 'acp' | 'anthropic' | 'openai' | 'gemini'
   /** Short hint shown in the picker when the binary isn't found. */
   installHint: string
   /** Single character used in the picker tile. */
@@ -43,6 +43,16 @@ export const ACP_AGENTS: ACPAgentDef[] = [
     provider: 'openai',
     installHint: 'Add an OpenAI API key in settings',
     icon: 'O'
+  },
+  {
+    id: 'gemini',
+    name: 'Gemini (API)',
+    command: '',
+    args: [],
+    acpSupported: true,
+    provider: 'gemini',
+    installHint: 'Add a Gemini API key in settings',
+    icon: 'G'
   },
   {
     id: 'claude-code',

@@ -40,6 +40,8 @@
 - **Browser automation** — The agent can navigate, click, type, scroll, screenshot, and take accessibility snapshots of the live tab.
 - **Bundle analysis** — Grep, extract, detect the bundler for, and deobfuscate the JavaScript already captured in the traffic store (no re-download), including a `webcrack`-backed deobfuscator.
 - **Deep API tooling** — A broad MCP tool set covering request repeater, intruder, header/override editing, HAR export, source-map recovery, crypto/decode helpers, WebSocket and service-worker inspection, and more.
+- **Remote control via Selenium / WebDriver** — Opt-in W3C WebDriver endpoint (`REVER_WEBDRIVER=1`) so any Selenium client can drive the real browser. Actions run through the same stealthy trusted-input path the agent uses. See [`docs/webdriver.md`](./docs/webdriver.md).
+- **Cross-platform** — Runs on macOS, Windows and Linux. Chrome cookie import (macOS Keychain / Windows DPAPI / Linux), external-Chrome launch, and the anti-bot fingerprint are all platform-aware.
 
 ## Requirements
 

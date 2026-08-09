@@ -37,6 +37,69 @@ const WEBGL_IDENTITY = pickWebGLIdentity()
 export const SPOOFED_CHROME_VERSION = '146.0.7680.188'
 export const SPOOFED_CHROME_MAJOR = '146'
 
+// Fonts document.fonts.check() is allowed to confirm. Must match what Chrome on
+// THIS OS actually ships — projecting the macOS set (Menlo, PingFang SC, …)
+// while the UA claims Windows is exactly the cross-signal contradiction
+// fingerprinters flag. Generic CSS families are shared by every OS.
+const GENERIC_FONT_FAMILIES = [
+  'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy',
+  'system-ui', 'ui-monospace', 'ui-serif', 'ui-sans-serif'
+]
+
+const MAC_FONTS = [
+  'Arial', 'Arial Black', 'Helvetica', 'Helvetica Neue', 'Times', 'Times New Roman',
+  'Courier', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia',
+  'Comic Sans MS', 'Impact', 'Lucida Console', 'Lucida Sans Unicode', 'Palatino',
+  'Monaco', 'Menlo', 'Apple Color Emoji', 'Apple Symbols', 'Apple SD Gothic Neo',
+  'Geneva', 'Optima', 'Didot', 'American Typewriter', 'Andale Mono', 'Avenir',
+  'Avenir Next', 'Baskerville', 'Big Caslon', 'Brush Script MT', 'Chalkboard',
+  'Cochin', 'Copperplate', 'Futura', 'Gill Sans', 'Hoefler Text', 'PingFang SC',
+  'Hiragino Sans', '-apple-system', 'BlinkMacSystemFont'
+]
+
+// Windows 10/11 default set (Segoe UI family, Calibri, Consolas, plus the
+// East-Asian faces a Korean/CJK Windows ships — Malgun Gothic, Microsoft YaHei).
+const WINDOWS_FONTS = [
+  'Arial', 'Arial Black', 'Bahnschrift', 'Calibri', 'Cambria', 'Cambria Math',
+  'Candara', 'Comic Sans MS', 'Consolas', 'Constantia', 'Corbel', 'Courier New',
+  'Ebrima', 'Franklin Gothic Medium', 'Gabriola', 'Gadugi', 'Georgia', 'Impact',
+  'Ink Free', 'Javanese Text', 'Leelawadee UI', 'Lucida Console',
+  'Lucida Sans Unicode', 'Malgun Gothic', 'Marlett', 'Microsoft Himalaya',
+  'Microsoft JhengHei', 'Microsoft New Tai Lue', 'Microsoft PhagsPa',
+  'Microsoft Sans Serif', 'Microsoft Tai Le', 'Microsoft YaHei',
+  'Microsoft Yi Baiti', 'MingLiU-ExtB', 'Mongolian Baiti', 'MS Gothic', 'MV Boli',
+  'Myanmar Text', 'Nirmala UI', 'Palatino Linotype', 'Segoe MDL2 Assets',
+  'Segoe Print', 'Segoe Script', 'Segoe UI', 'Segoe UI Emoji',
+  'Segoe UI Historic', 'Segoe UI Symbol', 'SimSun', 'Sitka', 'Sylfaen', 'Symbol',
+  'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana', 'Webdings', 'Wingdings',
+  'Yu Gothic'
+]
+
+const LINUX_FONTS = [
+  'Arial', 'Courier New', 'Times New Roman', 'Verdana', 'Georgia', 'Impact',
+  'Trebuchet MS', 'Comic Sans MS', 'DejaVu Sans', 'DejaVu Serif',
+  'DejaVu Sans Mono', 'Liberation Sans', 'Liberation Serif', 'Liberation Mono',
+  'Ubuntu', 'Ubuntu Mono', 'Cantarell', 'Noto Sans', 'Noto Serif', 'Noto Mono',
+  'Noto Color Emoji', 'FreeSans', 'FreeSerif', 'FreeMono'
+]
+
+function fontWhitelistForPlatform(): string[] {
+  const base =
+    process.platform === 'darwin'
+      ? MAC_FONTS
+      : process.platform === 'win32'
+        ? WINDOWS_FONTS
+        : LINUX_FONTS
+  return [...base, ...GENERIC_FONT_FAMILIES]
+}
+
+const FONT_WHITELIST = fontWhitelistForPlatform()
+// The menu-bar screen.avail* normalisation only makes sense on macOS — there
+// the menu bar pushes availTop to 30. On Windows/Linux the host's native
+// avail* values already match what real Chrome on that OS reports, so leave
+// them alone rather than manufacture a fresh inconsistency.
+const NORMALISE_AVAIL_FOR_MENUBAR = process.platform === 'darwin'
+
 export const STEALTH_INIT_SCRIPT = `
 (() => {
   const SPOOFED_VERSION = ${JSON.stringify(SPOOFED_CHROME_VERSION)}
@@ -318,9 +381,10 @@ export const STEALTH_INIT_SCRIPT = `
 
     // 7b. Normalise screen.avail* — on macOS the menu bar makes
     // screen.availTop = 30 / availHeight = screen.height - 30 (amiunique 0.21%).
-    // Pretend the menu bar is hidden / we're on Windows-style chrome:
-    // availTop = 0, availHeight = screen.height. Same for availLeft/Width.
-    try {
+    // Pretend the menu bar is hidden: availTop = 0, availHeight = screen.height.
+    // Only on macOS — on Windows/Linux the native avail* already match real
+    // Chrome on that OS, so overriding would manufacture a fresh mismatch.
+    if (${JSON.stringify(NORMALISE_AVAIL_FOR_MENUBAR)}) try {
       const atGetter = markNative(Object.getOwnPropertyDescriptor({ get availTop() { return 0 } }, 'availTop').get)
       Object.defineProperty(Screen.prototype, 'availTop', { get: atGetter, configurable: true })
       const alGetter = markNative(Object.getOwnPropertyDescriptor({ get availLeft() { return 0 } }, 'availLeft').get)
@@ -613,18 +677,7 @@ export const STEALTH_INIT_SCRIPT = `
     // Chrome ships with by default. Measurement-based detection (offsetWidth)
     // is intentionally NOT patched — too high a false-positive risk for legit pages.
     try {
-      const FONT_WHITELIST = new Set([
-        'Arial', 'Arial Black', 'Helvetica', 'Helvetica Neue', 'Times', 'Times New Roman',
-        'Courier', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Georgia',
-        'Comic Sans MS', 'Impact', 'Lucida Console', 'Lucida Sans Unicode', 'Palatino',
-        'Monaco', 'Menlo', 'Apple Color Emoji', 'Apple Symbols', 'Apple SD Gothic Neo',
-        'Geneva', 'Optima', 'Didot', 'American Typewriter', 'Andale Mono', 'Avenir',
-        'Avenir Next', 'Baskerville', 'Big Caslon', 'Brush Script MT', 'Chalkboard',
-        'Cochin', 'Copperplate', 'Futura', 'Gill Sans', 'Hoefler Text', 'PingFang SC',
-        'Hiragino Sans', 'serif', 'sans-serif', 'monospace', 'cursive', 'fantasy',
-        'system-ui', '-apple-system', 'BlinkMacSystemFont', 'ui-monospace', 'ui-serif',
-        'ui-sans-serif'
-      ])
+      const FONT_WHITELIST = new Set(${JSON.stringify(FONT_WHITELIST)})
       if (document.fonts && typeof document.fonts.check === 'function') {
         const origCheck = document.fonts.check.bind(document.fonts)
         document.fonts.check = markNative(function check(font, text) {

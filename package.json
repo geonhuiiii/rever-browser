@@ -8,7 +8,7 @@
   "main": "./out/main/index.js",
   "type": "module",
   "scripts": {
-    "postinstall": "bash scripts/patch-electron-name.sh",
+    "postinstall": "node scripts/postinstall.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

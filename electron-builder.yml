@@ -28,9 +28,19 @@ win:
     - target: nsis
       arch:
         - x64
+    - target: zip
+      arch:
+        - x64
   icon: build/icon.ico
   artifactName: Rever-Browser-${version}-setup.${ext}
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  category: Development
+  icon: build/icon.png

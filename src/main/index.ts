@@ -65,6 +65,8 @@ import {
   type RepeaterRequestSpec
 } from './repeater'
 import { getActivePartition, partitionForTab, registerTabPartition, setActivePartition } from './tab-partition'
+import { sendBrowserCommand, setMainWindow } from './browser-control'
+import { startWebDriverServer } from './webdriver/server'
 import { applyTabProxy, proxyCredentialsForSession, type TabProxyConfig } from './tab-proxy'
 import { listMcpTools } from './mcp/bridge'
 import {
@@ -184,6 +186,11 @@ function createWindow() {
     }
   })
 
+  // Publish the window so browser-control (and the WebDriver server through it)
+  // can drive the tab strip.
+  setMainWindow(mainWindow)
+  mainWindow.on('closed', () => setMainWindow(null))
+
   // Open external links in OS default browser, not inside our window
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
@@ -237,13 +244,9 @@ function createWindow() {
   // window on every restart. View › Toggle Developer Tools still opens it.
 }
 
-// Forward a browser-level command (new tab, close tab, tab switching, ...) to
-// the renderer, which owns the tab store.
-function sendBrowserCommand(cmd: string, extra?: { index?: number; url?: string }): void {
-  if (mainWindow && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send('browser-command', { cmd, ...extra })
-  }
-}
+// sendBrowserCommand lives in browser-control.ts so the WebDriver server can
+// drive the tab strip without importing this module (a cycle). It is imported
+// above; the local uses below are unchanged.
 
 // Chromium-style right-click menu for the browsed page (webview contents).
 function buildPageContextMenu(
@@ -692,6 +695,13 @@ app.whenReady().then(() => {
   // no way to reach the tools at all, and the in-app chat is the only door.
   void startMcpServer().catch((e) => console.warn('[mcp] eager start failed:', e))
 
+  // Remote-control surface: a W3C WebDriver endpoint so Selenium (and any other
+  // WebDriver client) can drive this browser. Off unless REVER_WEBDRIVER=1 so
+  // the automation port never opens without the user asking for it.
+  if (process.env.REVER_WEBDRIVER === '1') {
+    void startWebDriverServer().catch((e) => console.warn('[webdriver] start failed:', e))
+  }
+
   // macOS dev-mode dock icon (packaged builds use build/icon.icns).
   if (process.platform === 'darwin' && !app.isPackaged) {
     app.dock?.setIcon(appIcon)
@@ -1102,7 +1112,7 @@ app.whenReady().then(() => {
     return { snapshotCount: n }
   })
 
-  // ── Real Chrome cookie import (macOS) ─────────────────────────────────────
+  // ── Real Chrome cookie import (macOS / Windows / Linux) ───────────────────
   ipcMain.handle('chrome-cookies:profiles', () => listChromeProfiles())
   ipcMain.handle('chrome-cookies:import', (_event, opts: ChromeImportOptions) =>
     importChromeCookies(opts)

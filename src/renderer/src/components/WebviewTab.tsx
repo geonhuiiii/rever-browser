@@ -30,6 +30,18 @@ interface PageTitleEvent extends Event {
   title: string
 }
 
+// ERR_ABORTED (-3) is not a failure: Chromium reports it when a provisional
+// navigation is superseded (a redirect, a Cloudflare challenge, or a second
+// loadURL). The page still loads. Swallow it so it doesn't read as an error;
+// log anything else. (Electron's main process also prints its own
+// GUEST_VIEW_MANAGER_CALL line for the abort — that one is core noise we can't
+// suppress, but it's equally harmless.)
+function ignoreAbort(e: unknown): void {
+  const msg = e instanceof Error ? e.message : String(e)
+  if (/ERR_ABORTED/i.test(msg)) return
+  console.error('[webview] loadURL failed', e)
+}
+
 export const WebviewTab = forwardRef<WebviewTabHandle, Props>(function WebviewTab(
   { tab, active },
   ref
@@ -57,12 +69,12 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(function WebviewTa
         if (!ready) {
           const onReady = () => {
             wv.removeEventListener('dom-ready', onReady)
-            wv.loadURL(url).catch((e) => console.error('[webview] loadURL failed', e))
+            wv.loadURL(url).catch(ignoreAbort)
           }
           wv.addEventListener('dom-ready', onReady)
           return
         }
-        wv.loadURL(url).catch((e) => console.error('[webview] loadURL failed', e))
+        wv.loadURL(url).catch(ignoreAbort)
       },
       goBack: () => wvRef.current?.goBack(),
       goForward: () => wvRef.current?.goForward(),

@@ -5,11 +5,17 @@ import path from 'node:path'
 // LLM provider API 키를 userData 아래에 safeStorage로 암호화 저장한다.
 // safeStorage(OS 키체인)를 쓸 수 없는 환경에서는 평문 폴백을 사용하되,
 // 파일에 어떤 방식으로 저장됐는지 프리픽스로 구분한다.
-export type ApiProvider = 'anthropic' | 'openai'
+export type ApiProvider = 'anthropic' | 'openai' | 'gemini'
 
 const ENV_VAR: Record<ApiProvider, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY'
+  openai: 'OPENAI_API_KEY',
+  gemini: 'GEMINI_API_KEY'
+}
+
+// Secondary env fallbacks (dev convenience) checked when the primary is unset.
+const ENV_VAR_ALT: Partial<Record<ApiProvider, string>> = {
+  gemini: 'GOOGLE_API_KEY'
 }
 
 function keyFile(provider: ApiProvider): string {
@@ -50,7 +56,8 @@ export function getApiKey(provider: ApiProvider): string | null {
     }
   }
   // 파일이 없거나 비었으면 환경변수로 폴백한다(개발 편의).
-  return process.env[ENV_VAR[provider]] ?? null
+  const alt = ENV_VAR_ALT[provider]
+  return process.env[ENV_VAR[provider]] ?? (alt ? process.env[alt] ?? null : null)
 }
 
 export function hasApiKey(provider: ApiProvider): boolean {

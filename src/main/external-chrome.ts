@@ -1,13 +1,10 @@
 import { app } from 'electron'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createServer } from 'node:net'
 
-const CHROME_PATHS_MACOS = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium'
-]
+import { chromeBinaryCandidates, chromeInstallHint, IS_WINDOWS } from './platform'
 
 let chromeProcess: ChildProcess | null = null
 let chromePort: number | null = null
@@ -33,12 +30,23 @@ async function findFreePort(startPort = 9222): Promise<number> {
 }
 
 function findChromeBinary(): string {
-  for (const p of CHROME_PATHS_MACOS) {
+  for (const p of chromeBinaryCandidates()) {
     if (existsSync(p)) return p
   }
-  throw new Error(
-    'Google Chrome not found. Install Chrome at /Applications/Google Chrome.app or Chromium at /Applications/Chromium.app'
-  )
+  throw new Error(`Google Chrome not found. ${chromeInstallHint()}`)
+}
+
+// SIGTERM does not exist on Windows; process.kill there sends a hard TerminateProcess
+// that leaves Chrome's child renderer/GPU processes orphaned. `taskkill /T` walks
+// and kills the whole tree. POSIX just SIGTERMs the group leader.
+function killPidTree(pid: number): void {
+  if (IS_WINDOWS) {
+    execFile('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => {})
+    return
+  }
+  try {
+    process.kill(pid, 'SIGTERM')
+  } catch {}
 }
 
 async function pollUntilReady(port: number, timeoutMs = 5000): Promise<void> {
@@ -70,9 +78,9 @@ export async function launchExternalChrome(): Promise<{ port: number; pid: numbe
             return { port: chromePort, pid: stalePid }
           }
           // 앱 재시작 후 chromePort가 없는 경우: stale 프로세스가 살아있으므로
-          // 새 Chrome을 spawn하기 전에 SIGTERM으로 정리한다.
+          // 새 Chrome을 spawn하기 전에 정리한다 (Windows는 트리 전체 kill).
           try {
-            process.kill(stalePid, 'SIGTERM')
+            killPidTree(stalePid)
             console.warn('[external-chrome] killed stale Chrome pid:', stalePid)
           } catch {
             // 이미 죽었거나 권한 없음 — 무시
@@ -136,8 +144,10 @@ export async function launchExternalChrome(): Promise<{ port: number; pid: numbe
 
 export async function killExternalChrome(): Promise<void> {
   if (chromeProcess) {
+    const pid = chromeProcess.pid
     try {
-      chromeProcess.kill('SIGTERM')
+      if (pid != null) killPidTree(pid)
+      else chromeProcess.kill()
     } catch {}
     chromeProcess = null
   }

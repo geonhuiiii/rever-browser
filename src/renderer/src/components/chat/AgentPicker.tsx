@@ -16,10 +16,11 @@ interface AgentTileInfo {
 }
 
 // Providers gated on an API key rather than a PATH binary.
-type KeyProvider = 'anthropic' | 'openai'
-const KEY_PROVIDERS: { id: KeyProvider; label: string }[] = [
-  { id: 'anthropic', label: 'Anthropic API key' },
-  { id: 'openai', label: 'OpenAI API key' }
+type KeyProvider = 'anthropic' | 'openai' | 'gemini'
+const KEY_PROVIDERS: { id: KeyProvider; label: string; hint: string }[] = [
+  { id: 'anthropic', label: 'Anthropic API key', hint: 'console.anthropic.com' },
+  { id: 'openai', label: 'OpenAI API key', hint: 'platform.openai.com' },
+  { id: 'gemini', label: 'Gemini API key', hint: 'aistudio.google.com/apikey' }
 ]
 
 // Sentinel passed to onChange for API providers, which have no PATH binary —
@@ -31,7 +32,7 @@ function buildTiles(
   apiKeys: Record<KeyProvider, boolean>
 ): AgentTileInfo[] {
   return ACP_AGENTS.map((def) => {
-    if (def.provider === 'anthropic' || def.provider === 'openai') {
+    if (def.provider === 'anthropic' || def.provider === 'openai' || def.provider === 'gemini') {
       const hasKey = apiKeys[def.provider]
       return {
         def,
@@ -84,13 +85,21 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
   const [loading, setLoading] = useState(true)
   const [apiKeys, setApiKeys] = useState<Record<KeyProvider, boolean>>({
     anthropic: false,
-    openai: false
+    openai: false,
+    gemini: false
   })
   const [keyInput, setKeyInput] = useState<Record<KeyProvider, string>>({
     anthropic: '',
-    openai: ''
+    openai: '',
+    gemini: ''
   })
   const [savingKey, setSavingKey] = useState<KeyProvider | null>(null)
+  const [savedFlash, setSavedFlash] = useState<KeyProvider | null>(null)
+  const [keyError, setKeyError] = useState<Record<KeyProvider, string | null>>({
+    anthropic: null,
+    openai: null,
+    gemini: null
+  })
   const popoverRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
@@ -102,13 +111,14 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
     void Promise.all([
       window.rev.acp.listAvailable(probes),
       window.rev.settings.hasApiKey('anthropic'),
-      window.rev.settings.hasApiKey('openai')
-    ]).then(([results, anthropicKey, openaiKey]) => {
+      window.rev.settings.hasApiKey('openai'),
+      window.rev.settings.hasApiKey('gemini')
+    ]).then(([results, anthropicKey, openaiKey, geminiKey]) => {
       if (cancelled) return
       const resolved: Record<string, string | null> = {}
       for (const r of results) resolved[r.command] = r.resolvedPath
       setDetection({ resolved })
-      setApiKeys({ anthropic: anthropicKey, openai: openaiKey })
+      setApiKeys({ anthropic: anthropicKey, openai: openaiKey, gemini: geminiKey })
       setLoading(false)
     })
     return () => {
@@ -120,10 +130,22 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
     const key = keyInput[provider].trim()
     if (!key) return
     setSavingKey(provider)
+    setKeyError((prev) => ({ ...prev, [provider]: null }))
     try {
       const ok = await window.rev.settings.setApiKey(provider, key)
       setApiKeys((prev) => ({ ...prev, [provider]: ok }))
-      if (ok) setKeyInput((prev) => ({ ...prev, [provider]: '' }))
+      if (ok) {
+        setKeyInput((prev) => ({ ...prev, [provider]: '' }))
+        setSavedFlash(provider)
+        setTimeout(() => setSavedFlash((p) => (p === provider ? null : p)), 1800)
+      } else {
+        setKeyError((prev) => ({ ...prev, [provider]: 'Could not save the key.' }))
+      }
+    } catch (e) {
+      setKeyError((prev) => ({
+        ...prev,
+        [provider]: e instanceof Error ? e.message : 'Could not save the key.'
+      }))
     } finally {
       setSavingKey(null)
     }
@@ -191,6 +213,24 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
               {loading ? 'Scanning PATH…' : `${tiles.filter((t) => t.selectable).length} ready`}
             </span>
           </header>
+          {!loading && tiles.every((t) => !t.selectable) && (
+            <div
+              style={{
+                fontSize: 11,
+                lineHeight: 1.4,
+                color: 'var(--chip-warn-text)',
+                background: 'var(--chip-warn-bg)',
+                border: '1px solid var(--chip-warn-border)',
+                borderRadius: 6,
+                padding: '6px 8px',
+                margin: '0 0 8px'
+              }}
+            >
+              No agent is ready yet. Paste an API key below (Anthropic, OpenAI or Gemini) and press
+              Enter — that tile turns green and becomes selectable. CLI agents need their binary on
+              PATH.
+            </div>
+          )}
           <div style={gridStyle}>
             {tiles.map((tile) => (
               <button
@@ -237,10 +277,17 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
               </button>
             ))}
           </div>
+          <div style={{ fontSize: 10, opacity: 0.55, marginTop: 10, padding: '0 4px' }}>
+            No CLI to install — paste a provider API key below to chat directly.
+          </div>
           {KEY_PROVIDERS.map((kp) => (
             <div key={kp.id} style={keyRowStyle}>
-              <label style={{ fontSize: 11, opacity: 0.7 }}>
-                {kp.label} {apiKeys[kp.id] ? '· saved' : '· not set'}
+              <label style={{ fontSize: 11, opacity: 0.7, display: 'flex', gap: 6, alignItems: 'center' }}>
+                {kp.label}{' '}
+                <span style={{ color: apiKeys[kp.id] ? 'var(--status-ok)' : 'var(--text-dim)' }}>
+                  {savedFlash === kp.id ? '· ✓ saved' : apiKeys[kp.id] ? '· saved' : '· not set'}
+                </span>
+                <span style={{ marginLeft: 'auto', opacity: 0.45, fontSize: 10 }}>{kp.hint}</span>
               </label>
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
@@ -249,8 +296,22 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
                   onChange={(e) =>
                     setKeyInput((prev) => ({ ...prev, [kp.id]: e.target.value }))
                   }
+                  onKeyDown={(e) => {
+                    // Enter saves — without this the field feels dead (there is
+                    // no enclosing <form>, so Enter would otherwise do nothing).
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault()
+                      void saveApiKey(kp.id)
+                    }
+                  }}
                   placeholder={
-                    apiKeys[kp.id] ? 'Replace key…' : kp.id === 'openai' ? 'sk-…' : 'sk-ant-…'
+                    apiKeys[kp.id]
+                      ? 'Replace key…'
+                      : kp.id === 'openai'
+                        ? 'sk-…'
+                        : kp.id === 'gemini'
+                          ? 'AIza…'
+                          : 'sk-ant-…'
                   }
                   style={keyInputStyle}
                 />
@@ -263,6 +324,9 @@ export function AgentPicker({ agentId, onChange, disabled }: AgentPickerProps) {
                   {savingKey === kp.id ? '…' : 'Save'}
                 </button>
               </div>
+              {keyError[kp.id] && (
+                <span style={{ fontSize: 10, color: 'var(--status-error)' }}>{keyError[kp.id]}</span>
+              )}
             </div>
           ))}
         </div>
