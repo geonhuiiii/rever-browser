@@ -173,12 +173,19 @@ export async function spawnAcpSession(
       // Route to the renderer's permission UI when a prompt is in flight.
       // Falls back to auto-approve if no handler is attached or the round-trip
       // fails/times out — so the agent loop can never deadlock on a missing UI.
+      const toolTitle =
+        (params as unknown as { toolCall?: { title?: string } }).toolCall?.title ?? '?'
+      acpLog(`requestPermission id=${agentDef.id} tool=${toolTitle} hasHandler=${!!entryRef?.requestPermission}`)
+      const started = Date.now()
       const handler = entryRef?.requestPermission
       if (handler) {
         try {
-          return await handler(params)
+          const r = await handler(params)
+          acpLog(`requestPermission RESOLVED id=${agentDef.id} tool=${toolTitle} waitedMs=${Date.now() - started}`)
+          return r
         } catch (e) {
           console.error('[acp] permission round-trip failed, auto-approving:', e)
+          acpLog(`requestPermission FAILED id=${agentDef.id} tool=${toolTitle} err=${e instanceof Error ? e.message : String(e)}`)
         }
       }
       return {
